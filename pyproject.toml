@@ -13,7 +13,8 @@ dependencies = [
     "mapillary (>=1.0.15,<2.0.0)",
     "requests (>=2.32.5,<3.0.0)",
     "pillow (>=12.1.1,<13.0.0)",
-    "opencv-python (>=4.13.0.92,<5.0.0.0)"
+    "opencv-python (>=4.13.0.92,<5.0.0.0)",
+    "tqdm (>=4.67.3,<5.0.0)"
 ]
 
 [tool.poetry]
