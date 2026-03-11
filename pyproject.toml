@@ -1,0 +1,18 @@
+[project]
+name = "photorealistic-street-maps"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Ashp116",email = "ashp116@outlook.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+]
+
+[tool.poetry]
+packages = [{include = "photorealistic_street_maps", from = "src"}]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
