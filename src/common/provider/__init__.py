@@ -1,4 +1,4 @@
-from mapillary_client import MapillaryClient
-from osm_client import OSMClient
+from .mapillary import MapillaryClient
+from .osm import OSMClient
 
-__all__ = ["MapillaryClient", "OSMCLient"]
+__all__ = ["MapillaryClient", "OSMClient"]
