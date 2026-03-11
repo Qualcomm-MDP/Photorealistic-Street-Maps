@@ -10,22 +10,26 @@ ureg = UnitRegistry()
 # Distance convertions
 def meters_to_feet(meters: float) -> float:
     """Convert meters to feet"""
-    return (meters * ureg.meter).to(ureg.feet).magnitude
+    quantity = ureg.Quantity(meters, ureg.meter)
+    return float(quantity.to(ureg.feet).magnitude)
 
 
 def feet_to_meters(feet: float) -> float:
     """Convert feet to meters"""
-    return (feet * ureg.feet).to(ureg.meter).magnitude
+    quantity = ureg.Quantity(feet, ureg.feet)
+    return float(quantity.to(ureg.meter).magnitude)
 
 
 def kilometers_to_miles(km: float) -> float:
     """Convert kilometers to miles"""
-    return (km * ureg.kilometer).to(ureg.mile).magnitude
+    quantity = ureg.Quantity(km, ureg.kilometer)
+    return float(quantity.to(ureg.mile).magnitude)
 
 
 def miles_to_kilometers(miles: float) -> float:
     """Convert miles to kilometers"""
-    return (miles * ureg.mile).to(ureg.kilometer).magnitude
+    quantity = ureg.Quantity(miles, ureg.mile)
+    return float(quantity.to(ureg.kilometer).magnitude)
 
 
 def meters_to_kilometers(meters: float) -> float:
@@ -55,7 +59,7 @@ def normalize_angle_degrees(angle: float) -> float:
 
 
 def normalize_angle_radians(angle: float) -> float:
-    """Normalize angle to [0, 2π) radians"""
+    """Normalize angle to [0, 2pi) radians"""
     return angle % (2 * math.pi)
 
 
