@@ -1,4 +1,6 @@
 from . import providers, constants
 from .ProgressMonitor import ProgressMonitor
 
-__all__ = ["providers", "constants", "ProgressMonitor"]
+import common.MeshUtils as MeshUtils
+
+__all__ = ["providers", "constants", "ProgressMonitor", "MeshUtils"]
