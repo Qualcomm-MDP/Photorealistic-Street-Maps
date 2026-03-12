@@ -1,0 +1,59 @@
+name: Create Mesh Builder PR
+
+on:
+  push:
+    branches:
+      - 'copilot/add-mesh-builder-pr'
+  workflow_dispatch:
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Create PR from dervin_branch to main
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = 'Qualcomm-MDP';
+            const repo = 'Photorealistic-Street-Maps';
+            const title = 'Mesh builder';
+            const head = 'dervin_branch';
+            const base = 'main';
+
+            // Check if PR already exists
+            const { data: existingPRs } = await github.rest.pulls.list({
+              owner,
+              repo,
+              head: `${owner}:${head}`,
+              base,
+              state: 'open',
+            });
+
+            if (existingPRs.length > 0) {
+              const pr = existingPRs[0];
+              if (pr.title !== title) {
+                await github.rest.pulls.update({
+                  owner,
+                  repo,
+                  pull_number: pr.number,
+                  title,
+                });
+                console.log(`Updated PR #${pr.number} title to "${title}"`);
+              } else {
+                console.log(`PR #${pr.number} already has title "${title}"`);
+              }
+            } else {
+              const { data: newPR } = await github.rest.pulls.create({
+                owner,
+                repo,
+                title,
+                head,
+                base,
+                body: '',
+              });
+              console.log(`Created PR #${newPR.number}: ${newPR.html_url}`);
+            }
