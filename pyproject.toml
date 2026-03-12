@@ -8,7 +8,6 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.11,<4.0"
 dependencies = [
-    "trimesh (>=4.11.3,<5.0.0)",
     "numpy (>=2.4.3,<3.0.0)",
     "mapillary (>=1.0.15,<2.0.0)",
     "requests (>=2.32.5,<3.0.0)",
@@ -17,7 +16,8 @@ dependencies = [
     "tqdm (>=4.67.3,<5.0.0)",
     "pyproj (>=3.7.2,<4.0.0)",
     "dotenv (>=0.9.9,<0.10.0)",
-    "pint (>=0.25.2,<0.26.0)"
+    "pint (>=0.25.2,<0.26.0)",
+    "trimesh (>=4.11.3,<5.0.0)"
 ]
 
 [tool.poetry]
