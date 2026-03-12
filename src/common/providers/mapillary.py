@@ -10,6 +10,7 @@ class MapillaryClient:
     def fetch(self):
         # TODO: Create a fetch function that takes in some arguments 
         # from the user and return the Mapillary data 
+        # follow https://github.com/Qualcomm-MDP/Blender_Map_Overlay/blob/main/map_extract.py
         pass
 
     # TODO: Add more functions that is needed to process mappilary 
