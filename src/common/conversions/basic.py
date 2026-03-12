@@ -64,12 +64,12 @@ def normalize_angle_radians(angle: float) -> float:
 
 def compass_to_cartesian(bearing: float) -> float:
     """
-    Convert compass bearing (0° = North, clockwise) to 
+    Convert compass bearing (0° = North, clockwise) to
     cartesian angle (0° = East, counter-clockwise).
-    
+
     Args:
         bearing: Compass bearing in degrees (0-360)
-    
+
     Returns:
         Cartesian angle in degrees (0-360)
     """
@@ -79,10 +79,10 @@ def compass_to_cartesian(bearing: float) -> float:
 def cartesian_to_compass(angle: float) -> float:
     """
     Convert cartesian angle to compass bearing.
-    
+
     Args:
         angle: Cartesian angle in degrees (0° = East, counter-clockwise)
-    
+
     Returns:
         Compass bearing in degrees (0° = North, clockwise)
     """
@@ -113,99 +113,91 @@ def utc_to_unix_timestamp(dt: datetime) -> float:
     return dt.timestamp()
 
 
-
 # Geographic Distance Calculations
 def haversine_distance(
-    lon1: float, lat1: float, 
-    lon2: float, lat2: float,
-    unit: str = 'meters'
+    lon1: float, lat1: float, lon2: float, lat2: float, unit: str = "meters"
 ) -> float:
     """
     Calculate great-circle distance between two points using Haversine formula.
-    
+
     Args:
         lon1, lat1: First point coordinates (degrees)
         lon2, lat2: Second point coordinates (degrees)
         unit: Output unit ('meters', 'kilometers', 'miles', 'feet')
-    
+
     Returns:
         Distance in specified unit
     """
     # Earth radius
     R = 6371000  # meters
-    
+
     # Convert to radians
     phi1 = degrees_to_radians(lat1)
     phi2 = degrees_to_radians(lat2)
     delta_phi = degrees_to_radians(lat2 - lat1)
     delta_lambda = degrees_to_radians(lon2 - lon1)
-    
+
     # Haversine formula
-    a = (math.sin(delta_phi / 2) ** 2 + 
-         math.cos(phi1) * math.cos(phi2) * 
-         math.sin(delta_lambda / 2) ** 2)
+    a = (
+        math.sin(delta_phi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+    )
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    
+
     distance_m = R * c
-    
+
     # Convert to requested unit
     conversions = {
-        'meters': lambda x: x,
-        'kilometers': meters_to_kilometers,
-        'miles': lambda x: kilometers_to_miles(meters_to_kilometers(x)),
-        'feet': meters_to_feet,
+        "meters": lambda x: x,
+        "kilometers": meters_to_kilometers,
+        "miles": lambda x: kilometers_to_miles(meters_to_kilometers(x)),
+        "feet": meters_to_feet,
     }
-    
+
     if unit not in conversions:
-        raise ValueError(f"Unknown unit: {unit}. Use 'meters', 'kilometers', 'miles', or 'feet'")
-    
+        raise ValueError(
+            f"Unknown unit: {unit}. Use 'meters', 'kilometers', 'miles', or 'feet'"
+        )
+
     return conversions[unit](distance_m)
 
 
-def euclidean_distance_2d(
-    x1: float, y1: float,
-    x2: float, y2: float
-) -> float:
+def euclidean_distance_2d(x1: float, y1: float, x2: float, y2: float) -> float:
     """Calculate 2D Euclidean distance"""
-    return math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+    return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
 
 
 def euclidean_distance_3d(
-    x1: float, y1: float, z1: float,
-    x2: float, y2: float, z2: float
+    x1: float, y1: float, z1: float, x2: float, y2: float, z2: float
 ) -> float:
     """Calculate 3D Euclidean distance"""
-    return math.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
+    return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
 
 
 __all__ = [
     # Distance conversions
-    'meters_to_feet',
-    'feet_to_meters',
-    'kilometers_to_miles',
-    'miles_to_kilometers',
-    'meters_to_kilometers',
-    'kilometers_to_meters',
-    
+    "meters_to_feet",
+    "feet_to_meters",
+    "kilometers_to_miles",
+    "miles_to_kilometers",
+    "meters_to_kilometers",
+    "kilometers_to_meters",
     # Angle conversions
-    'degrees_to_radians',
-    'radians_to_degrees',
-    'normalize_angle_degrees',
-    'normalize_angle_radians',
-    'compass_to_cartesian',
-    'cartesian_to_compass',
-    
+    "degrees_to_radians",
+    "radians_to_degrees",
+    "normalize_angle_degrees",
+    "normalize_angle_radians",
+    "compass_to_cartesian",
+    "cartesian_to_compass",
     # Timezone utilities
-    'utc_now',
-    'to_utc',
-    'unix_timestamp_to_utc',
-    'utc_to_unix_timestamp',
-    
+    "utc_now",
+    "to_utc",
+    "unix_timestamp_to_utc",
+    "utc_to_unix_timestamp",
     # Distance calculations
-    'haversine_distance',
-    'euclidean_distance_2d',
-    'euclidean_distance_3d',
-
+    "haversine_distance",
+    "euclidean_distance_2d",
+    "euclidean_distance_3d",
     # Unit registry
-    'ureg',
+    "ureg",
 ]
