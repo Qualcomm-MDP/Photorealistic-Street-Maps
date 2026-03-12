@@ -1,3 +1,9 @@
+from enum import Enum
+
+# Refer https://wiki.openstreetmap.org/wiki/Map_features
+class OSM_MAP_FEATURES(Enum):
+    BUILDING = "building"
+    NATURE = "nature"
 
 
 class OSMClient:
