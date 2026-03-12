@@ -47,13 +47,17 @@ jobs:
                 console.log(`PR #${pr.number} already has title "${title}"`);
               }
             } else {
-              const { data: newPR } = await github.rest.pulls.create({
-                owner,
-                repo,
-                title,
-                head,
-                base,
-                body: '',
-              });
-              console.log(`Created PR #${newPR.number}: ${newPR.html_url}`);
+              try {
+                const { data: newPR } = await github.rest.pulls.create({
+                  owner,
+                  repo,
+                  title,
+                  head,
+                  base,
+                  body: '',
+                });
+                console.log(`Created PR #${newPR.number}: ${newPR.html_url}`);
+              } catch (err) {
+                core.setFailed(`Failed to create PR: ${err.message}`);
+              }
             }
