@@ -1,5 +1,3 @@
-import os
-import mapillary
 
 class MapillaryClient:
     def __init__(self):

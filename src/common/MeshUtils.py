@@ -1,4 +1,3 @@
-import trimesh
 
 # Follow https://github.com/Qualcomm-MDP/mesh_creation/blob/main/extrude_out.py
 def generate_plane():

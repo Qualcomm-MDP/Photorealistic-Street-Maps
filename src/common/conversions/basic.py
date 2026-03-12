@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from typing import Optional
 import math
 from pint import UnitRegistry
 
