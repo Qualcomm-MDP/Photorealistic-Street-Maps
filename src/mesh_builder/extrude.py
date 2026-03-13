@@ -51,6 +51,8 @@ def extrude_buildings(input_data, area_bbox, scale=5):
         buildings[id] = mesh
     
     combined_mesh = trimesh.util.concatenate([building for _, building in buildings.items()])
+    center = combined_mesh.bounding_box.centroid
+    combined_mesh.apply_translation(-center)
     rotation = trimesh.transformations.rotation_matrix(
         angle=np.radians(90.0),
         direction=[1.0, 0.0, 0.0],
