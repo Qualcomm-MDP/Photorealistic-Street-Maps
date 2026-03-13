@@ -1,7 +1,7 @@
 import trimesh
 import numpy as np
 from common.MeshUtils import get_corners, get_lines, get_height
-from common.constants import BoundingBox
+from common.MeshExport import export_to_glb
 
 
 def extrude_buildings(input_data, area_bbox, scale=5):
@@ -58,5 +58,4 @@ def extrude_buildings(input_data, area_bbox, scale=5):
     )
     
     combined_mesh.apply_transform(rotation)
-    print("Saved combined building mesh!\n")
-    combined_mesh.export(f"combined.glb", file_type='glb')
+    export_to_glb(combined_mesh, f"combined.glb")
