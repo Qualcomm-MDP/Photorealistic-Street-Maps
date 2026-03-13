@@ -67,6 +67,8 @@ class OSMClient:
                 south, west, north, east = bbox
                 area_str = f"({south},{west},{north},{east})"
             else:
+                if center is None or radius is None:
+                    raise ValueError("Provide bbox or both center and radius.")
                 lat, lon = center
                 area_str = f"(around:{radius},{lat},{lon})"
 
