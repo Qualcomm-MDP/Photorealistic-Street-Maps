@@ -2,6 +2,8 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 import requests
 
+from constants import OVERPASS_URL
+
 # Refer https://wiki.openstreetmap.org/wiki/Map_features
 class OSM_MAP_FEATURES(Enum):
     BUILDING = "building"
@@ -9,8 +11,7 @@ class OSM_MAP_FEATURES(Enum):
 
 
 class OSMClient:
-    def __init__(self, overpass_url: str = "https://overpass-api.de/api/interpreter", timeout: int = 60):
-        self.overpass_url = overpass_url
+    def __init__(self, timeout: int = 60):
         self.timeout = timeout
 
     def fetch(self,
@@ -43,7 +44,7 @@ class OSMClient:
         out skel qt;
         """
         response = requests.post(
-            self.overpass_url,
+            OVERPASS_URL,
             data={"data": query},
             timeout=self.timeout,
         )
