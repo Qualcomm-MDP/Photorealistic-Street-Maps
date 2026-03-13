@@ -2,7 +2,16 @@ import trimesh
 from trimesh.path import entities 
 
 import numpy as np
+from pyproj import Transformer
 from .constants import BoundingBox
+
+_GEODETIC_TO_PROJECTED = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+
+
+def _scale_distance(value: float, scale: int) -> float:
+    if scale <= 0:
+        raise ValueError("Scale must be greater than 0")
+    return value / float(scale)
 
 # Follow https://github.com/Qualcomm-MDP/mesh_creation/blob/main/extrude_out.py
 def generate_plane(height, width):
@@ -19,14 +28,18 @@ def generate_plane(height, width):
     return plane, corners, faces
 
 def initialize_plane(bounding_box: BoundingBox, Scale: int):
-    max_lat = int(bounding_box.max_lat * (10**Scale))
-    min_lat = int(bounding_box.min_lat * (10**Scale))
-    max_lon = int(bounding_box.max_lon * (10**Scale))
-    min_lon = int(bounding_box.min_lon * (10**Scale))
+    min_x, min_y = _GEODETIC_TO_PROJECTED.transform(
+        bounding_box.min_lon,
+        bounding_box.min_lat,
+    )
+    max_x, max_y = _GEODETIC_TO_PROJECTED.transform(
+        bounding_box.max_lon,
+        bounding_box.max_lat,
+    )
 
-    delta_lat = abs(max_lat - min_lat) 
-    delta_long = abs(max_lon - min_lon) 
-    plane, corners, faces = generate_plane(delta_lat, delta_long) 
+    delta_x = _scale_distance(max_x - min_x, Scale)
+    delta_y = _scale_distance(max_y - min_y, Scale)
+    plane, corners, faces = generate_plane(delta_x, delta_y)
 
     return plane, corners, faces
 
@@ -34,12 +47,19 @@ def get_corners(element, bounding_box: BoundingBox, Scale: int):
     geometry_points = element["geometry"]
     corners = []
 
-    for point in geometry_points:
-        latitude = int(float(point["lat"]) * (10**Scale))
-        longitude = int(float(point["lon"]) * (10**Scale))
+    origin_x, origin_y = _GEODETIC_TO_PROJECTED.transform(
+        bounding_box.min_lon,
+        bounding_box.min_lat,
+    )
 
-        local_i = abs(latitude - int(bounding_box.min_lat * (10**Scale)))
-        local_j = abs(longitude - int(bounding_box.min_lon * (10**Scale)))
+    for point in geometry_points:
+        projected_x, projected_y = _GEODETIC_TO_PROJECTED.transform(
+            float(point["lon"]),
+            float(point["lat"]),
+        )
+
+        local_i = _scale_distance(projected_x - origin_x, Scale)
+        local_j = _scale_distance(projected_y - origin_y, Scale)
 
         corners.append([local_i, local_j])
     

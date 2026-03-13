@@ -31,9 +31,7 @@ class OSMClient:
         (
             {"".join(query_parts)}
         );
-        out body;
-        >;
-        out skel qt;
+        out body geom;
         """
         response = requests.post(
             OVERPASS_URL,
