@@ -2,7 +2,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 import requests
 
-from constants import OVERPASS_URL, BoundingBox
+from ..constants import OVERPASS_URL, BoundingBox
 
 # Refer https://wiki.openstreetmap.org/wiki/Map_features
 class OSM_MAP_FEATURES(Enum):
@@ -31,9 +31,7 @@ class OSMClient:
         (
             {"".join(query_parts)}
         );
-        out body;
-        >;
-        out skel qt;
+        out body geom;
         """
         response = requests.post(
             OVERPASS_URL,
