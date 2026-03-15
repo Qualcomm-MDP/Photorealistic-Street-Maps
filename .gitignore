@@ -5,3 +5,4 @@ __pycache__/
 dist/
 .vscode/
 .idea/
+*_test.py
