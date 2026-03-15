@@ -60,4 +60,3 @@ def extrude_buildings(input_data, area_bbox, scale=5):
     )
     
     combined_mesh.apply_transform(rotation)
-    export_to_glb(combined_mesh, f"combined.glb")
