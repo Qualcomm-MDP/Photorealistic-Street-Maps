@@ -7,3 +7,7 @@ def pytest_configure(config):
         "markers", 
         "basic_conversion: Tests for basic conversion functions (distance, angle, haversine)"
     )
+    config.addinivalue_line(
+        "markers",
+        "pipeline: Tests for pipeline stage chaining, forks, merges, and resume behavior"
+    )
