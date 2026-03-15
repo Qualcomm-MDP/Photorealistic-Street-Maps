@@ -12,7 +12,7 @@ git clone https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps.git
 ```
 
 2. Navigate to the cloned repo folder
-3. Ensure you have [Poetry](https://python-poetry.org/) is install by running `poetry --version`.
+3. Ensure you have [Poetry](https://python-poetry.org/) installed by running `poetry --version`.
     If the output doesn't show the version, then follow this [guide to install poetry](https://python-poetry.org/docs/).
 
     ```
