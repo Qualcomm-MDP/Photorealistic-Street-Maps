@@ -1,6 +1,6 @@
 from . import providers, constants
 from .MeshExport import export_to_glb
-from .pipeline import Pipeline, PipelineState
+from .pipeline_chain import PipelineChain, PipelineState
 from .ProgressMonitor import ProgressMonitor
 
 import common.MeshUtils as MeshUtils
@@ -8,7 +8,7 @@ import common.MeshUtils as MeshUtils
 __all__ = [
     "providers", 
     "constants", 
-    "Pipeline",
+    "PipelineChain",
     "PipelineState",
     "ProgressMonitor", 
     "MeshUtils",

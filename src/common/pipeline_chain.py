@@ -45,7 +45,7 @@ class PipelineState:
             self.stage_outputs.pop(stage_name, None)
 
 
-class Pipeline:
+class PipelineChain:
     def __init__(self, name: str = "pipeline") -> None:
         self.name = name
         self._stages: list[_AnyStage] = []
@@ -62,7 +62,7 @@ class Pipeline:
                 names.update(stage.branches.keys())
         return names
 
-    def add_stage(self, name: str, handler: StageHandler) -> "Pipeline":
+    def add_stage(self, name: str, handler: StageHandler) -> "PipelineChain":
         if name in self._all_names():
             raise ValueError(f"Stage '{name}' already exists in pipeline '{self.name}'")
 
@@ -74,7 +74,7 @@ class Pipeline:
         name: str,
         branches: dict[str, StageHandler],
         merge: MergeHandler | None = None,
-    ) -> "Pipeline":
+    ) -> "PipelineChain":
         existing = self._all_names()
         if name in existing:
             raise ValueError(f"Stage '{name}' already exists in pipeline '{self.name}'")

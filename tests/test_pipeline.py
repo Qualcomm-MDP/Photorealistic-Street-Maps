@@ -1,8 +1,8 @@
-from common.pipeline import Pipeline
+from common.pipeline_chain import PipelineChain
 
 
 def test_pipeline_runs_stages_in_order():
-    pipeline = Pipeline("numbers")
+    pipeline = PipelineChain("numbers")
     pipeline.add_stage("double", lambda value, state: value * 2)
     pipeline.add_stage("offset", lambda value, state: value + state.metadata["offset"])
     pipeline.add_stage("square", lambda value, state: value**2)
@@ -18,7 +18,7 @@ def test_pipeline_runs_stages_in_order():
 
 
 def test_pipeline_fork_sends_same_input_to_each_branch():
-    pipeline = Pipeline("fork")
+    pipeline = PipelineChain("fork")
     pipeline.add_stage("start", lambda value, state: value + 1)
     pipeline.add_fork(
         "geometry",
@@ -44,7 +44,7 @@ def test_pipeline_fork_sends_same_input_to_each_branch():
 
 
 def test_pipeline_fork_merge_shapes_next_stage_input():
-    pipeline = Pipeline("merge")
+    pipeline = PipelineChain("merge")
     pipeline.add_stage("start", lambda value, state: value * 3)
     pipeline.add_fork(
         "geometry",
@@ -65,7 +65,7 @@ def test_pipeline_fork_merge_shapes_next_stage_input():
 
 
 def test_pipeline_resume_replays_only_downstream_stage():
-    pipeline = Pipeline("resume")
+    pipeline = PipelineChain("resume")
     pipeline.add_stage("double", lambda value, state: value * 2)
     pipeline.add_stage("offset", lambda value, state: value + 4)
     pipeline.add_stage("square", lambda value, state: value**2)
@@ -82,7 +82,7 @@ def test_pipeline_resume_replays_only_downstream_stage():
 
 
 def test_pipeline_resume_clears_fork_outputs_before_replay():
-    pipeline = Pipeline("fork-resume")
+    pipeline = PipelineChain("fork-resume")
     pipeline.add_stage("start", lambda value, state: value + 1)
     pipeline.add_fork(
         "geometry",

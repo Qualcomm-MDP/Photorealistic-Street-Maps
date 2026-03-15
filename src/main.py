@@ -1,4 +1,4 @@
-from common import ProgressMonitor, Pipeline, export_to_glb
+from common import ProgressMonitor, PipelineChain, export_to_glb
 from common.constants import BoundingBox
 from common.providers import OSMClient, OSM_MAP_FEATURES
 
@@ -31,7 +31,7 @@ def progress():
 def export_mesh(value, state):
     export_to_glb(value, "combined.glb")
 
-run_pipeline = Pipeline()
+run_pipeline = PipelineChain()
 run_pipeline.add_stage("fetech", ingest_data)
 run_pipeline.add_stage("build_mesh", build_mesh)
 run_pipeline.add_stage("export", export_mesh)
