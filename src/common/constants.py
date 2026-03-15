@@ -11,6 +11,12 @@ class BoundingBox:
     min_lon: float
     max_lon: float
 
+    def to_list(self):
+        return [self.min_lon, self.min_lat, self.max_lon, self.max_lat]
+    
+    def to_str(self):
+        return f"{str(self.min_lon)},{str(self.min_lat)},{str(self.max_lon)},{str(self.max_lat)}"
+    
     @classmethod
     def from_json(cls, data):
         required_keys = ["min_lat", "max_lat", "min_lon", "max_lon"]
@@ -32,5 +38,17 @@ class BoundingBox:
             max_lat=max_lat,
             min_lon=min_lon,
             max_lon=max_lon
+        )
+    
+    @classmethod
+    def from_list(cls, data):
+        if len(data) != 4:
+            raise ValueError(f"Incorrect list length. Got {len(data)}. Expected 4")
+        
+        return cls(
+            min_lon=data[0],  
+            min_lat=data[1],  
+            max_lon=data[2],  
+            max_lat=data[3],
         )
     

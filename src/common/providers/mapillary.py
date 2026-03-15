@@ -1,4 +1,5 @@
 import os
+import json
 import warnings
 from ..constants import MAPILLARY_URL, BoundingBox
 from scipy.spatial.transform import Rotation as R
@@ -24,7 +25,7 @@ class MapillaryClient:
         params = {
             "access_token": self.get_token(),
             "fields": ",".join(fields),
-            "bbox": f"{bbox.min_lon},{bbox.min_lat},{bbox.max_lon},{bbox.max_lat}",
+            "bbox": bbox.to_str(),
             "limit": limit
         }
 
