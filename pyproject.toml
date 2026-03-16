@@ -37,9 +37,9 @@ dev = [ "pre-commit>=4.3,<5", "pytest>=9.0.2,<10", "ruff>=0.15.5,<0.16" ]
 packages = [ { include = "photorealistic_street_maps", from = "src" } ]
 package-mode = false
 
+[tool.pyright]
+extraPaths = [ "src" ]
+
 [tool.pytest]
 ini_options.pythonpath = [ "src" ]
 ini_options.testpaths = [ "tests" ]
-
-[tool.pyright]
-extraPaths = [ "src" ]
