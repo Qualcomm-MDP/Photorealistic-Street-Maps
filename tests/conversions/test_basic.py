@@ -1,5 +1,5 @@
 import pytest
-from common.convertions import basic
+from common.conversions import basic
 
 
 @pytest.mark.basic_conversion
