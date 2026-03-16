@@ -6,7 +6,7 @@ from pint import UnitRegistry
 ureg = UnitRegistry()
 
 
-# Distance convertions
+# Distance conversions
 def meters_to_feet(meters: float) -> float:
     """Convert meters to feet"""
     quantity = ureg.Quantity(meters, ureg.meter)
@@ -41,7 +41,7 @@ def kilometers_to_meters(km: float) -> float:
     return km * 1000.0
 
 
-# Angle convertions
+# Angle conversions
 def degrees_to_radians(degrees: float) -> float:
     """Convert degrees to radians"""
     return math.radians(degrees)
@@ -89,7 +89,7 @@ def cartesian_to_compass(angle: float) -> float:
     return normalize_angle_degrees(90.0 - angle)
 
 
-# Time convertions
+# Time conversions
 def utc_now() -> datetime:
     """Get current UTC time"""
     return datetime.now(timezone.utc)

@@ -18,5 +18,5 @@ git clone https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps.git
     ```
     Poetry (version x.x.x)
     ``` 
-4. Install all the dependancies by running `poetry install`
+4. Install all the dependencies by running `poetry install`
 5. You have finished setting up the development environment. 

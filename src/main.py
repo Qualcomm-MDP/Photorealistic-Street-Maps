@@ -11,7 +11,7 @@ bbox = BoundingBox(42.29025, 42.29422, -83.71978, -83.71205)
 def progress():
     # Register a blue print of each task
     progress = ProgressMonitor()
-    progress.add_task("Retrive data from OSM")
+    progress.add_task("Retrieve data from OSM")
     progress.add_task("Transform OSM to Mesh data")
     progress.add_task("Export mesh file")
     progress.add_task("FINISHED!")
