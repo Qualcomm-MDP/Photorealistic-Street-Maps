@@ -2,7 +2,6 @@ from pyproj import Transformer
 import numpy as np
 import trimesh
 
-from trimesh import Geometry
 
 from typing import Tuple
 
@@ -21,12 +20,12 @@ def convert_mesh_to_utm(
     origin_lon, origin_lat = lon_and_lat[0], lon_and_lat[1]
 
     loaded = trimesh.load(mesh_path, force="mesh")
-    
+
     if not isinstance(loaded, trimesh.Trimesh):
         raise TypeError("Expected trimesh.Trimesh when loading mesh_path")
-    
+
     mesh = loaded
-    
+
     t_merc = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
     t_utm = Transformer.from_crs("EPSG:4326", f"EPSG:{utm_epsg}", always_xy=True)
 

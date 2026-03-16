@@ -80,11 +80,15 @@ class PipelineChain:
             raise ValueError(f"Stage '{name}' already exists in pipeline '{self.name}'")
         for branch_name in branches:
             if branch_name in existing:
-                raise ValueError(f"Branch '{branch_name}' already exists in pipeline '{self.name}'")
+                raise ValueError(
+                    f"Branch '{branch_name}' already exists in pipeline '{self.name}'"
+                )
         self._stages.append(PipelineFork(name=name, branches=branches, merge=merge))
         return self
 
-    def run(self, initial_input: Any, metadata: dict[str, Any] | None = None) -> PipelineState:
+    def run(
+        self, initial_input: Any, metadata: dict[str, Any] | None = None
+    ) -> PipelineState:
         state = PipelineState(
             initial_input=initial_input,
             current_value=initial_input,
@@ -124,7 +128,11 @@ class PipelineChain:
                     output = handler(current_value, state)
                     branch_outputs[branch_name] = output
                     state.stage_outputs[branch_name] = output
-                current_value = stage.merge(branch_outputs, state) if stage.merge else branch_outputs
+                current_value = (
+                    stage.merge(branch_outputs, state)
+                    if stage.merge
+                    else branch_outputs
+                )
                 state.stage_outputs[stage.name] = current_value
             else:
                 current_value = stage.handler(current_value, state)
@@ -139,4 +147,6 @@ class PipelineChain:
             if stage.name == stage_name:
                 return index
 
-        raise ValueError(f"Stage '{stage_name}' does not exist in pipeline '{self.name}'")
+        raise ValueError(
+            f"Stage '{stage_name}' does not exist in pipeline '{self.name}'"
+        )
