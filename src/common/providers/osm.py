@@ -5,7 +5,7 @@ import requests
 from ..constants import OVERPASS_URL, BoundingBox
 
 
-# Refer https://wiki.openstreetmap.org/wiki/Map_features 
+# Refer https://wiki.openstreetmap.org/wiki/Map_features
 class OSM_MAP_FEATURES(Enum):
     BUILDING = "building"
     NATURE = "nature"
