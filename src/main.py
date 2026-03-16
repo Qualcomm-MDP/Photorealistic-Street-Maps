@@ -5,6 +5,8 @@ from common.providers import OSMClient, OSM_MAP_FEATURES
 from mesh_builder.extrude import extrude_buildings
 from data_ingest.ingest import ingest_data
 from mesh_builder.extrude import build_mesh
+from tkinter import Tk, filedialog
+
 
 bbox = BoundingBox(42.29025, 42.29422, -83.71978, -83.71205)
 
@@ -37,8 +39,24 @@ pipeline_progress.add_task("Retrieved data from OSM")
 pipeline_progress.add_task("Transform OSM to Mesh data")
 pipeline_progress.add_task("Export mesh file")
 
+def ask_save_path(default_name: str = "combined.glb") -> str | None:
+    root = Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+
+    path = filedialog.asksaveasfilename(
+        title="Choose where to save",
+        defaultextension=".glb",
+        initialfile=default_name,
+        filetypes=[("GLB files", "*.glb"), ("All files", "*.*")],
+    )
+
+    root.destroy()
+    return path or None
+
 def export_mesh(value, state):
-    export_to_glb(value, "combined.glb")
+    path = ask_save_path()
+    export_to_glb(value, path or "combined.glb")
     state.metadata["progress_monitor"].next()
 
 
