@@ -7,7 +7,7 @@ import requests
 
 class MapillaryClient:
     def __init__(self):
-        # NOTE: Ensure you use `os.environ['MAPILLARY_ACCESS_TOKEN']` 
+        # NOTE: Ensure you use `os.environ['MAPILLARY_ACCESS_TOKEN']`
         # when you need to send the mapillary token
         pass
     
@@ -88,5 +88,5 @@ class MapillaryClient:
         return metadata
     
 
-    # TODO: Add more functions that is needed to process mappilary 
+    # TODO: Add more functions that is needed to process mappilary
     # data. Refer to https://mapillary.github.io/mapillary-python-sdk/docs/intro
