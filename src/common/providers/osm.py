@@ -72,5 +72,4 @@ class OSMClient:
         
         
 
-    # TODO: Add more functions that is needed to process OSM data 
-    
+    # TODO: Add more functions that is needed to process OSM data
