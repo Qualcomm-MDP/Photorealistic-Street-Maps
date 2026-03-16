@@ -6,5 +6,5 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers",
-        "pipeline: Tests for pipeline stage chaining, forks, merges, and resume behavior"
+        "pipeline: Tests for pipeline stage chaining, forks, merges, and resume behavior",
     )
