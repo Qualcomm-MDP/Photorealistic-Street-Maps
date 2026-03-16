@@ -8,7 +8,7 @@ TODO: Write a guide to start contributing
 1. Clone the repository
 
 ```
-git clone https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps.git 
+git clone https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps.git
 ```
 
 2. Navigate to the cloned repo folder
@@ -17,6 +17,6 @@ git clone https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps.git
 
     ```
     Poetry (version x.x.x)
-    ``` 
+    ```
 4. Install all the dependencies by running `poetry install`
-5. You have finished setting up the development environment. 
+5. You have finished setting up the development environment.

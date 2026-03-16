@@ -8,6 +8,7 @@ def build_mesh(value, state):
 
     return extrude_buildings(value, bbox)
 
+
 def extrude_buildings(input_data, area_bbox, scale=5):
     buildings = {}
 
@@ -17,8 +18,8 @@ def extrude_buildings(input_data, area_bbox, scale=5):
     #     faces=plane_faces,
     # )
 
-    #buildings = []
-    #buildings.append(mesh)
+    # buildings = []
+    # buildings.append(mesh)
 
     for _, element in enumerate(input_data["elements"]):
         if "geometry" not in element:
@@ -44,17 +45,18 @@ def extrude_buildings(input_data, area_bbox, scale=5):
         mesh = path.extrude(height=height)
 
         if isinstance(mesh, list):
-            mesh = trimesh.util.concatenate([
-                m.to_mesh() if hasattr(m, "to_mesh") else m
-                for m in mesh
-            ])
+            mesh = trimesh.util.concatenate(
+                [m.to_mesh() if hasattr(m, "to_mesh") else m for m in mesh]
+            )
         else:
             if hasattr(mesh, "to_mesh"):
                 mesh = mesh.to_mesh()
-        
+
         buildings[id] = mesh
-    
-    combined_mesh = trimesh.util.concatenate([building for _, building in buildings.items()])
+
+    combined_mesh = trimesh.util.concatenate(
+        [building for _, building in buildings.items()]
+    )
     center = combined_mesh.bounding_box.centroid
     combined_mesh.apply_translation(-center)
     rotation = trimesh.transformations.rotation_matrix(
@@ -62,6 +64,6 @@ def extrude_buildings(input_data, area_bbox, scale=5):
         direction=[1.0, 0.0, 0.0],
         point=[0.0, 0.0, 0.0],
     )
-    
+
     combined_mesh.apply_transform(rotation)
     return combined_mesh
