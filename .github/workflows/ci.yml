@@ -42,7 +42,7 @@ jobs:
       - name: Lint and Format with Ruff
         run: |
           # Fails the build if there are syntax errors or undefined names
-          poetry run ruff check . 
+          poetry run ruff check --fix . 
           # Fails the build if the code is not formatted properly
           poetry run ruff format --check .
 
