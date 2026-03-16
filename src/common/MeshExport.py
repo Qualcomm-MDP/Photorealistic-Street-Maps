@@ -1,6 +1,6 @@
 from pathlib import Path
 import trimesh
-import json
+
 
 def export_to_glb(mesh: trimesh.Scene, output_path: str) -> None:
     """Export a trimesh Scene to GLB format.

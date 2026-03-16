@@ -1,5 +1,5 @@
 import trimesh
-from trimesh.path import entities 
+from trimesh.path import entities
 
 import numpy as np
 from pyproj import Transformer
@@ -12,6 +12,7 @@ def _scale_distance(value: float, scale: int) -> float:
     if scale <= 0:
         raise ValueError("Scale must be greater than 0")
     return value / float(scale)
+
 
 # Follow https://github.com/Qualcomm-MDP/mesh_creation/blob/main/extrude_out.py
 def generate_plane(height, width):
@@ -26,6 +27,7 @@ def generate_plane(height, width):
     plane = trimesh.Trimesh(vertices=corners, faces=faces)
 
     return plane, corners, faces
+
 
 def initialize_plane(bounding_box: BoundingBox, Scale: int):
     min_x, min_y = _GEODETIC_TO_PROJECTED.transform(
@@ -42,6 +44,7 @@ def initialize_plane(bounding_box: BoundingBox, Scale: int):
     plane, corners, faces = generate_plane(delta_x, delta_y)
 
     return plane, corners, faces
+
 
 def get_corners(element, bounding_box: BoundingBox, Scale: int):
     geometry_points = element["geometry"]
@@ -62,14 +65,15 @@ def get_corners(element, bounding_box: BoundingBox, Scale: int):
         local_j = _scale_distance(projected_y - origin_y, Scale)
 
         corners.append([local_i, local_j])
-    
+
     return corners
+
 
 def get_lines(corners, loop=True):
     lines = []
     start = 0
     end = 1
-    lines.append(entities.Line([start, end])) 
+    lines.append(entities.Line([start, end]))
 
     for i in range(len(corners) - 2):
         start += 1
@@ -79,6 +83,7 @@ def get_lines(corners, loop=True):
     if loop:
         lines.append(entities.Line([end, 0]))
     return lines
+
 
 def get_height(element):
     height = element["tags"].get("height")
@@ -92,5 +97,5 @@ def get_height(element):
             height = 3 * float(height)
     else:
         height = float(height)
-    
+
     return height
