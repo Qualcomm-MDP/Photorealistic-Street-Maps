@@ -30,8 +30,16 @@ def progress():
     progress.next()
 
 
+# MAIN PIPELINE RUN
+pipeline_progress = ProgressMonitor()
+pipeline_progress.add_task("Fetching data from OSM ...")
+pipeline_progress.add_task("Retrieved data from OSM")
+pipeline_progress.add_task("Transform OSM to Mesh data")
+pipeline_progress.add_task("Export mesh file")
+
 def export_mesh(value, state):
     export_to_glb(value, "combined.glb")
+    state.metadata["progress_monitor"].next()
 
 
 run_pipeline = PipelineChain()
@@ -41,7 +49,12 @@ run_pipeline.add_stage("export", export_mesh)
 
 
 def main():
-    run_pipeline.run(bbox, metadata={"bbox": bbox})
+    run_pipeline.run(bbox, 
+                     metadata={
+                        "bbox": bbox,
+                        "progress_monitor": pipeline_progress
+                        }
+                    )
 
 
 if __name__ == "__main__":
