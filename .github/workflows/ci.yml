@@ -46,12 +46,6 @@ jobs:
           # Fails the build if the code is not formatted properly
           poetry run ruff format --check .
 
-      - name: Run Unit Tests
+      - name: Run Tests
         run: |
-          poetry run pytest tests/unit/
-
-      - name: Run Integration Tests
-        env:
-          MAPILLARY_CLIENT_TOKEN: ${{ secrets.MAPILLARY_CLIENT_TOKEN }}
-        run: |
-          poetry run pytest tests/integration/
+          poetry run pytest tests/
