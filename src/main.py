@@ -7,11 +7,9 @@ from data_ingest.ingest import ingest_data
 from mesh_builder.extrude import build_mesh
 from tkinter import Tk, filedialog
 
-
-bbox = BoundingBox(42.29025, 42.29422, -83.71978, -83.71205)
-
-
 def progress():
+    bbox = BoundingBox(42.29025, 42.29422, -83.71978, -83.71205)
+
     # Register a blue print of each task
     progress = ProgressMonitor()
     progress.add_task("Retrieve data from OSM")
@@ -67,6 +65,13 @@ run_pipeline.add_stage("export", export_mesh)
 
 
 def main():
+    min_lon = float(input("WEST (Minimum Longitude): "))
+    min_lat = float(input("SOUTH (Minimum Latitude): "))
+    max_lon = float(input("EAST (Minimum Longitude): "))
+    max_lat = float(input("NORTH (Minimum Latitude): "))
+
+    bbox = BoundingBox(min_lat, max_lat, min_lon, max_lon)
+
     run_pipeline.run(bbox, 
                      metadata={
                         "bbox": bbox,
