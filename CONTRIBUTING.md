@@ -20,3 +20,4 @@ git clone https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps.git
     ```
 4. Install all the dependencies by running `poetry install`
 5. You have finished setting up the development environment.
+6. To run the pipeline, run `poetry run python src/main.py`
