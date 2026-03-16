@@ -1,8 +1,12 @@
 import trimesh
 import numpy as np
 from common.MeshUtils import get_corners, get_lines, get_height
-from common.MeshExport import export_to_glb
 
+
+def build_mesh(value, state):
+    bbox = state.metadata["bbox"]
+
+    return extrude_buildings(value, bbox)
 
 def extrude_buildings(input_data, area_bbox, scale=5):
     buildings = {}
@@ -60,3 +64,4 @@ def extrude_buildings(input_data, area_bbox, scale=5):
     )
     
     combined_mesh.apply_transform(rotation)
+    return combined_mesh
