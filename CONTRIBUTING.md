@@ -3,7 +3,7 @@
 TODO: Write a guide to start contributing
 
 ## Get Started
-**Note:** This project using [Poetry](https://python-poetry.org/). To install follow this [guide](https://python-poetry.org/docs/).
+**Note:** This project uses [Poetry](https://python-poetry.org/). To install follow this [guide](https://python-poetry.org/docs/).
 
 1. Clone the repository
 
