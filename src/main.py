@@ -7,6 +7,7 @@ from data_ingest.ingest import ingest_data
 from mesh_builder.extrude import build_mesh
 from tkinter import Tk, filedialog
 
+
 def progress():
     bbox = BoundingBox(42.29025, 42.29422, -83.71978, -83.71205)
 
@@ -37,6 +38,7 @@ pipeline_progress.add_task("Retrieved data from OSM")
 pipeline_progress.add_task("Transform OSM to Mesh data")
 pipeline_progress.add_task("Export mesh file")
 
+
 def ask_save_path(default_name: str = "combined.glb") -> str | None:
     root = Tk()
     root.withdraw()
@@ -51,6 +53,7 @@ def ask_save_path(default_name: str = "combined.glb") -> str | None:
 
     root.destroy()
     return path or None
+
 
 def export_mesh(value, state):
     path = ask_save_path()
@@ -72,12 +75,9 @@ def main():
 
     bbox = BoundingBox(min_lat, max_lat, min_lon, max_lon)
 
-    run_pipeline.run(bbox, 
-                     metadata={
-                        "bbox": bbox,
-                        "progress_monitor": pipeline_progress
-                        }
-                    )
+    run_pipeline.run(
+        bbox, metadata={"bbox": bbox, "progress_monitor": pipeline_progress}
+    )
 
 
 if __name__ == "__main__":
