@@ -23,7 +23,11 @@ def extrude_buildings(input_data, area_bbox, scale=5):
     # buildings = []
     # buildings.append(mesh)
 
-    for _, element in tqdm(enumerate(input_data["elements"]), "Generating Building Mesh(s)", len(input_data["elements"])):
+    for _, element in tqdm(
+        enumerate(input_data["elements"]),
+        "Generating Building Mesh(s)",
+        len(input_data["elements"]),
+    ):
         if "geometry" not in element:
             continue
 
@@ -44,7 +48,7 @@ def extrude_buildings(input_data, area_bbox, scale=5):
             continue
 
         height = -1 * (height / float(scale))
-        if (height == 0):
+        if height == 0:
             height += 1e-3
 
         mesh = path.extrude(height=height)
