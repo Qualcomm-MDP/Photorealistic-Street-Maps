@@ -1,27 +1,17 @@
 import trimesh
 from tqdm import tqdm
-import numpy as np
 from common.MeshUtils import get_corners, get_lines, get_height
 
 
 def build_mesh(value, state):
-    bbox = state.metadata["bbox"]
-    data = extrude_buildings(value, bbox)
-    state.metadata["progress_monitor"].next()
+    bbox = state.require_metadata("bbox")
+    data = extrude_buildings(value["osm"], bbox)
+    state.require_metadata("progress_monitor").next()
     return data
 
 
-def extrude_buildings(input_data, area_bbox, scale=5):
+def extrude_buildings(input_data, area_bbox):
     buildings = {}
-
-    # _, plane_vertices, plane_faces = initialize_plane(area_bbox, scale)
-    # mesh = trimesh.Trimesh(
-    #     vertices=plane_vertices,
-    #     faces=plane_faces,
-    # )
-
-    # buildings = []
-    # buildings.append(mesh)
 
     for _, element in tqdm(
         enumerate(input_data["elements"]),
@@ -32,7 +22,7 @@ def extrude_buildings(input_data, area_bbox, scale=5):
             continue
 
         id = element["id"]
-        corners = get_corners(element, area_bbox, scale)
+        corners = get_corners(element, area_bbox)
 
         lines = get_lines(corners)
 
@@ -47,7 +37,7 @@ def extrude_buildings(input_data, area_bbox, scale=5):
         if not polys[0]:
             continue
 
-        height = -1 * (height / float(scale))
+        height = -1 * height
         if height == 0:
             height += 1e-3
 
@@ -66,13 +56,4 @@ def extrude_buildings(input_data, area_bbox, scale=5):
     combined_mesh = trimesh.util.concatenate(
         [building for _, building in buildings.items()]
     )
-    center = combined_mesh.bounding_box.centroid
-    combined_mesh.apply_translation(-center)
-    rotation = trimesh.transformations.rotation_matrix(
-        angle=np.radians(90.0),
-        direction=[1.0, 0.0, 0.0],
-        point=[0.0, 0.0, 0.0],
-    )
-
-    combined_mesh.apply_transform(rotation)
     return combined_mesh

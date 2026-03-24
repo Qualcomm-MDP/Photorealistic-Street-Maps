@@ -1,6 +1,8 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypeVar
+
+_T = TypeVar("_T")
 
 StageHandler = Callable[[Any, "PipelineState"], Any]
 MergeHandler = Callable[[dict[str, Any], "PipelineState"], Any]
@@ -28,6 +30,20 @@ class PipelineState:
     current_value: Any
     stage_outputs: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    def get_metadata(self, key: str, default: _T) -> _T:
+        return self.metadata.get(key, default)
+
+    def require_metadata(self, key: str) -> Any:
+        if key not in self.metadata:
+            raise KeyError(
+                f"Required metadata key '{key}' is missing. "
+                f"Available keys: {list(self.metadata.keys())}"
+            )
+        return self.metadata[key]
+
+    def set_metadata(self, key: str, value: Any) -> None:
+        self.metadata[key] = value
 
     def get_output(self, stage_name: str) -> Any:
         if stage_name not in self.stage_outputs:
