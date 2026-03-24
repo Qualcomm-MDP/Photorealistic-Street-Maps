@@ -1,10 +1,11 @@
 from common import PipelineState
-from common.constants import BoundingBox
 import json
+
 
 def export_json(data: dict, filepath: str):
     with open(filepath, "w") as f:
         json.dump(data, f, indent=2)
+
 
 def tex_projection(value, state: PipelineState):
     mapillary_data = state.get_metadata("provider_data", {})["mapillary"]

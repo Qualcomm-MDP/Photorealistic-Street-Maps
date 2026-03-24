@@ -5,6 +5,7 @@ import numpy as np
 from pyproj import Transformer
 from .constants import BoundingBox
 
+
 def _get_utm_transformer(lon: float, lat: float) -> Transformer:
     zone_number = int((lon + 180) / 6) + 1
     epsg = (32600 if lat >= 0 else 32700) + zone_number

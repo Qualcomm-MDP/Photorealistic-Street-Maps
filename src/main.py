@@ -6,7 +6,7 @@ from common.providers import OSMClient, OSM_MAP_FEATURES
 from mesh_builder.extrude import extrude_buildings
 from data_ingest.ingest import ingest_data
 from mesh_builder.extrude import build_mesh
-from texturing.tex_projection import tex_projection 
+from texturing.tex_projection import tex_projection
 from tkinter import Tk, filedialog
 
 import os
