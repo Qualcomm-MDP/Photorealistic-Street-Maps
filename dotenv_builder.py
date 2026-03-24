@@ -31,7 +31,11 @@ def main():
     label, dotenv_path = choose_environment()
 
     if dotenv_path.is_file():
-        overwrite = input(f"{dotenv_path.name} already exists. Overwrite? (y/N): ").strip().lower()
+        overwrite = (
+            input(f"{dotenv_path.name} already exists. Overwrite? (y/N): ")
+            .strip()
+            .lower()
+        )
         if overwrite != "y":
             print("Aborted.")
             return
