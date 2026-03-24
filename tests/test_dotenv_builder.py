@@ -72,9 +72,7 @@ def test_main_writes_plain_env(tmp_path, monkeypatch):
 
 def test_main_skips_comments_and_blanks(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / ".env.example").write_text(
-        "# this is a comment\n\nAPI_KEY=\n"
-    )
+    (tmp_path / ".env.example").write_text("# this is a comment\n\nAPI_KEY=\n")
 
     with patch("builtins.input", side_effect=["3", "abc"]):
         main()
