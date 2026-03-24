@@ -5,7 +5,10 @@ import numpy as np
 from pyproj import Transformer
 from .constants import BoundingBox
 
-_GEODETIC_TO_PROJECTED = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+def _get_utm_transformer(lon: float, lat: float) -> Transformer:
+    zone_number = int((lon + 180) / 6) + 1
+    epsg = (32600 if lat >= 0 else 32700) + zone_number
+    return Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True)
 
 
 def _scale_distance(value: float, scale: int) -> float:
@@ -30,11 +33,15 @@ def generate_plane(height, width):
 
 
 def initialize_plane(bounding_box: BoundingBox, Scale: int):
-    min_x, min_y = _GEODETIC_TO_PROJECTED.transform(
+    center_lon = (bounding_box.min_lon + bounding_box.max_lon) / 2
+    center_lat = (bounding_box.min_lat + bounding_box.max_lat) / 2
+    transformer = _get_utm_transformer(center_lon, center_lat)
+
+    min_x, min_y = transformer.transform(
         bounding_box.min_lon,
         bounding_box.min_lat,
     )
-    max_x, max_y = _GEODETIC_TO_PROJECTED.transform(
+    max_x, max_y = transformer.transform(
         bounding_box.max_lon,
         bounding_box.max_lat,
     )
@@ -46,25 +53,20 @@ def initialize_plane(bounding_box: BoundingBox, Scale: int):
     return plane, corners, faces
 
 
-def get_corners(element, bounding_box: BoundingBox, Scale: int):
+def get_corners(element, bounding_box: BoundingBox):
     geometry_points = element["geometry"]
     corners = []
 
-    origin_x, origin_y = _GEODETIC_TO_PROJECTED.transform(
-        bounding_box.min_lon,
-        bounding_box.min_lat,
-    )
+    center_lon = (bounding_box.min_lon + bounding_box.max_lon) / 2
+    center_lat = (bounding_box.min_lat + bounding_box.max_lat) / 2
+    transformer = _get_utm_transformer(center_lon, center_lat)
 
     for point in geometry_points:
-        projected_x, projected_y = _GEODETIC_TO_PROJECTED.transform(
+        projected_x, projected_y = transformer.transform(
             float(point["lon"]),
             float(point["lat"]),
         )
-
-        local_i = _scale_distance(projected_x - origin_x, Scale)
-        local_j = _scale_distance(projected_y - origin_y, Scale)
-
-        corners.append([local_i, local_j])
+        corners.append([projected_x, projected_y])
 
     return corners
 
