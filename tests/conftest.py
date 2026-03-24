@@ -8,3 +8,7 @@ def pytest_configure(config):
         "markers",
         "pipeline: Tests for pipeline stage chaining, forks, merges, and resume behavior",
     )
+    config.addinivalue_line(
+        "markers",
+        "dotenv_builder: Tests for dotenv_builder env file generation",
+    )
