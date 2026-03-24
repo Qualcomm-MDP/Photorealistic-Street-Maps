@@ -1,3 +1,4 @@
+from dotenv import load_dotenv
 from common import ProgressMonitor, PipelineChain, export_to_glb
 from common.constants import BoundingBox
 from common.providers import OSMClient, OSM_MAP_FEATURES
@@ -7,7 +8,7 @@ from data_ingest.ingest import ingest_data
 from mesh_builder.extrude import build_mesh
 from tkinter import Tk, filedialog
 
-
+load_dotenv()
 def progress():
     bbox = BoundingBox(42.29025, 42.29422, -83.71978, -83.71205)
 
