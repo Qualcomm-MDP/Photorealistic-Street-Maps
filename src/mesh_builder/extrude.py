@@ -5,9 +5,9 @@ from common.MeshUtils import get_corners, get_lines, get_height
 
 
 def build_mesh(value, state):
-    bbox = state.metadata["bbox"]
+    bbox = state.require_metadata("bbox")
     data = extrude_buildings(value, bbox)
-    state.metadata["progress_monitor"].next()
+    state.require_metadata("progress_monitor").next()
     return data
 
 

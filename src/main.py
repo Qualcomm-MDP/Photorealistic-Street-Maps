@@ -68,7 +68,7 @@ def ask_save_path(default_name: str = "combined.glb") -> str | None:
 def export_mesh(value, state):
     path = ask_save_path()
     export_to_glb(value, path or "combined.glb")
-    state.metadata["progress_monitor"].next()
+    state.require_metadata("progress_monitor").next()
 
 
 run_pipeline = PipelineChain()
