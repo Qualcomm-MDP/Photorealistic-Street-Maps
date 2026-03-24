@@ -8,7 +8,14 @@ from data_ingest.ingest import ingest_data
 from mesh_builder.extrude import build_mesh
 from tkinter import Tk, filedialog
 
-load_dotenv()
+import os
+_env = os.environ.get("APP_ENV", "").lower()
+_env_file = {
+    "development": ".env.development",
+    "production": ".env.production",
+}.get(_env, ".env")
+load_dotenv(_env_file)
+
 def progress():
     bbox = BoundingBox(42.29025, 42.29422, -83.71978, -83.71205)
 
