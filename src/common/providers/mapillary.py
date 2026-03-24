@@ -78,13 +78,14 @@ class MapillaryClient:
             metadata[img_id] = {
                 "latitude": img["geometry"]["coordinates"][1],
                 "longitude": img["geometry"]["coordinates"][0],
+                "rotvec": list(computed_rotation),  # raw angle-axis (preferred)
                 "yaw": yaw,
                 "pitch": pitch,
                 "roll": roll,
                 "focal_length_pixels": focal_px,
                 "original_width": img.get("width"),
                 "original_height": img.get("height"),
-                "image_url": img.get("thumb_2048_url"),
+                "image_url": img.get("thumb_original_url"),
             }
 
         return metadata
