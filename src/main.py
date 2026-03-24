@@ -6,6 +6,7 @@ from common.providers import OSMClient, OSM_MAP_FEATURES
 from mesh_builder.extrude import extrude_buildings
 from data_ingest.ingest import ingest_data
 from mesh_builder.extrude import build_mesh
+from texturing.tex_projection import tex_projection 
 from tkinter import Tk, filedialog
 
 import os
@@ -23,8 +24,9 @@ def progress():
 
     # Register a blue print of each task
     progress = ProgressMonitor()
-    progress.add_task("Retrieve data from OSM")
+    progress.add_task("Retrieve data from OSM and Mapillary")
     progress.add_task("Transform OSM to Mesh data")
+    progress.add_task("Texture mesh")
     progress.add_task("Export mesh file")
     progress.add_task("FINISHED!")
 
@@ -43,9 +45,10 @@ def progress():
 
 # MAIN PIPELINE RUN
 pipeline_progress = ProgressMonitor()
-pipeline_progress.add_task("Fetching data from OSM ...")
+pipeline_progress.add_task("Fetching data from OSM and Mapillary...")
 pipeline_progress.add_task("Retrieved data from OSM")
 pipeline_progress.add_task("Transform OSM to Mesh data")
+pipeline_progress.add_task("Texture Mesh")
 pipeline_progress.add_task("Export mesh file")
 
 
@@ -74,6 +77,7 @@ def export_mesh(value, state):
 run_pipeline = PipelineChain()
 run_pipeline.add_stage("fetech", ingest_data)
 run_pipeline.add_stage("build_mesh", build_mesh)
+run_pipeline.add_stage("texturing", tex_projection)
 run_pipeline.add_stage("export", export_mesh)
 
 
