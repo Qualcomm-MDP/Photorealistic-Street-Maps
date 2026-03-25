@@ -8,7 +8,7 @@ version = "0.1.0"
 description = ""
 readme = "README.md"
 authors = [ { name = "Ashp116", email = "ashp116@outlook.com" } ]
-requires-python = ">=3.11,<4.0,!=3.14.1"
+requires-python = ">=3.11,<3.15,!=3.14.1"
 classifiers = [
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.11",
@@ -29,7 +29,10 @@ dependencies = [
   "triangle>=20250106,<20250107",
   "trimesh>=4.11.3,<5",
   "rtree (>=1.4.1,<2.0.0)",
-  "matplotlib (>=3.10.8,<4.0.0)"
+  "matplotlib (>=3.10.8,<4.0.0)",
+  "torch (>=2.11.0,<3.0.0)",
+  "transformers (>=4.45.0,<5.0.0)",
+  "simple-lama-inpainting (>=0.1.0)"
 ]
 
 [dependency-groups]

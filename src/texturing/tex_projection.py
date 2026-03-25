@@ -11,6 +11,7 @@ from trimesh import visual
 
 from common import PipelineState
 from common.MeshUtils import _get_utm_transformer
+from segmentation import remove_obstructions
 
 CAMERA_HEIGHT_M = 1.6
 ATLAS_W = 4096
@@ -76,6 +77,7 @@ def apply_textures(mesh: trimesh.Trimesh, mapillary_data: dict, bbox) -> trimesh
     for img_id, meta in tqdm(candidates, desc="Downloading images"):
         try:
             img = _download_image(meta["image_url"])
+            img = remove_obstructions(img)
         except Exception as exc:
             tqdm.write(f"  Download failed [{img_id}]: {exc}")
             continue
