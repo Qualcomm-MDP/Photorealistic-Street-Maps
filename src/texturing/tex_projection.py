@@ -6,6 +6,7 @@ import requests
 import trimesh
 from PIL import Image
 from scipy.spatial.transform import Rotation as SciR
+from tqdm import tqdm
 from trimesh import visual
 
 from common import PipelineState
@@ -14,7 +15,8 @@ from common.MeshUtils import _get_utm_transformer
 CAMERA_HEIGHT_M = 1.6
 ATLAS_W = 4096
 MAX_PATCH = 1024
-ENABLE_OCCLUSION = True
+ZBUF_GRID = 128
+ZBUF_TOL_M = 1.0
 
 
 def _build_K(focal_px: float, w: int, h: int) -> np.ndarray:
@@ -72,12 +74,11 @@ def apply_textures(mesh: trimesh.Trimesh, mapillary_data: dict, bbox) -> trimesh
         return mesh
 
     cam_data: list[dict] = []
-    for img_id, meta in candidates:
-        print(f"  Downloading {img_id} ...")
+    for img_id, meta in tqdm(candidates, desc="Downloading images"):
         try:
             img = _download_image(meta["image_url"])
         except Exception as exc:
-            print(f"    Download failed: {exc}")
+            tqdm.write(f"  Download failed [{img_id}]: {exc}")
             continue
         w = meta["original_width"]
         h = meta["original_height"]
@@ -100,59 +101,67 @@ def apply_textures(mesh: trimesh.Trimesh, mapillary_data: dict, bbox) -> trimesh
 
     verts = mesh.vertices
     faces = mesh.faces
-    _ = mesh.face_normals
     face_normals = mesh.face_normals
 
     verts_proj = verts.copy()
     verts_proj[:, 2] = -verts_proj[:, 2]
 
-    occ_mesh = trimesh.Trimesh(vertices=verts_proj, faces=faces, process=False)
+    face_centers_p = verts_proj[faces].mean(axis=1)
 
     best_hit: dict[int, tuple] = {}
-    print(f"  Visibility pass over {len(cam_data)} camera(s) ...")
-    for ci, cd in enumerate(cam_data):
+    for ci, cd in enumerate(tqdm(cam_data, desc="Visibility")):
         Cw, R, K = cd["Cw"], cd["R"], cd["K"]
         w, h = cd["w"], cd["h"]
 
-        for fi, face in enumerate(faces):
-            V0p, V1p, V2p = verts_proj[face]
-            center_p = (V0p + V1p + V2p) / 3.0
+        # vectorized frontality filter
+        vd = face_centers_p - Cw
+        vd_len = np.linalg.norm(vd, axis=1)
+        valid = vd_len > 1e-9
+        vd_norm = vd / np.where(valid[:, None], vd_len[:, None], 1.0)
+        frontality_all = -np.einsum("ij,ij->i", face_normals, vd_norm)
+        cand = np.where(valid & (frontality_all > 0))[0]
+        if len(cand) == 0:
+            continue
 
-            vd = center_p - Cw
-            vd_len = np.linalg.norm(vd)
-            if vd_len < 1e-9:
-                continue
-            vd = vd / vd_len
+        # vectorized projection + bounds filter
+        V_flat = verts_proj[faces[cand]].reshape(-1, 3)
+        Xc = (R @ (V_flat - Cw).T).T
+        z = np.maximum(Xc[:, 2], 1e-6)
+        uv_flat = (K @ np.vstack([Xc[:, 0] / z, Xc[:, 1] / z, np.ones(len(z))])).T[:, :2]
+        M = len(cand)
+        uv3 = uv_flat.reshape(M, 3, 2)
+        z3 = z.reshape(M, 3)
 
-            frontality = -np.dot(face_normals[fi], vd)
-            if frontality <= 0:
-                continue
+        depth_ok = np.all(z3 > 0.1, axis=1)
+        u_ok = (uv3[:, :, 0].min(axis=1) >= 0) & (uv3[:, :, 0].max(axis=1) < w)
+        v_ok = (uv3[:, :, 1].min(axis=1) >= 0) & (uv3[:, :, 1].max(axis=1) < h)
+        proj_ok = depth_ok & u_ok & v_ok
+        cand = cand[proj_ok]
+        uv3 = uv3[proj_ok]
+        z3 = z3[proj_ok]
+        if len(cand) == 0:
+            continue
 
-            uv_img, depths = _project(np.array([V0p, V1p, V2p]), Cw, R, K)
-            if not np.all(depths > 0.1):
-                continue
+        # coarse Z-buffer: reject faces behind the nearest face in each grid cell
+        center_depth = z3.mean(axis=1)
+        center_uv = uv3.mean(axis=1)
+        cell_u = (center_uv[:, 0] / w * ZBUF_GRID).astype(np.int32).clip(0, ZBUF_GRID - 1)
+        cell_v = (center_uv[:, 1] / h * ZBUF_GRID).astype(np.int32).clip(0, ZBUF_GRID - 1)
+        cell_idx = cell_v * ZBUF_GRID + cell_u
+        zbuf = np.full(ZBUF_GRID * ZBUF_GRID, np.inf)
+        np.minimum.at(zbuf, cell_idx, center_depth)
+        visible = center_depth <= zbuf[cell_idx] + ZBUF_TOL_M
+        cand = cand[visible]
+        uv3 = uv3[visible]
+        z3 = z3[visible]
+        if len(cand) == 0:
+            continue
 
-            pts = uv_img.astype(np.int32)
-            if not (
-                pts[:, 0].min() >= 0
-                and pts[:, 0].max() < w
-                and pts[:, 1].min() >= 0
-                and pts[:, 1].max() < h
-            ):
-                continue
-
-            if ENABLE_OCCLUSION:
-                ray_len = np.linalg.norm(center_p - Cw)
-                ray_dir = (center_p - Cw) / ray_len
-                locs, _, idx_tri = occ_mesh.ray.intersects_location([Cw], [ray_dir])
-                if len(locs) > 0:
-                    dists = np.linalg.norm(locs - Cw, axis=1)
-                    nearest = np.argmin(dists)
-                    if idx_tri[nearest] != fi and abs(dists[nearest] - ray_len) >= 0.5:
-                        continue
-
-            if fi not in best_hit or frontality > best_hit[fi][3]:
-                best_hit[fi] = (ci, uv_img.astype(np.float32), depths, frontality)
+        fronts = frontality_all[cand]
+        for k, fi in enumerate(cand):
+            fi = int(fi)
+            if fi not in best_hit or fronts[k] > best_hit[fi][3]:
+                best_hit[fi] = (ci, uv3[k].astype(np.float32), z3[k], fronts[k])
 
     print(f"  {len(best_hit)} / {len(faces)} faces assigned a camera")
 
