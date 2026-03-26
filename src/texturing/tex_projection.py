@@ -77,7 +77,7 @@ def apply_textures(mesh: trimesh.Trimesh, mapillary_data: dict, bbox) -> trimesh
     for img_id, meta in tqdm(candidates, desc="Downloading images"):
         try:
             img = _download_image(meta["image_url"])
-            img = remove_obstructions(img)
+            #img = remove_obstructions(img)
         except Exception as exc:
             tqdm.write(f"  Download failed [{img_id}]: {exc}")
             continue

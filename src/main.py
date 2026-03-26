@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 from common import ProgressMonitor, PipelineChain, export_to_glb
+from common.profiler import PipelineProfiler
 from common.constants import BoundingBox
 from common.providers import OSMClient, OSM_MAP_FEATURES
 from common.MeshUtils import _get_utm_transformer
@@ -109,9 +110,13 @@ def main():
 
     bbox = BoundingBox(min_lat, max_lat, min_lon, max_lon)
 
+    profiler = PipelineProfiler(pipeline_name="photorealistic-street-maps")
     run_pipeline.run(
-        bbox, metadata={"bbox": bbox, "progress_monitor": pipeline_progress}
+        bbox,
+        metadata={"bbox": bbox, "progress_monitor": pipeline_progress},
+        profiler=profiler,
     )
+    profiler.save("performance.json")
 
 
 if __name__ == "__main__":
