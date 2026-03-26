@@ -128,6 +128,7 @@ class PipelineProfiler:
             "system": {
                 "python": platform.python_version(),
                 "os": platform.platform(),
+                "cpu_name": platform.processor() or platform.machine(),
                 "cpu_count": os.cpu_count(),
                 "gpu": _gpu_system_info(),
             },
