@@ -1,6 +1,11 @@
+from __future__ import annotations
+
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
+
+if TYPE_CHECKING:
+    from common.profiler import PipelineProfiler
 
 _T = TypeVar("_T")
 
@@ -103,14 +108,22 @@ class PipelineChain:
         return self
 
     def run(
-        self, initial_input: Any, metadata: dict[str, Any] | None = None
+        self,
+        initial_input: Any,
+        metadata: dict[str, Any] | None = None,
+        profiler: "PipelineProfiler | None" = None,
     ) -> PipelineState:
         state = PipelineState(
             initial_input=initial_input,
             current_value=initial_input,
             metadata=dict(metadata or {}),
         )
-        return self._execute(state, start_index=0)
+        if profiler is not None:
+            profiler.start()
+        result = self._execute(state, start_index=0, profiler=profiler)
+        if profiler is not None:
+            profiler.finish()
+        return result
 
     def resume(self, state: PipelineState, from_stage: str) -> PipelineState:
         start_index = self._get_stage_index(from_stage)
@@ -134,25 +147,39 @@ class PipelineChain:
 
         return self._execute(state, start_index=start_index)
 
-    def _execute(self, state: PipelineState, start_index: int) -> PipelineState:
+    def _execute(
+        self,
+        state: PipelineState,
+        start_index: int,
+        profiler: "PipelineProfiler | None" = None,
+    ) -> PipelineState:
         current_value = state.current_value
 
         for stage in self._stages[start_index:]:
-            if isinstance(stage, PipelineFork):
-                branch_outputs: dict[str, Any] = {}
-                for branch_name, handler in stage.branches.items():
-                    output = handler(current_value, state)
-                    branch_outputs[branch_name] = output
-                    state.stage_outputs[branch_name] = output
-                current_value = (
-                    stage.merge(branch_outputs, state)
-                    if stage.merge
-                    else branch_outputs
-                )
-                state.stage_outputs[stage.name] = current_value
-            else:
-                current_value = stage.handler(current_value, state)
-                state.stage_outputs[stage.name] = current_value
+            metrics = profiler.begin_stage(stage.name) if profiler else None
+            try:
+                if isinstance(stage, PipelineFork):
+                    branch_outputs: dict[str, Any] = {}
+                    for branch_name, handler in stage.branches.items():
+                        output = handler(current_value, state)
+                        branch_outputs[branch_name] = output
+                        state.stage_outputs[branch_name] = output
+                    current_value = (
+                        stage.merge(branch_outputs, state)
+                        if stage.merge
+                        else branch_outputs
+                    )
+                    state.stage_outputs[stage.name] = current_value
+                else:
+                    current_value = stage.handler(current_value, state)
+                    state.stage_outputs[stage.name] = current_value
+
+                if profiler and metrics:
+                    profiler.end_stage(metrics, status="ok")
+            except Exception as exc:
+                if profiler and metrics:
+                    profiler.end_stage(metrics, status="error", error=str(exc))
+                raise
 
             state.current_value = current_value
 

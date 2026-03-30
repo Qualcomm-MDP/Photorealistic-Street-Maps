@@ -23,6 +23,7 @@ def ingest_data(bbox: BoundingBox, state: PipelineState):
             "width",
             "height",
         ],
+        limit=1000,
     )
     state.require_metadata("progress_monitor").next()
 

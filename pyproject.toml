@@ -8,7 +8,7 @@ version = "0.1.0"
 description = ""
 readme = "README.md"
 authors = [ { name = "Ashp116", email = "ashp116@outlook.com" } ]
-requires-python = ">=3.11,<4.0,!=3.14.1"
+requires-python = ">=3.11,<3.15,!=3.14.1"
 classifiers = [
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.11",
@@ -18,6 +18,7 @@ classifiers = [
 dependencies = [
   "dotenv>=0.9.9,<0.10",
   "mapillary>=1.0.15,<2",
+  "matplotlib>=3.10.8,<4",
   "networkx>=3.6.1,<4",
   "numpy>=2.4.3,<3",
   "opencv-python>=4.13.0.92,<5",
@@ -25,7 +26,11 @@ dependencies = [
   "pint>=0.25.2,<0.26",
   "pyproj>=3.7.2,<4",
   "requests>=2.32.5,<3",
+  "rtree>=1.4.1,<2",
+  "simple-lama-inpainting>=0.1",
+  "torch>=2.11,<3",
   "tqdm>=4.67.3,<5",
+  "transformers>=4.45,<5",
   "triangle>=20250106,<20250107",
   "trimesh>=4.11.3,<5"
 ]
