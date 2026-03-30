@@ -118,7 +118,11 @@ def main():
 
     bbox = BoundingBox(min_lat, max_lat, min_lon, max_lon)
 
-    profiler = PipelineProfiler(pipeline_name="photorealistic-street-maps") if args.profile else None
+    profiler = (
+        PipelineProfiler(pipeline_name="photorealistic-street-maps")
+        if args.profile
+        else None
+    )
     run_pipeline.run(
         bbox,
         metadata={

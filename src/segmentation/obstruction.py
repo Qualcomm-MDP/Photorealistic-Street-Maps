@@ -98,5 +98,5 @@ def synthesize_texture(img_bgr: np.ndarray, mask: np.ndarray) -> np.ndarray:
 
 def remove_obstructions(img_bgr: np.ndarray) -> np.ndarray:
     mask = build_obstruction_mask(img_bgr)
-    #n_obs = int((mask > 0).sum())
+    # n_obs = int((mask > 0).sum())
     return synthesize_texture(img_bgr, mask)
