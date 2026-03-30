@@ -64,7 +64,9 @@ def build_obstruction_mask(img_bgr: np.ndarray) -> np.ndarray:
     inputs = _seg_proc(images=pil, return_tensors="pt").to(device)  # type: ignore[operator]
     with torch.no_grad():
         outputs = _seg_model(**inputs)
-    seg = _seg_proc.post_process_semantic_segmentation(outputs, target_sizes=[(h, w)])[0]  # type: ignore[arg-type]
+    seg = _seg_proc.post_process_semantic_segmentation(outputs, target_sizes=[(h, w)])[
+        0
+    ]  # type: ignore[arg-type]
     seg_np = seg.cpu().numpy()
 
     mask = np.zeros((h, w), dtype=np.uint8)

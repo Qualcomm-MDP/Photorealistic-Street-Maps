@@ -23,7 +23,8 @@ def ingest_data(bbox: BoundingBox, state: PipelineState):
             "width",
             "height",
         ],
-        limit=1000)
+        limit=1000,
+    )
     state.require_metadata("progress_monitor").next()
 
     cumulative_data = {"osm": osm_data, "mapillary": mapillary_data}

@@ -11,6 +11,7 @@ from typing import Any
 
 import torch
 
+
 def _gpu_available() -> bool:
     return torch.cuda.is_available()
 
@@ -26,7 +27,11 @@ def _gpu_snapshot() -> dict[str, Any]:
         "allocated_mb": round(torch.cuda.memory_allocated() / 1e6, 2),
         "reserved_mb": round(torch.cuda.memory_reserved() / 1e6, 2),
         "free_mb": round(
-            (torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_reserved()) / 1e6,
+            (
+                torch.cuda.get_device_properties(0).total_memory
+                - torch.cuda.memory_reserved()
+            )
+            / 1e6,
             2,
         ),
     }
@@ -80,7 +85,9 @@ class StageMetrics:
         self.gpu_end = _gpu_snapshot()
         if _gpu_available():
             self.gpu_delta_allocated_mb = round(
-                float(self.gpu_end["allocated_mb"]) - float(self.gpu_start["allocated_mb"]), 2
+                float(self.gpu_end["allocated_mb"])
+                - float(self.gpu_start["allocated_mb"]),
+                2,
             )
         self.status = status
         self.error = error

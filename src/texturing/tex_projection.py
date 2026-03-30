@@ -11,7 +11,6 @@ from trimesh import visual
 
 from common import PipelineState
 from common.MeshUtils import _get_utm_transformer
-from segmentation import remove_obstructions
 
 CAMERA_HEIGHT_M = 1.6
 ATLAS_W = 4096
@@ -55,7 +54,9 @@ def _download_image(url: str) -> np.ndarray:
     return img
 
 
-def apply_textures(mesh: trimesh.Trimesh, mapillary_data: dict, bbox) -> trimesh.Trimesh:
+def apply_textures(
+    mesh: trimesh.Trimesh, mapillary_data: dict, bbox
+) -> trimesh.Trimesh:
     center_lon = (bbox.min_lon + bbox.max_lon) / 2
     center_lat = (bbox.min_lat + bbox.max_lat) / 2
     transformer = _get_utm_transformer(center_lon, center_lat)
@@ -77,7 +78,7 @@ def apply_textures(mesh: trimesh.Trimesh, mapillary_data: dict, bbox) -> trimesh
     for img_id, meta in tqdm(candidates, desc="Downloading images"):
         try:
             img = _download_image(meta["image_url"])
-            #img = remove_obstructions(img)
+            # img = remove_obstructions(img)
         except Exception as exc:
             tqdm.write(f"  Download failed [{img_id}]: {exc}")
             continue
@@ -204,9 +205,7 @@ def apply_textures(mesh: trimesh.Trimesh, mapillary_data: dict, bbox) -> trimesh
 
         ds = (s_max - s_min) / patch_w
         dt = (t_max - t_min) / patch_h
-        S = np.array(
-            [[ds, 0, s_min], [0, -dt, t_max], [0, 0, 1]], dtype=np.float64
-        )
+        S = np.array([[ds, 0, s_min], [0, -dt, t_max], [0, 0, 1]], dtype=np.float64)
         H_atlas = H @ S
 
         patch_bgr = cv2.warpPerspective(
@@ -249,7 +248,7 @@ def apply_textures(mesh: trimesh.Trimesh, mapillary_data: dict, bbox) -> trimesh
     atlas_h = photo_h + GRAY_H
     atlas = np.full((atlas_h, ATLAS_W, 3), 180, dtype=np.uint8)
     for p in patch_records:
-        atlas[p["ay"]: p["ay"] + p["ph"], p["ax"]: p["ax"] + p["pw"]] = p["patch"]
+        atlas[p["ay"] : p["ay"] + p["ph"], p["ax"] : p["ax"] + p["pw"]] = p["patch"]
 
     DEFAULT_U = 0.5
     DEFAULT_V = 1.0 - (photo_h + GRAY_H / 2) / atlas_h
@@ -260,7 +259,7 @@ def apply_textures(mesh: trimesh.Trimesh, mapillary_data: dict, bbox) -> trimesh
     new_uvs = np.full((n_all * 3, 2), [DEFAULT_U, DEFAULT_V])
 
     for i, face in enumerate(faces):
-        new_verts[i * 3: i * 3 + 3] = verts[face]
+        new_verts[i * 3 : i * 3 + 3] = verts[face]
 
     for p in patch_records:
         fi = p["fi"]
