@@ -11,6 +11,7 @@ from trimesh import visual
 
 from common import PipelineState
 from common.MeshUtils import _get_utm_transformer
+from segmentation import remove_obstructions
 
 CAMERA_HEIGHT_M = 1.6
 ATLAS_W = 4096
@@ -55,7 +56,7 @@ def _download_image(url: str) -> np.ndarray:
 
 
 def apply_textures(
-    mesh: trimesh.Trimesh, mapillary_data: dict, bbox
+    mesh: trimesh.Trimesh, mapillary_data: dict, bbox, remove_obs: bool = True
 ) -> trimesh.Trimesh:
     center_lon = (bbox.min_lon + bbox.max_lon) / 2
     center_lat = (bbox.min_lat + bbox.max_lat) / 2
@@ -78,10 +79,11 @@ def apply_textures(
     for img_id, meta in tqdm(candidates, desc="Downloading images"):
         try:
             img = _download_image(meta["image_url"])
-            # img = remove_obstructions(img)
         except Exception as exc:
             tqdm.write(f"  Download failed [{img_id}]: {exc}")
             continue
+        if remove_obs:
+            img = remove_obstructions(img)
         w = meta["original_width"]
         h = meta["original_height"]
         x, y = transformer.transform(meta["longitude"], meta["latitude"])
@@ -282,6 +284,7 @@ def tex_projection(value, state: PipelineState):
     with open("test.json", "w") as f:
         json.dump(mapillary_data, f, indent=2)
     bbox = state.require_metadata("bbox")
-    mesh = apply_textures(value, mapillary_data, bbox)
+    remove_obs = state.get_metadata("remove_obstructions", True)
+    mesh = apply_textures(value, mapillary_data, bbox, remove_obs=remove_obs)
     state.require_metadata("progress_monitor").next()
     return mesh

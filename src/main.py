@@ -92,7 +92,9 @@ def export_mesh(value, state):
     value.apply_transform(rotation)
 
     path = ask_save_path()
-    export_to_glb(value, path or "combined.glb")
+    if path is not None:
+        export_to_glb(value, path or "combined.glb")
+
     state.require_metadata("progress_monitor").next()
 
 
@@ -106,6 +108,7 @@ run_pipeline.add_stage("export", export_mesh)
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", metavar="FILENAME", default=None)
+    parser.add_argument("--no-seg", action="store_true", default=False)
     args = parser.parse_args()
 
     min_lon = float(input("WEST (Minimum Longitude): "))
@@ -118,7 +121,11 @@ def main():
     profiler = PipelineProfiler(pipeline_name="photorealistic-street-maps") if args.profile else None
     run_pipeline.run(
         bbox,
-        metadata={"bbox": bbox, "progress_monitor": pipeline_progress},
+        metadata={
+            "bbox": bbox,
+            "progress_monitor": pipeline_progress,
+            "remove_obstructions": not args.no_seg,
+        },
         profiler=profiler,
     )
     if profiler is not None:
