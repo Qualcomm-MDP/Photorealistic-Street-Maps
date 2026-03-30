@@ -2924,4 +2924,4 @@ mapbox-vector-tile = "*"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.15,!=3.14.1"
-content-hash = "f577a6022a28794441a81889109b2bfcbd9f17f0d01aec93f3afce039392cdfd"
+content-hash = "897274abc3d55a887d193160216e9ad3f267f57c15c5dfa04c3825c5736b0882"
