@@ -96,7 +96,7 @@ def export_mesh(value, state):
 
 
 run_pipeline = PipelineChain()
-run_pipeline.add_stage("fetech", ingest_data)
+run_pipeline.add_stage("fetch", ingest_data)
 run_pipeline.add_stage("build_mesh", build_mesh)
 run_pipeline.add_stage("texturing", tex_projection)
 run_pipeline.add_stage("export", export_mesh)
