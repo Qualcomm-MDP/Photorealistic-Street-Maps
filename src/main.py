@@ -11,6 +11,7 @@ from mesh_builder.extrude import build_mesh
 from texturing.tex_projection import tex_projection
 from tkinter import Tk, filedialog
 
+import argparse
 import os
 import numpy as np
 import trimesh
@@ -103,6 +104,10 @@ run_pipeline.add_stage("export", export_mesh)
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--profile", metavar="FILENAME", default=None)
+    args = parser.parse_args()
+
     min_lon = float(input("WEST (Minimum Longitude): "))
     min_lat = float(input("SOUTH (Minimum Latitude): "))
     max_lon = float(input("EAST (Minimum Longitude): "))
@@ -110,13 +115,14 @@ def main():
 
     bbox = BoundingBox(min_lat, max_lat, min_lon, max_lon)
 
-    profiler = PipelineProfiler(pipeline_name="photorealistic-street-maps")
+    profiler = PipelineProfiler(pipeline_name="photorealistic-street-maps") if args.profile else None
     run_pipeline.run(
         bbox,
         metadata={"bbox": bbox, "progress_monitor": pipeline_progress},
         profiler=profiler,
     )
-    profiler.save("performance.json")
+    if profiler is not None:
+        profiler.save(args.profile)
 
 
 if __name__ == "__main__":
