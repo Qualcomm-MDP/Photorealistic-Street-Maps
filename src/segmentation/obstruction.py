@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from PIL import Image
 from simple_lama_inpainting import SimpleLama
-from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
+from transformers import Mask2FormerForUniversalSegmentation, Mask2FormerImageProcessor
 
 SEG_MODEL_ID = "facebook/mask2former-swin-large-cityscapes-semantic"
 
@@ -20,7 +20,7 @@ OBSTRUCTION_CLASSES = {
 
 LAMA_MAX_DIM = 1024
 
-_seg_proc: AutoImageProcessor | None = None  # type: ignore[type-arg]
+_seg_proc: Mask2FormerImageProcessor | None = None
 _seg_model: Mask2FormerForUniversalSegmentation | None = None
 _lama: SimpleLama | None = None
 
@@ -30,7 +30,7 @@ def _load_seg_model() -> None:
     if _seg_model is not None:
         return
     print(f"Loading segmentation model ({SEG_MODEL_ID}) …")
-    _seg_proc = AutoImageProcessor.from_pretrained(SEG_MODEL_ID)
+    _seg_proc = Mask2FormerImageProcessor.from_pretrained(SEG_MODEL_ID)
     _seg_model = Mask2FormerForUniversalSegmentation.from_pretrained(SEG_MODEL_ID)
     _seg_model.eval()
     if torch.cuda.is_available():
@@ -98,5 +98,5 @@ def synthesize_texture(img_bgr: np.ndarray, mask: np.ndarray) -> np.ndarray:
 
 def remove_obstructions(img_bgr: np.ndarray) -> np.ndarray:
     mask = build_obstruction_mask(img_bgr)
-    n_obs = int((mask > 0).sum())
+    #n_obs = int((mask > 0).sum())
     return synthesize_texture(img_bgr, mask)
