@@ -1,0 +1,77 @@
+site_name: Photorealistic Open Street Map (POSM)
+site_description: Open-source pipeline for generating photorealistic 3D street-level maps from GPS coordinates
+repo_url: https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps
+repo_name: Qualcomm-MDP/Photorealistic-Street-Maps
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - content.code.copy
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: true
+            show_root_heading: true
+            heading_level: 3
+            members_order: source
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Architecture: architecture.md
+  - Pipeline Stages:
+      - Overview: pipeline/overview.md
+      - 1 – Data Processing: pipeline/data-processing.md
+      - 2 – Mesh Generation: pipeline/mesh-generation.md
+      - 3 – Texturing: pipeline/texturing.md
+      - 4 – Evaluation: pipeline/evaluation.md
+  - API Reference:
+      - Pipeline & State: api/pipeline.md
+      - Data Providers: api/providers.md
+      - Utilities: api/common.md
+      - Profiler: api/profiler.md
+  - Contributing: contributing.md
