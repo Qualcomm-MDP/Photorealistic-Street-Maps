@@ -62,6 +62,7 @@ When enabled (default), each downloaded street-view image passes through:
 4. **LaMa inpainting** fills the masked regions with plausible building texture, synthesizing what the wall likely looks like behind the obstruction
 
 !!! tip "Disabling Obstruction Removal"
+
     Use `--no-seg` when running the pipeline to skip this step. This is useful for faster iteration or when GPU is not available (Mask2Former on CPU is slow).
 
 ## Texture Atlas
@@ -97,12 +98,12 @@ Roof textures come from NAIP satellite imagery (processed in Stage 1):
 
 Texturing is the most compute-intensive stage, accounting for roughly **93%** of total pipeline wall time:
 
-| Component | Wall Time | CPU % |
-|---|---|---|
-| Image download + segmentation | ~150s | varies |
-| Visibility analysis + projection | ~230s | 76% |
-| Atlas construction | <1s | -- |
-| **Total texturing stage** | **~6m 18s** | **76%** |
+| Component                        | Wall Time   | CPU %   |
+| -------------------------------- | ----------- | ------- |
+| Image download + segmentation    | ~150s       | varies  |
+| Visibility analysis + projection | ~230s       | 76%     |
+| Atlas construction               | \<1s        | --      |
+| **Total texturing stage**        | **~6m 18s** | **76%** |
 
 Peak memory during texturing is approximately **12.4 GB RAM** and **1.06 GB GPU VRAM** (when using GPU for segmentation).
 

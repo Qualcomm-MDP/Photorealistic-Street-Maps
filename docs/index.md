@@ -33,13 +33,13 @@ The pipeline will prompt you for bounding box coordinates (south, west, north, e
 
 ## Who Benefits
 
-| Audience | Use Case |
-|---|---|
-| Robotics & AV teams | Realistic simulation environments |
-| Emergency response | Flood/disaster digital twin modeling |
-| Insurance & quant firms | Geospatial risk assessment |
-| Open-source community | Foundation for 3D urban generation tools |
-| Qualcomm (internal) | Wireless R&D, digital twin applications |
+| Audience                | Use Case                                 |
+| ----------------------- | ---------------------------------------- |
+| Robotics & AV teams     | Realistic simulation environments        |
+| Emergency response      | Flood/disaster digital twin modeling     |
+| Insurance & quant firms | Geospatial risk assessment               |
+| Open-source community   | Foundation for 3D urban generation tools |
+| Qualcomm (internal)     | Wireless R&D, digital twin applications  |
 
 ## Project Links
 

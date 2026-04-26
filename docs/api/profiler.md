@@ -7,38 +7,38 @@ The profiler module provides per-stage instrumentation for the pipeline, trackin
 The top-level profiler that wraps an entire pipeline run. Created in `main.py` when the `--profile` flag is passed.
 
 ::: common.profiler.PipelineProfiler
-    options:
-      show_source: true
-      members:
-        - start
-        - begin_stage
-        - end_stage
-        - finish
-        - total_wall_time_s
-        - summary
-        - save
+options:
+show_source: true
+members:
+\- start
+\- begin_stage
+\- end_stage
+\- finish
+\- total_wall_time_s
+\- summary
+\- save
 
 ## StageMetrics
 
 Holds timing and resource measurements for a single pipeline stage. Created by `PipelineProfiler.begin_stage()` and finalized by `end_stage()`.
 
 ::: common.profiler.StageMetrics
-    options:
-      show_source: true
-      members:
-        - name
-        - wall_time_s
-        - cpu_time_s
-        - peak_memory_mb
-        - start_memory_mb
-        - end_memory_mb
-        - memory_delta_mb
-        - gpu_start
-        - gpu_end
-        - gpu_delta_allocated_mb
-        - status
-        - error
-        - set_throughput
+options:
+show_source: true
+members:
+\- name
+\- wall_time_s
+\- cpu_time_s
+\- peak_memory_mb
+\- start_memory_mb
+\- end_memory_mb
+\- memory_delta_mb
+\- gpu_start
+\- gpu_end
+\- gpu_delta_allocated_mb
+\- status
+\- error
+\- set_throughput
 
 ## Usage
 
@@ -105,8 +105,12 @@ The `summary()` method (and the JSON written by `save()`) follows this structure
       "start_memory_mb": 0.8,
       "end_memory_mb": 1.8,
       "memory_delta_mb": 1.0,
-      "gpu_start": { "allocated_mb": 0.0 },
-      "gpu_end": { "allocated_mb": 0.0 },
+      "gpu_start": {
+        "allocated_mb": 0.0
+      },
+      "gpu_end": {
+        "allocated_mb": 0.0
+      },
       "gpu_delta_allocated_mb": 0.0,
       "throughput": {},
       "status": "ok",

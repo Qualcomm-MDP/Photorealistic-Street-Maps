@@ -12,14 +12,14 @@ poetry run python src/main.py --profile results.json
 
 ### Metrics Collected Per Stage
 
-| Metric | Description |
-|---|---|
-| `wall_time_s` | Real elapsed time (includes I/O waits) |
-| `cpu_time_s` | CPU-only processing time |
-| `peak_memory_mb` | Maximum memory traced during the stage |
-| `memory_delta_mb` | Net memory change (end - start) |
+| Metric                   | Description                                 |
+| ------------------------ | ------------------------------------------- |
+| `wall_time_s`            | Real elapsed time (includes I/O waits)      |
+| `cpu_time_s`             | CPU-only processing time                    |
+| `peak_memory_mb`         | Maximum memory traced during the stage      |
+| `memory_delta_mb`        | Net memory change (end - start)             |
 | `gpu_delta_allocated_mb` | Change in GPU VRAM allocation (NVIDIA only) |
-| `status` | `ok` or `error` |
+| `status`                 | `ok` or `error`                             |
 
 ### Sample Output
 
@@ -43,10 +43,34 @@ The profiler writes a JSON report with system info and per-stage metrics:
     }
   },
   "stages": [
-    {"name": "fetch",      "wall_time_s": 7.607,  "cpu_time_s": 0.073, "peak_memory_mb": 2.5,    "status": "ok"},
-    {"name": "build_mesh", "wall_time_s": 0.196,  "cpu_time_s": 0.196, "peak_memory_mb": 0.6,    "status": "ok"},
-    {"name": "texturing",  "wall_time_s": 377.8,  "cpu_time_s": 286.2, "peak_memory_mb": 12440.0, "status": "ok"},
-    {"name": "export",     "wall_time_s": 17.483, "cpu_time_s": 3.316, "peak_memory_mb": 283.2,  "status": "ok"}
+    {
+      "name": "fetch",
+      "wall_time_s": 7.607,
+      "cpu_time_s": 0.073,
+      "peak_memory_mb": 2.5,
+      "status": "ok"
+    },
+    {
+      "name": "build_mesh",
+      "wall_time_s": 0.196,
+      "cpu_time_s": 0.196,
+      "peak_memory_mb": 0.6,
+      "status": "ok"
+    },
+    {
+      "name": "texturing",
+      "wall_time_s": 377.8,
+      "cpu_time_s": 286.2,
+      "peak_memory_mb": 12440.0,
+      "status": "ok"
+    },
+    {
+      "name": "export",
+      "wall_time_s": 17.483,
+      "cpu_time_s": 3.316,
+      "peak_memory_mb": 283.2,
+      "status": "ok"
+    }
   ]
 }
 ```
@@ -74,11 +98,11 @@ The profiler output is JSON-based, making it straightforward to compare multiple
 
 For example, three benchmark profiles from DR1:
 
-| Profile | Hardware | Segmentation | Total Time |
-|---|---|---|---|
-| `noseg_desktop` | Desktop GPU | Off | 4m 52s |
-| `seg_desktop` | Desktop GPU | On | 6m 43s |
-| `noseg_laptop` | Laptop CPU | Off | 15m 53s |
+| Profile         | Hardware    | Segmentation | Total Time |
+| --------------- | ----------- | ------------ | ---------- |
+| `noseg_desktop` | Desktop GPU | Off          | 4m 52s     |
+| `seg_desktop`   | Desktop GPU | On           | 6m 43s     |
+| `noseg_laptop`  | Laptop CPU  | Off          | 15m 53s    |
 
 Texturing dominates runtime in all configurations, with segmentation adding roughly 2 minutes on desktop GPU.
 
@@ -86,16 +110,17 @@ Texturing dominates runtime in all configurations, with segmentation adding roug
 
 The project defines the following acceptance criteria:
 
-| Criterion | Target | Measurement |
-|---|---|---|
-| Mesh Generation | Uncorrupted mesh file | Automated validation |
-| Texture Generation | Textures produced from street-view images | Automated validation |
-| Mesh Quality | Average rating >= 8/10 | User survey (20 U-M students) |
-| Texture Quality | Average rating >= 8/10 | User survey (20 U-M students) |
-| Total Runtime | < 25 min per 247 acres | Profiler measurement |
-| Usability | Average rating >= 7/10 | User survey |
+| Criterion          | Target                                    | Measurement                   |
+| ------------------ | ----------------------------------------- | ----------------------------- |
+| Mesh Generation    | Uncorrupted mesh file                     | Automated validation          |
+| Texture Generation | Textures produced from street-view images | Automated validation          |
+| Mesh Quality       | Average rating >= 8/10                    | User survey (20 U-M students) |
+| Texture Quality    | Average rating >= 8/10                    | User survey (20 U-M students) |
+| Total Runtime      | < 25 min per 247 acres                    | Profiler measurement          |
+| Usability          | Average rating >= 7/10                    | User survey                   |
 
 !!! info "User Survey"
+
     Quality metrics are assessed by surveying 20 random University of Michigan students who rate POSM-generated buildings against photographs of their real-world counterparts. This evaluation is in progress.
 
 ## Source Code

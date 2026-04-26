@@ -27,6 +27,7 @@ Each building element includes:
 - **Roof levels** -- `roof:levels` tag (optional)
 
 !!! warning "OSM Data Limitations"
+
     OSM building heights are community-contributed and frequently missing or inaccurate. When no height data is available, the mesh generator falls back to a default estimate based on building levels (approximately 3m per level).
 
 ### Mapillary
@@ -79,13 +80,13 @@ For roof textures, the pipeline:
 
 ## Runtime
 
-| Component | Hardware | Time |
-|---|---|---|
-| OSM + Mapillary fetch | Any (network-bound) | ~7s |
-| Mask2Former segmentation (70 images) | Apple M-series CPU | ~2 min |
-| Mask2Former segmentation (70 images) | NVIDIA Jetson Orin | ~43s |
-| SAM2 per-image inference | Apple M-series CPU | ~216s |
-| SAM2 per-image inference | NVIDIA Jetson Orin | ~0.6s |
+| Component                            | Hardware            | Time   |
+| ------------------------------------ | ------------------- | ------ |
+| OSM + Mapillary fetch                | Any (network-bound) | ~7s    |
+| Mask2Former segmentation (70 images) | Apple M-series CPU  | ~2 min |
+| Mask2Former segmentation (70 images) | NVIDIA Jetson Orin  | ~43s   |
+| SAM2 per-image inference             | Apple M-series CPU  | ~216s  |
+| SAM2 per-image inference             | NVIDIA Jetson Orin  | ~0.6s  |
 
 ## Source Code
 

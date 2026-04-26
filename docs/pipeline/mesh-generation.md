@@ -36,6 +36,7 @@ The mesh uses a specific Z-axis convention:
 - This convention aligns roofs with the satellite texture projection from above
 
 !!! note "Why Negative Extrusion?"
+
     The negative Z extrusion ensures that when satellite roof textures are projected from above, the roof faces are at z=0 and align with the aerial imagery coordinate system. The final export step flips the mesh back to a conventional orientation.
 
 ## Height Estimation
@@ -47,13 +48,14 @@ Building heights come from OSM tags in priority order:
 3. Default fallback if no data is available
 
 !!! warning "Missing Heights"
+
     Many OSM buildings lack height data entirely. This produces flat buildings (near-zero height) or default-height boxes that don't match reality. Improving height estimation is an active area of work.
 
 ## Current Performance
 
-| Metric | Value |
-|---|---|
-| Runtime | < 1 second for typical regions |
+| Metric             | Value                                |
+| ------------------ | ------------------------------------ |
+| Runtime            | < 1 second for typical regions       |
 | Building alignment | Accurate (matches satellite imagery) |
 
 ## Strengths and Limitations

@@ -51,15 +51,15 @@ flowchart TD
 
 ## Technology Stack
 
-| Layer | Technology | Role | Constraints |
-|---|---|---|---|
-| **Data** | OpenStreetMap, Mapillary, NAIP (USGS) | Building footprints, street-view photos, aerial imagery | OSM geometries are simplified; Mapillary coverage is sporadic |
-| **Segmentation** | Mask2Former (`facebook/mask2former-swin-large-cityscapes-semantic`) | Identify and mask obstructions (cars, poles, trees) in street-view images | ~2 min on CPU for 70 images; ~0.6s/image on GPU |
-| **Inpainting** | LaMa (Simple LaMa) | Fill masked obstruction regions with plausible building texture | Max input dimension 1024px |
-| **Mesh** | Trimesh | Extrude 2D footprints to 3D, combine meshes, export GLB | Heights from OSM are often missing or inaccurate |
-| **Vision** | OpenCV, Pillow, SciPy | Camera projection, homography warping, atlas packing | -- |
-| **Coordinates** | PyProj, UTM converters | WGS84 ↔ UTM transformations for meter-scale geometry | -- |
-| **Profiling** | Custom `PipelineProfiler` | Per-stage wall time, CPU time, peak memory, GPU VRAM delta | Requires `torch` for GPU metrics |
+| Layer            | Technology                                                          | Role                                                                      | Constraints                                                   |
+| ---------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| **Data**         | OpenStreetMap, Mapillary, NAIP (USGS)                               | Building footprints, street-view photos, aerial imagery                   | OSM geometries are simplified; Mapillary coverage is sporadic |
+| **Segmentation** | Mask2Former (`facebook/mask2former-swin-large-cityscapes-semantic`) | Identify and mask obstructions (cars, poles, trees) in street-view images | ~2 min on CPU for 70 images; ~0.6s/image on GPU               |
+| **Inpainting**   | LaMa (Simple LaMa)                                                  | Fill masked obstruction regions with plausible building texture           | Max input dimension 1024px                                    |
+| **Mesh**         | Trimesh                                                             | Extrude 2D footprints to 3D, combine meshes, export GLB                   | Heights from OSM are often missing or inaccurate              |
+| **Vision**       | OpenCV, Pillow, SciPy                                               | Camera projection, homography warping, atlas packing                      | --                                                            |
+| **Coordinates**  | PyProj, UTM converters                                              | WGS84 ↔ UTM transformations for meter-scale geometry                      | --                                                            |
+| **Profiling**    | Custom `PipelineProfiler`                                           | Per-stage wall time, CPU time, peak memory, GPU VRAM delta                | Requires `torch` for GPU metrics                              |
 
 ## Pipeline Framework
 
@@ -72,10 +72,10 @@ The pipeline is built on two core abstractions in `common/pipeline_chain.py`:
 ```python
 # How the pipeline is wired in main.py
 run_pipeline = PipelineChain()
-run_pipeline.add_stage("fetch",      ingest_data)
+run_pipeline.add_stage("fetch", ingest_data)
 run_pipeline.add_stage("build_mesh", build_mesh)
-run_pipeline.add_stage("texturing",  tex_projection)
-run_pipeline.add_stage("export",     export_mesh)
+run_pipeline.add_stage("texturing", tex_projection)
+run_pipeline.add_stage("export", export_mesh)
 ```
 
 The framework also supports **forking** (parallel branches that merge), **resumption** from a named stage, and optional **profiling** that wraps each stage with timing and memory instrumentation.

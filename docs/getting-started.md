@@ -10,6 +10,7 @@ This guide walks you through installing and running the POSM pipeline on your ma
 - **A Mapillary API token** (free, required for street-view image access)
 
 !!! note "GPU Support"
+
     The pipeline runs on CPU by default. If you have an NVIDIA GPU with CUDA support, segmentation and inpainting models will automatically use it for significantly faster processing.
 
 ## Installation
@@ -55,6 +56,7 @@ MAPILLARY_ACCESS_TOKEN="your_token_here"
 ```
 
 !!! tip "Getting a Mapillary Token"
+
     Sign up at [mapillary.com](https://www.mapillary.com/) and generate an access token from your dashboard under **Developers > API**.
 
 ## Running the Pipeline
@@ -91,10 +93,10 @@ poetry run python src/main.py --profile performance.json
 poetry run python src/main.py --no-seg
 ```
 
-| Flag | Description |
-|---|---|
-| `--profile FILENAME` | Enable the built-in profiler and save stage-level metrics (wall time, CPU time, memory, GPU VRAM) to the specified JSON file. |
-| `--no-seg` | Disable the Mask2Former + LaMa obstruction removal pipeline. Produces faster results but street-view textures will retain trees, cars, and other obstructions. |
+| Flag                 | Description                                                                                                                                                    |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--profile FILENAME` | Enable the built-in profiler and save stage-level metrics (wall time, CPU time, memory, GPU VRAM) to the specified JSON file.                                  |
+| `--no-seg`           | Disable the Mask2Former + LaMa obstruction removal pipeline. Produces faster results but street-view textures will retain trees, cars, and other obstructions. |
 
 ## Finding Bounding Box Coordinates
 
@@ -106,6 +108,7 @@ The easiest way to get bounding box coordinates for a region:
 4. The bounding box values (min lat, min lon, max lat, max lon) are displayed
 
 !!! warning "Region Size"
+
     Larger regions produce more buildings and require more Mapillary images, increasing runtime. Start with a small area (a few city blocks) to test. The target benchmark is under 25 minutes for a 247-acre region.
 
 ## Viewing the Output
