@@ -1,6 +1,6 @@
 from common import PipelineState
 from common.constants import BoundingBox
-from common.providers import OSMClient, OSM_MAP_FEATURES, MapillaryClient
+from common.providers import OSM_MAP_FEATURES, MapillaryClient, OSMClient
 
 
 def ingest_data(bbox: BoundingBox, state: PipelineState):
