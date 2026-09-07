@@ -1,9 +1,6 @@
-from pyproj import Transformer
 import numpy as np
 import trimesh
-
-
-from typing import Tuple
+from pyproj import Transformer
 
 
 def camera_center_utm(image_meta, utm_epsg, camera_height_m):
@@ -15,7 +12,7 @@ def camera_center_utm(image_meta, utm_epsg, camera_height_m):
 
 
 def convert_mesh_to_utm(
-    mesh_path: str, lon_and_lat: Tuple[float, float], utm_epsg: int
+    mesh_path: str, lon_and_lat: tuple[float, float], utm_epsg: int
 ):
     origin_lon, origin_lat = lon_and_lat[0], lon_and_lat[1]
 
