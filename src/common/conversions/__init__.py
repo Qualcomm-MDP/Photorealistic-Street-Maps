@@ -1,3 +1,3 @@
-from . import utm, basic
+from . import basic, utm
 
-__all__ = ["utm", "basic"]
+__all__ = ["basic", "utm"]

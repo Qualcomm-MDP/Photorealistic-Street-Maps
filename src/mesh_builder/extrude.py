@@ -1,6 +1,7 @@
 import trimesh
 from tqdm import tqdm
-from common.MeshUtils import get_corners, get_lines, get_height
+
+from common.MeshUtils import get_corners, get_height, get_lines
 
 
 def build_mesh(value, state):
