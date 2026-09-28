@@ -1,5 +1,6 @@
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 import requests
 
 from ..constants import OVERPASS_URL, BoundingBox
@@ -18,8 +19,8 @@ class OSMClient:
     def fetch(
         self,
         bbox: BoundingBox,
-        features: Optional[List[OSM_MAP_FEATURES]] = None,
-    ) -> Dict[str, Any]:
+        features: list[OSM_MAP_FEATURES] | None = None,
+    ) -> dict[str, Any]:
 
         if features is None:
             features = [OSM_MAP_FEATURES.BUILDING]
@@ -47,7 +48,7 @@ class OSMClient:
         self,
         feature: OSM_MAP_FEATURES,
         bbox: BoundingBox,
-    ) -> List[str]:
+    ) -> list[str]:
         """Build Overpass query snippets for a feature."""
         tag_filters = self._get_tag_filters(feature)
         query_parts = []
@@ -67,7 +68,7 @@ class OSMClient:
 
         return query_parts
 
-    def _get_tag_filters(self, feature: OSM_MAP_FEATURES) -> List[str]:
+    def _get_tag_filters(self, feature: OSM_MAP_FEATURES) -> list[str]:
         """Map enum feature to OSM tag keys."""
         if feature == OSM_MAP_FEATURES.BUILDING:
             return ["building"]
