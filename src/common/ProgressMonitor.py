@@ -1,6 +1,3 @@
-from typing import Optional, List
-
-
 class ProgressMonitor:
     """Monitor and track progress through a series of tasks.
 
@@ -23,14 +20,14 @@ class ProgressMonitor:
         """
         self._total_tasks = 0
         self._current_index = 0
-        self._tasks: List[str] = []
+        self._tasks: list[str] = []
         self.verbose = verbose
 
     def set_verbose(self, enable: bool = True) -> None:
         """Enable or disable verbose output."""
         self.verbose = enable
 
-    def add_task(self, name: Optional[str] = None) -> int:
+    def add_task(self, name: str | None = None) -> int:
         """Add a task to track.
 
         Args:
@@ -45,7 +42,7 @@ class ProgressMonitor:
         return self._total_tasks
 
     @property
-    def tasks(self) -> List[str]:
+    def tasks(self) -> list[str]:
         """Get list of all task names."""
         return self._tasks.copy()
 
@@ -55,7 +52,7 @@ class ProgressMonitor:
         return self._current_index
 
     @property
-    def current_task(self) -> Optional[str]:
+    def current_task(self) -> str | None:
         """Get name of current task."""
         if 0 <= self._current_index < len(self._tasks):
             return self._tasks[self._current_index]
