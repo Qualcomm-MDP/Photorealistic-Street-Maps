@@ -57,7 +57,12 @@ def _project(
 
 
 def _download_image(url: str) -> tuple[np.ndarray, bytes]:
-    """The decoded photo and the file exactly as downloaded."""
+    """The decoded photo and the file exactly as downloaded (or read from disk)."""
+    if not url.startswith(("http://", "https://")):
+        img = cv2.imread(url, cv2.IMREAD_COLOR)
+        if img is None:
+            raise ValueError(f"Failed to read image {url}")
+        return img, Path(url).read_bytes()
     resp = requests.get(url, timeout=30)
     resp.raise_for_status()
     arr = np.frombuffer(resp.content, np.uint8)
@@ -199,7 +204,11 @@ def _apply_textures(
                 "h": h,
                 "K": _build_K(meta["focal_length_pixels"], w, h),
                 "R": _build_R(meta),
-                "Cw": camera_position(x, y, terrain),
+                "Cw": (
+                    np.array([x, y, meta["camera_height_m"]])
+                    if meta.get("camera_height_m") is not None
+                    else camera_position(x, y, terrain)
+                ),
             }
         )
 
