@@ -10,3 +10,5 @@ dist/
 *_test.py
 models/
 outputs/alignment/*/data/
+AGENTS.md
+CLAUDE.md
