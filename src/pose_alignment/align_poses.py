@@ -10,7 +10,7 @@ focal_length_pixels at original_width x original_height, image_url):
             mapillary -> segmentation -> colmap -> osm). Every image the OSM stage marks
             reliable gets its corrected pose and measured camera height; reliable images the
             main fetch did not return are added from the alignment layers' downloads. Other
-            images keep their raw Mapillary pose, or are dropped with --aligned-only. A leg
+            images keep the `computed` pose, or are dropped with --aligned-only. A leg
             whose aligned cameras end up more than one corridor width (15 m) from the street
             they were captured on is rejected too: the OSM stage can call a leg reliable when
             a single short facade pinned its heading.
@@ -18,9 +18,13 @@ focal_length_pixels at original_width x original_height, image_url):
             that did not complete.
 
 The colmap source writes <ROI folder>/pose_overrides.json: per image the pose used, how far
-the camera moved and turned, and why an image kept its Mapillary pose. If the alignment
+the camera moved and turned from Mapillary's computed pose, and why an image kept it. If the alignment
 fails (COLMAP missing, no usable capture, no fit to OSM), the reason is printed and every
-image keeps its Mapillary pose: the pipeline carries on.
+image keeps the `computed` pose: the pipeline carries on.
+
+Every source stores the final pose of each image in the `camera_poses` metadata, so an
+evaluation can render from the poses texturing used. Images listed in the `exclude_images`
+metadata (held-out photos) get a pose there but are then removed from texturing.
 """
 
 import json
@@ -93,14 +97,25 @@ def _aligned_cameras(paths):
     return cameras
 
 
-def _off_street_legs(paths, cameras, max_off_street_m):
+def _extend(line, length_m):
+    """The polyline lengthened by length_m past both ends, along its end segments."""
+    pts = np.asarray(line, dtype=float)
+    ends = []
+    for tip, prev in ((pts[0], pts[1]), (pts[-1], pts[-2])):
+        d = tip - prev
+        ends.append(tip + d / (np.linalg.norm(d) or 1.0) * length_m)
+    return [ends[0], *pts, ends[1]]
+
+
+def _off_street_legs(paths, cameras, max_off_street_m, extend_m=50.0):
     """{leg: metres} for legs whose aligned cameras stray further than max_off_street_m from
     the ROI's street lines. Cameras drive along the street, so a leg that leaves it was fitted
     to the wrong walls (e.g. a heading pinned by one short facade) even if the OSM stage calls
-    it reliable."""
+    it reliable. The lines end at the bounding box but captures run on past it, so they are
+    extended by extend_m: only distance sideways off the street counts."""
     lines = json.loads(paths.roi_json.read_text())["lines"]
     frame = LocalFrame(*lines[0][0])
-    lines_xy = [[frame.xy(*p) for p in line] for line in lines]
+    lines_xy = [_extend([frame.xy(*p) for p in line], extend_m) for line in lines]
     worst = {}
     for _, cam in cameras.values():
         pipe = cam.get("pipeline")
@@ -188,16 +203,30 @@ def _apply_alignment(paths, mapillary, aligned_only=False, max_off_street_m=15.0
     return summary
 
 
+POSE_KEYS = ("latitude", "longitude", "rotvec", "camera_height_m", "focal_length_pixels",
+             "original_width", "original_height", "pose_source")
+
+
 def align_poses(value, state):
     source = state.get_metadata("pose_source", "raw")
     mapillary = state.require_metadata("provider_data")["mapillary"]
-    if source == "computed":
+    if source in ("computed", "colmap"):
         _use_computed(mapillary)
-    elif source == "colmap":
+    if source == "colmap":
         try:
             paths = _run_alignment(state.require_metadata("bbox"), state.get_metadata("alignment_dir", None))
             state.set_metadata("pose_alignment", _apply_alignment(paths, mapillary,
                                                                   state.get_metadata("aligned_only", False)))
         except (Exception, SystemExit) as e:
-            print(f"  align_poses: alignment failed ({e}); every image keeps its Mapillary pose")
+            print(f"  align_poses: alignment failed ({e}); every image keeps Mapillary's computed pose")
+
+    for meta in mapillary.values():
+        if "pose_source" not in meta:
+            meta["pose_source"] = "raw" if source == "raw" or meta.get("computed_latitude") is None else "computed"
+    state.set_metadata("camera_poses", {
+        img_id: {k: meta[k] for k in POSE_KEYS if meta.get(k) is not None} for img_id, meta in mapillary.items()
+    })
+    excluded = [i for i in state.get_metadata("exclude_images", None) or () if mapillary.pop(i, None)]
+    if excluded:
+        print(f"  align_poses: {len(excluded)} held-out images removed from texturing")
     return value
