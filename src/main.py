@@ -8,6 +8,7 @@ from common.MeshUtils import _get_utm_transformer
 from mesh_builder.extrude import extrude_buildings
 from data_ingest.ingest import ingest_data
 from mesh_builder.extrude import build_mesh
+from pose_alignment.align_poses import POSE_SOURCES, align_poses
 from texturing.tex_projection import tex_projection
 from tkinter import Tk, filedialog
 
@@ -100,6 +101,7 @@ def export_mesh(value, state):
 
 run_pipeline = PipelineChain()
 run_pipeline.add_stage("fetch", ingest_data)
+run_pipeline.add_stage("align_poses", align_poses)
 run_pipeline.add_stage("build_mesh", build_mesh)
 run_pipeline.add_stage("texturing", tex_projection)
 run_pipeline.add_stage("export", export_mesh)
@@ -109,6 +111,24 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", metavar="FILENAME", default=None)
     parser.add_argument("--no-seg", action="store_true", default=False)
+    parser.add_argument(
+        "--poses",
+        choices=POSE_SOURCES,
+        default="raw",
+        help="Camera poses for texturing: Mapillary raw GPS (default), Mapillary computed, "
+        "or COLMAP aligned to OSM (see src/pose_alignment/align_poses.py)",
+    )
+    parser.add_argument(
+        "--aligned-only",
+        action="store_true",
+        help="With --poses colmap, texture only from images with an aligned pose",
+    )
+    parser.add_argument(
+        "--alignment-dir",
+        metavar="DIR",
+        default=None,
+        help="With --poses colmap, reuse this ROI folder (outputs/alignment/mapillary_roi_N)",
+    )
     args = parser.parse_args()
 
     min_lon = float(input("WEST (Minimum Longitude): "))
@@ -129,6 +149,9 @@ def main():
             "bbox": bbox,
             "progress_monitor": pipeline_progress,
             "remove_obstructions": not args.no_seg,
+            "pose_source": args.poses,
+            "aligned_only": args.aligned_only,
+            "alignment_dir": args.alignment_dir,
         },
         profiler=profiler,
     )

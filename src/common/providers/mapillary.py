@@ -75,9 +75,12 @@ class MapillaryClient:
                     max_dim = max(w, h)
                     focal_px = round((f_norm * max_dim), 2)
 
+            computed = (img.get("computed_geometry") or {}).get("coordinates")
             metadata[img_id] = {
                 "latitude": img["geometry"]["coordinates"][1],
                 "longitude": img["geometry"]["coordinates"][0],
+                "computed_latitude": computed[1] if computed else None,
+                "computed_longitude": computed[0] if computed else None,
                 "rotvec": list(computed_rotation),  # raw angle-axis (preferred)
                 "yaw": yaw,
                 "pitch": pitch,
