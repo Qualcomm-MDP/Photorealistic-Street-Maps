@@ -12,8 +12,8 @@ The Mapillary layer (mapillary_layer.py) takes this file and fetches the cameras
 corridor.
 
 Usage:
-  python route_gui.py                      # saves routes/<name>_<time>.json
-  python route_gui.py --out my_route.json
+  python -m pose_alignment.route_gui        # saves outputs/alignment/routes/<name>_<time>.json
+  python -m pose_alignment.route_gui --out my_route.json
 """
 
 import argparse
@@ -24,7 +24,7 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from common import ROUTES_DIR, LocalFrame, line_length_m
+from .geo_common import ROUTES_DIR, LocalFrame, line_length_m
 
 PAGE = Path(__file__).resolve().parent / "route_gui.html"
 
@@ -107,7 +107,7 @@ def select_roi(out=None, port=0, open_browser=True):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--out", type=Path, help="Where to save the ROI (default routes/<name>_<time>.json)")
+    parser.add_argument("--out", type=Path, help="Where to save the ROI (default outputs/alignment/routes/<name>_<time>.json)")
     parser.add_argument("--port", type=int, default=0, help="Local port (default: any free port)")
     parser.add_argument("--no-browser", action="store_true", help="Only print the URL")
     args = parser.parse_args()

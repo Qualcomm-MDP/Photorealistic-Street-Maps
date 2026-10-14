@@ -6,8 +6,8 @@ Stages, in order (each is also its own script):
   segmentation  segmentation_layer.py   Mask2Former building/road masks -> data/masks/
   colmap        colmap_layer.py         sparse models per leg and camera -> data/colmap/
   osm           osm_alignment_layer.py  aligned to OSM; corrected cameras -> data/alignment/
-Each ROI has its own folder, rois/mapillary_roi_N/, holding data/ (the folders above) and
-results/ (before/after overviews, per-leg alignments, COLMAP 3D views).
+Each ROI has its own folder, outputs/alignment/mapillary_roi_N/, holding data/ (the folders
+above) and results/ (before/after overviews, per-leg alignments, COLMAP 3D views).
 
 --from picks the first stage to run (default: auto). Without --roi-dir a new ROI starts at
 the GUI (or at the Mapillary stage with --roi <file>). With --roi-dir, auto starts at the
@@ -19,13 +19,13 @@ segmented), so an interrupted run can be resumed; --force redoes the stages that
 
 Needs MAPILLARY_TOKEN for the mapillary stage; see README.md.
 
-Usage:
-  python run_pipeline.py                                        # draw a route, run everything
-  python run_pipeline.py --roi routes/my_route.json             # skip the GUI
-  python run_pipeline.py --roi-dir rois/mapillary_roi_1         # resume where it stopped
-  python run_pipeline.py --roi-dir rois/mapillary_roi_1 --from colmap
-  python run_pipeline.py --roi-dir rois/mapillary_roi_1 --from osm --camera-height 1.4
-  python run_pipeline.py --view right --to segmentation
+Usage (from the repository root, with PYTHONPATH=src):
+  python -m pose_alignment.run_pipeline                    # draw a route, run everything
+  python -m pose_alignment.run_pipeline --roi outputs/alignment/routes/my_route.json      # skip the GUI
+  python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_1      # resume where it stopped
+  python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_1 --from colmap
+  python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_1 --from osm --camera-height 1.4
+  python -m pose_alignment.run_pipeline --view right --to segmentation
 """
 
 import argparse
@@ -34,14 +34,14 @@ import os
 import time
 from pathlib import Path
 
-from common import ROIS_DIR, RoiPaths
+from .geo_common import ROIS_DIR, RoiPaths
 
 STAGES = ["gui", "mapillary", "segmentation", "colmap", "osm"]
 
 
 def stage_done(paths):
     """Which stages have complete outputs for this ROI folder."""
-    from segmentation_layer import missing_masks
+    from .segmentation_layer import missing_masks
 
     done = {"gui": paths.roi_json.exists()}
     done["mapillary"] = paths.sequences_json.exists() and all(
@@ -57,7 +57,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--from", dest="start", choices=["auto"] + STAGES, default="auto", help="First stage to run")
     parser.add_argument("--to", dest="stop", choices=STAGES, default="osm", help="Last stage to run")
-    parser.add_argument("--roi-dir", type=Path, help="Existing ROI folder (rois/mapillary_roi_N) to continue")
+    parser.add_argument("--roi-dir", type=Path, help="Existing ROI folder (outputs/alignment/mapillary_roi_N) to continue")
     parser.add_argument("--roi", type=Path, help="ROI file from route_gui.py, to start at the mapillary stage")
     parser.add_argument("--rois-dir", type=Path, default=ROIS_DIR, help="Where new ROI folders are created")
     parser.add_argument("--force", action="store_true", help="Redo the stages that run instead of reusing their outputs")
@@ -105,7 +105,7 @@ def main():
             print(f"{paths.name}: starting at the {start} stage (earlier stages are complete)")
     elif start not in ("gui", "mapillary"):
         if paths is None:
-            raise SystemExit(f"--from {start} needs --roi-dir rois/mapillary_roi_N")
+            raise SystemExit(f"--from {start} needs --roi-dir outputs/alignment/mapillary_roi_N")
         done = stage_done(paths)
         for s in STAGES[1:STAGES.index(start)]:
             if not done[s]:
@@ -122,12 +122,12 @@ def main():
 
     roi = None
     if "gui" in run:
-        from route_gui import select_roi
+        from .route_gui import select_roi
         t0 = time.time()
         roi, _ = select_roi()
         timings["gui"] = time.time() - t0
     if "mapillary" in run:
-        from mapillary_layer import fetch_roi
+        from .mapillary_layer import fetch_roi
         if not args.token:
             raise SystemExit("Set MAPILLARY_TOKEN (https://www.mapillary.com/dashboard/developers) or pass --token")
         if roi is None:
@@ -143,18 +143,18 @@ def main():
     if paths is None:
         return
     if "segmentation" in run:
-        from segmentation_layer import segment_roi
+        from .segmentation_layer import segment_roi
         t0 = time.time()
         segment_roi(paths.root, device=args.device, previews=args.previews, force=args.force)
         timings["segmentation"] = time.time() - t0
     if "colmap" in run:
-        from colmap_layer import reconstruct_roi
+        from .colmap_layer import reconstruct_roi
         t0 = time.time()
         reconstruct_roi(paths.root, args.max_turn, args.trim_deg, args.min_frames, args.max_frames, args.mask_moving,
                         args.largest_piece, args.height_range, args.force)
         timings["colmap"] = time.time() - t0
     if "osm" in run:
-        from osm_alignment_layer import align_roi
+        from .osm_alignment_layer import align_roi
         t0 = time.time()
         align_roi(paths.root, args.camera_height, args.height_range, args.max_tie_misfit, args.max_leg_error)
         timings["osm"] = time.time() - t0

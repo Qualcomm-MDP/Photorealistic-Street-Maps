@@ -2,7 +2,7 @@
 
 Runs Mask2Former (default: Swin-Large trained on Mapillary Vistas, 65 street-scene classes)
 on every frame of every sequence of an ROI and reduces its classes to one mask per frame,
-saved as a PNG in rois/mapillary_roi_N/data/masks/<sequence folder>/<frame>.png:
+saved as a PNG in outputs/alignment/mapillary_roi_N/data/masks/<sequence folder>/<frame>.png:
 
     0  other (sidewalk, vegetation, poles, signs, ...)
   100  road surface (road, lane markings, crosswalks, bike lane, manholes, ...)
@@ -17,8 +17,8 @@ overlays (data/masks/<sequence folder>/previews/) for checking by eye.
 Frames that already have a mask are skipped unless --force.
 
 Usage:
-  python segmentation_layer.py rois/mapillary_roi_1
-  python segmentation_layer.py rois/mapillary_roi_1 --previews
+  python -m pose_alignment.segmentation_layer outputs/alignment/mapillary_roi_1
+  python -m pose_alignment.segmentation_layer outputs/alignment/mapillary_roi_1 --previews
 """
 
 import argparse
@@ -29,7 +29,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from common import MASK_BUILDING, MASK_NAMES, MASK_OTHER, MASK_ROAD, MASK_SKY_OR_MOVING, RoiPaths
+from .geo_common import MASK_BUILDING, MASK_NAMES, MASK_OTHER, MASK_ROAD, MASK_SKY_OR_MOVING, RoiPaths
 
 DEFAULT_MODEL = "facebook/mask2former-swin-large-mapillary-vistas-semantic"
 # Mapillary Vistas class names per mask value.
@@ -132,7 +132,7 @@ def segment_roi(roi_dir, model_name=DEFAULT_MODEL, device=None, previews=False, 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("roi_dir", type=Path, help="ROI folder from mapillary_layer.py (rois/mapillary_roi_N)")
+    parser.add_argument("roi_dir", type=Path, help="ROI folder from mapillary_layer.py (outputs/alignment/mapillary_roi_N)")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Hugging Face Mask2Former semantic checkpoint (Vistas classes)")
     parser.add_argument("--device", help="mps, cuda or cpu (default: best available)")
     parser.add_argument("--previews", action="store_true", help="Also save colour overlays for checking by eye")
