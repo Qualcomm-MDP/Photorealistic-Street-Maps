@@ -13,6 +13,7 @@ from common.reporter import get_reporter
 from data_ingest.ingest import ingest_data
 from mesh_builder.extrude import build_mesh
 from naip import naip_stage
+from pose_alignment.align_poses import align_poses
 from terrain import terrain_stage
 from texturing.tex_projection import tex_projection
 
@@ -72,6 +73,12 @@ def build_pipeline() -> PipelineChain:
     pipeline = PipelineChain("photorealistic-street-maps")
     pipeline.add_stage(
         "fetch", ingest_data, label="Fetch data", detail="OSM + Mapillary"
+    )
+    pipeline.add_stage(
+        "align_poses",
+        align_poses,
+        label="Align poses",
+        detail="Optional COLMAP / Mapillary computed poses",
     )
     pipeline.add_stage(
         "terrain",
