@@ -31,15 +31,15 @@
   5. A 3D view of each sparse model: points in their colours, a plan view coloured by label
      (building / road / other) and the camera path, in approximate metres.
 
-Outputs in rois/mapillary_roi_N/data/colmap/:
+Outputs in outputs/alignment/mapillary_roi_N/data/colmap/:
   legs.json                               legs, cameras, models, camera heights, calibration
   <leg>/<sequence folder>/sparse/<k>/     COLMAP models (binary, txt/ export, points.ply)
   <leg>/<sequence folder>/colmap.log      COLMAP output
-3D views go to rois/mapillary_roi_N/results/sparse_views/<leg>_<sequence folder>.png.
+3D views go to outputs/alignment/mapillary_roi_N/results/sparse_views/<leg>_<sequence folder>.png.
 
 Usage:
-  python colmap_layer.py rois/mapillary_roi_1
-  python colmap_layer.py rois/mapillary_roi_1 --mask-moving --force
+  python -m pose_alignment.colmap_layer outputs/alignment/mapillary_roi_1
+  python -m pose_alignment.colmap_layer outputs/alignment/mapillary_roi_1 --mask-moving --force
 """
 
 import argparse
@@ -57,7 +57,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from common import (MASK_BUILDING, MASK_ROAD, MASK_SKY_OR_MOVING, LocalFrame, RoiPaths, gravity_frame, label_points,
+from .geo_common import (MASK_BUILDING, MASK_ROAD, MASK_SKY_OR_MOVING, LocalFrame, RoiPaths, gravity_frame, label_points,
                     load_cameras, load_points, model_size, overpass, similarity_2d, straight_stretches)
 
 LEG_SETTINGS = ("max_turn", "trim_deg", "min_frames", "max_frames")
@@ -462,7 +462,7 @@ def reconstruct_roi(roi_dir, max_turn=35.0, trim_deg=20.0, min_frames=15, max_fr
 def calibration_trial(cam, model, height, work, images, meta, seg, largest_piece, height_range, force):
     """Rerun COLMAP self-calibrating, align both versions to OSM on their own and keep the one
     whose facades fit the walls better. Returns (model, height)."""
-    from osm_alignment_layer import AlignmentError, OSMAlignmentLayer
+    from .osm_alignment_layer import AlignmentError, OSMAlignmentLayer
 
     lo, hi = height_range
     work2 = work.parent / f"{work.name}_selfcal"
@@ -501,7 +501,7 @@ def calibration_trial(cam, model, height, work, images, meta, seg, largest_piece
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("roi_dir", type=Path, help="ROI folder (rois/mapillary_roi_N) after the segmentation stage")
+    parser.add_argument("roi_dir", type=Path, help="ROI folder (outputs/alignment/mapillary_roi_N) after the segmentation stage")
     parser.add_argument("--max-turn", type=float, default=35.0, help="Split legs at turns sharper than this (deg)")
     parser.add_argument("--trim-deg", type=float, default=20.0, help="Keep leg frames heading within this of the leg")
     parser.add_argument("--min-frames", type=int, default=15, help="Skip legs with fewer primary frames")

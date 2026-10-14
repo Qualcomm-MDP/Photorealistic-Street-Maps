@@ -12,9 +12,9 @@ from pathlib import Path
 
 import numpy as np
 
-HERE = Path(__file__).resolve().parent
-ROIS_DIR = HERE / "rois"      # one parent folder per ROI: rois/mapillary_roi_N/{data,results}
-ROUTES_DIR = HERE / "routes"  # routes drawn in route_gui.py
+REPO = Path(__file__).resolve().parents[2]
+ROIS_DIR = REPO / "outputs" / "alignment"  # one parent folder per ROI: mapillary_roi_N/{data,results}
+ROUTES_DIR = ROIS_DIR / "routes"           # routes drawn in route_gui.py
 USER_AGENT = "umich-mdp-alignment-pipeline/1.0"
 OVERPASS_URLS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter"]
 
@@ -147,7 +147,7 @@ def _trim_straight(pts, idx, trim_deg, k=2):
 
 class RoiPaths:
     """Folders of one ROI. Everything for an ROI lives in its own parent folder,
-    rois/mapillary_roi_N/ by default:
+    outputs/alignment/mapillary_roi_N/ by default:
 
       data/
         mapillary/     roi.json, sequences.json, one folder per sequence

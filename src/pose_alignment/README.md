@@ -14,7 +14,7 @@ reconstructed facades typically sit within 0.2–0.7 m of the OSM walls (median)
 
 | # | Stage | Script | Input | Output |
 |---|-------|--------|-------|--------|
-| 1 | gui | `route_gui.py` | — | ROI file: the drawn lines, corridor width and bounding box (`routes/*.json`) |
+| 1 | gui | `route_gui.py` | — | ROI file: the drawn lines, corridor width and bounding box (`outputs/alignment/routes/*.json`) |
 | 2 | mapillary | `mapillary_layer.py` | ROI file | `data/mapillary/`: one folder per sequence (`frame_0001.jpg` …, `cameras.json`), `roi.json`, `sequences.json` |
 | 3 | segmentation | `segmentation_layer.py` | ROI folder | `data/masks/`: a building/road mask per frame (optional colour previews) |
 | 4 | colmap | `colmap_layer.py` | ROI folder + masks | `data/colmap/`: sparse models per leg and camera, `legs.json` |
@@ -24,7 +24,7 @@ reconstructed facades typically sit within 0.2–0.7 m of the OSM walls (median)
 helpers (geography, ROI folders, COLMAP readers, geometry), and `alignment_plots.py` draws the
 OSM stage's images.
 
-Each ROI gets its own folder, `rois/mapillary_roi_N/`. The output folders in the table
+Each ROI gets its own folder, `outputs/alignment/mapillary_roi_N/`. The output folders in the table
 above are inside its `data/` folder, and the result images are collected in its `results/`
 folder:
 
@@ -64,7 +64,7 @@ aligned.
 
 Rig siblings are added: vehicles with several cameras upload one sequence per camera, and
 seeing both sides of the street is what fixes the reconstruction's scale. Each sequence is
-downloaded to `rois/mapillary_roi_N/data/mapillary/line<L>_cam<k>_<id>/`. If
+downloaded to `outputs/alignment/mapillary_roi_N/data/mapillary/line<L>_cam<k>_<id>/`. If
 `mapillary_roi_1` already exists, the next free number is used.
 
 Each sequence folder's `cameras.json` holds, per frame: the Mapillary image id, capture
@@ -97,7 +97,7 @@ per frame on an Apple-silicon GPU (MPS) and is slower on a CPU.
 - **Calibration check.** The camera's height above the road plane flags a bad Mapillary
   focal length. For forward-facing cameras, a self-calibrated rerun is then compared
   against OSM, and the better fit is kept.
-- **Output.** `rois/mapillary_roi_N/results/sparse_views/` has a 3D view of each model, plus
+- **Output.** `outputs/alignment/mapillary_roi_N/results/sparse_views/` has a 3D view of each model, plus
   a plan view coloured by label.
 
 ### 5. Align to OSM (`osm_alignment_layer.py`)
@@ -122,7 +122,7 @@ seen on one side only, the scale is held to Mapillary's track.
 
 Outputs:
 
-- **`<sequence folder>.json`** (in `rois/mapillary_roi_N/data/alignment/`) has one entry per
+- **`<sequence folder>.json`** (in `outputs/alignment/mapillary_roi_N/data/alignment/`) has one entry per
   frame:
   - `pipeline`: lat/lon, height above the road, `enu_m` (metres east/north/up from
     `enu_origin_lon_lat`), `rotation_cam_to_enu` (OpenCV camera axes in ENU),
@@ -146,13 +146,16 @@ Outputs:
 
 ## Running
 
+The layers are a package inside `src/`, so run them as modules from the repository root
+with `src` on the import path (`export PYTHONPATH=src`):
+
 ```bash
-python run_pipeline.py                                   # draw a route, then run everything
-python run_pipeline.py --roi routes/my_route.json        # reuse a drawn route
-python run_pipeline.py --roi-dir rois/mapillary_roi_1    # resume: starts at the first unfinished stage
-python run_pipeline.py --roi-dir rois/mapillary_roi_1 --from colmap   # rerun from COLMAP
-python run_pipeline.py --roi-dir rois/mapillary_roi_1 --from osm --camera-height 1.4
-python run_pipeline.py --view right --to segmentation    # stop after a stage
+python -m pose_alignment.run_pipeline                    # draw a route, then run everything
+python -m pose_alignment.run_pipeline --roi outputs/alignment/routes/my_route.json   # reuse a drawn route
+python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_1    # resume at the first unfinished stage
+python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_1 --from colmap   # rerun from COLMAP
+python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_1 --from osm --camera-height 1.4
+python -m pose_alignment.run_pipeline --view right --to segmentation    # stop after a stage
 ```
 
 - **`--from`**: `gui`, `mapillary`, `segmentation`, `colmap` or `osm`. The default
@@ -166,14 +169,14 @@ python run_pipeline.py --view right --to segmentation    # stop after a stage
 Every stage script also runs on its own:
 
 ```bash
-python route_gui.py
-python mapillary_layer.py --roi routes/my_route.json [--view right] [--list]
-python segmentation_layer.py rois/mapillary_roi_1 [--previews]
-python colmap_layer.py rois/mapillary_roi_1 [--mask-moving]
-python osm_alignment_layer.py rois/mapillary_roi_1
+python -m pose_alignment.route_gui
+python -m pose_alignment.mapillary_layer --roi outputs/alignment/routes/my_route.json [--view right] [--list]
+python -m pose_alignment.segmentation_layer outputs/alignment/mapillary_roi_1 [--previews]
+python -m pose_alignment.colmap_layer outputs/alignment/mapillary_roi_1 [--mask-moving]
+python -m pose_alignment.osm_alignment_layer outputs/alignment/mapillary_roi_1
 ```
 
-`python <script> --help` lists every option.
+`python -m pose_alignment.<script> --help` lists every option.
 
 ### Time
 
@@ -186,11 +189,8 @@ COLMAP runs on the CPU (Homebrew COLMAP has no CUDA) and dominates the run time.
 
 ## Setup
 
-1. Python 3.10+ and the packages:
-   ```bash
-   python -m venv .venv && source .venv/bin/activate
-   pip install -r requirements.txt
-   ```
+1. The project's Poetry environment (`poetry install`) already has every package these
+   layers need (numpy, scipy, matplotlib, opencv, torch, transformers, pillow).
    The first segmentation run downloads the Mask2Former weights (about 900 MB) from Hugging
    Face.
 2. COLMAP 3.9+ on the PATH (`brew install colmap` on macOS; see
@@ -208,9 +208,9 @@ aerial in the layer switcher. None of these needs an API key.
 ## Data layout
 
 ```
-routes/
-  my_route_20261007_181500.json          drawn route (route_gui.py)
-rois/
+outputs/alignment/
+  routes/
+    my_route_20261007_181500.json        drawn route (route_gui.py)
   mapillary_roi_1/                       one parent folder per ROI
     data/
       mapillary/
@@ -231,5 +231,5 @@ rois/
     ...
 ```
 
-`rois/*/data/` is in `.gitignore`. Each ROI's `results/` is not, so example images can be
+`outputs/alignment/*/data/` is in `.gitignore`. Each ROI's `results/` is not, so example images can be
 committed. A whole ROI folder can be moved, renamed or deleted on its own.

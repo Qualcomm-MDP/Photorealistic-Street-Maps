@@ -25,8 +25,8 @@ align_roi() runs every leg of an ROI (legs.json from the COLMAP layer) and write
   results/legs/<leg>_alignment.png       before/after map of one leg
 
 Usage:
-  python osm_alignment_layer.py rois/mapillary_roi_1
-  python osm_alignment_layer.py rois/mapillary_roi_1 --camera-height 1.4
+  python -m pose_alignment.osm_alignment_layer outputs/alignment/mapillary_roi_1
+  python -m pose_alignment.osm_alignment_layer outputs/alignment/mapillary_roi_1 --camera-height 1.4
 """
 
 import argparse
@@ -40,8 +40,8 @@ import numpy as np
 from matplotlib.path import Path as PolyPath
 from scipy.optimize import least_squares
 
-from alignment_plots import plot_before_after, plot_gps_vs_pipeline
-from common import (MASK_BUILDING, MASK_ROAD, LocalFrame, RoiPaths, apply_2d, fit_plane, gravity_frame, label_points,
+from .alignment_plots import plot_before_after, plot_gps_vs_pipeline
+from .geo_common import (MASK_BUILDING, MASK_ROAD, LocalFrame, RoiPaths, apply_2d, fit_plane, gravity_frame, label_points,
                     load_cameras, load_points, overpass, planarity, ransac_lines, read_camera, segment_distances,
                     similarity_2d, split_segments, wrap_deg)
 
@@ -781,7 +781,7 @@ def align_roi(roi_dir, camera_height=None, height_range=(0.9, 3.0), max_tie_misf
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("roi_dir", type=Path, help="ROI folder (rois/mapillary_roi_N) after the colmap stage")
+    parser.add_argument("roi_dir", type=Path, help="ROI folder (outputs/alignment/mapillary_roi_N) after the colmap stage")
     parser.add_argument("--camera-height", type=float, help="Camera height above the road (m); default: measured per leg")
     parser.add_argument("--height-range", type=float, nargs=2, default=[0.9, 3.0], help="Plausible camera heights (m)")
     parser.add_argument("--max-tie-misfit", type=float, default=5.0,

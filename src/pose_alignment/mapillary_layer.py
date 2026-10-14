@@ -22,7 +22,7 @@ For each line of the ROI (route_gui.py):
      camera data (id, time, raw GPS, Mapillary's computed position and rotation, compass,
      altitude, calibration).
 
-The ROI folder is the next free rois/mapillary_roi_N (N = 1, 2, ...); every later stage
+The ROI folder is the next free outputs/alignment/mapillary_roi_N (N = 1, 2, ...); every later stage
 writes into it too (data/ and results/). This stage writes data/mapillary/:
   roi.json        the drawn route
   sequences.json  one entry per downloaded sequence (folder, id, line, role, view, camera)
@@ -31,8 +31,8 @@ Needs a Mapillary client access token (https://www.mapillary.com/dashboard/devel
   export MAPILLARY_TOKEN='MLY|...'
 
 Usage:
-  python mapillary_layer.py --roi routes/my_route.json
-  python mapillary_layer.py --roi routes/my_route.json --view right --list
+  python -m pose_alignment.mapillary_layer --roi outputs/alignment/routes/my_route.json
+  python -m pose_alignment.mapillary_layer --roi outputs/alignment/routes/my_route.json --view right --list
 """
 
 import argparse
@@ -48,7 +48,7 @@ from pathlib import Path
 
 import numpy as np
 
-from common import (ROIS_DIR, USER_AGENT, LocalFrame, RoiPaths, get_json, line_length_m, next_roi_dir,
+from .geo_common import (ROIS_DIR, USER_AGENT, LocalFrame, RoiPaths, get_json, line_length_m, next_roi_dir,
                     straight_stretches, wrap_deg)
 
 MAPILLARY_URL = "https://graph.mapillary.com/images"
@@ -349,7 +349,7 @@ def fetch_roi(roi, token, out=None, view=None, view_tol=35.0, sequence=None, min
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--roi", type=Path, required=True, help="ROI file from route_gui.py (or a ROI folder)")
-    parser.add_argument("--out", type=Path, help="ROI folder (default: next free rois/mapillary_roi_N)")
+    parser.add_argument("--out", type=Path, help="ROI folder (default: next free outputs/alignment/mapillary_roi_N)")
     parser.add_argument("--view", choices=list(VIEWS), help="Only start from cameras looking this way")
     parser.add_argument("--view-tol", type=float, default=35.0, help="Allowed deviation (deg) for --view")
     parser.add_argument("--sequence", help="Start from this Mapillary sequence instead of the best one")
