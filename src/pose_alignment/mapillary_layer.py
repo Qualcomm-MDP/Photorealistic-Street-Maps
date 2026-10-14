@@ -40,6 +40,7 @@ import json
 import math
 import os
 import shutil
+import time
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -269,30 +270,37 @@ def frame_record(img, name):
 
 
 def download_sequence(imgs, folder, header, resolution="2048", workers=8):
-    """Download images as frame_0001.jpg, ... (capture order) plus cameras.json."""
+    """Download images as frame_0001.jpg, ... (capture order) plus cameras.json. Images
+    Mapillary cannot serve are skipped; returns the images saved."""
     if folder.exists():
         shutil.rmtree(folder)
     folder.mkdir(parents=True)
     url_field = "thumb_original_url" if resolution == "original" else "thumb_2048_url"
-    names = [f"frame_{n:04d}.jpg" for n in range(1, len(imgs) + 1)]
 
     def fetch(job):
         img, name = job
         req = urllib.request.Request(img[url_field], headers={"User-Agent": USER_AGENT})
-        for attempt in range(3):
+        for attempt in range(4):
             try:
                 with urllib.request.urlopen(req, timeout=120) as r, open(folder / name, "wb") as f:
                     shutil.copyfileobj(r, f)
-                return
+                return True
             except OSError:
-                if attempt == 2:
-                    raise
+                time.sleep(2 ** attempt)
+        (folder / name).unlink(missing_ok=True)
+        return False
 
     with ThreadPoolExecutor(workers) as pool:
-        list(pool.map(fetch, zip(imgs, names)))
-    frames = [frame_record(img, name) for img, name in zip(imgs, names)]
+        ok = list(pool.map(fetch, ((img, f"download_{n:04d}.jpg") for n, img in enumerate(imgs))))
+    saved = [img for img, good in zip(imgs, ok) if good]
+    names = [f"frame_{n:04d}.jpg" for n in range(1, len(saved) + 1)]
+    for name, n in zip(names, [n for n, good in enumerate(ok) if good]):
+        (folder / f"download_{n:04d}.jpg").rename(folder / name)
+    frames = [frame_record(img, name) for img, name in zip(saved, names)]
     (folder / "cameras.json").write_text(json.dumps({**header, "frames": frames}, indent=1))
-    print(f"  saved {len(imgs)} frames and cameras.json to {folder}")
+    skipped = f" ({len(imgs) - len(saved)} that Mapillary could not serve skipped)" if len(saved) < len(imgs) else ""
+    print(f"  saved {len(saved)} frames and cameras.json to {folder}{skipped}")
+    return saved
 
 
 def fetch_roi(roi, token, out=None, view=None, view_tol=35.0, sequence=None, min_images=20, max_spacing=6.0,
@@ -336,7 +344,7 @@ def fetch_roi(roi, token, out=None, view=None, view_tol=35.0, sequence=None, min
                   f"view {'?' if view_deg is None else f'{view_deg:+.0f}'} deg, {len(imgs)} frames, {r['camera']}")
             header = {"roi": out.name, "line": k, "sequence": r["sequence"], "role": role, "camera": r["camera"],
                       "view_deg": view_deg, "date": r["date"], "resolution": resolution}
-            download_sequence(imgs, paths.images / folder, header, resolution)
+            imgs = download_sequence(imgs, paths.images / folder, header, resolution)
             sequences.append({"folder": folder, **{key: header[key] for key in ("sequence", "line", "role", "camera",
                                                                                  "view_deg", "date")},
                               "frames": len(imgs), "spacing_m": round(r["spacing_m"], 2),
