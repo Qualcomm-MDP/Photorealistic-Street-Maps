@@ -4,6 +4,9 @@ from dataclasses import dataclass
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 MAPILLARY_URL = "https://graph.mapillary.com/images"
 
+# Overpass rejects generic client User-Agents (e.g. python-requests) with HTTP 406
+USER_AGENT = "Photorealistic-Street-Maps/0.1 (+https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps)"
+
 
 @dataclass(frozen=True)
 class BoundingBox:

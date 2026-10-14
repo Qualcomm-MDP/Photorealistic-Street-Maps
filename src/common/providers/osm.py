@@ -2,7 +2,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 import requests
 
-from ..constants import OVERPASS_URL, BoundingBox
+from ..constants import OVERPASS_URL, USER_AGENT, BoundingBox
 
 
 # Refer https://wiki.openstreetmap.org/wiki/Map_features
@@ -38,6 +38,7 @@ class OSMClient:
         response = requests.post(
             OVERPASS_URL,
             data={"data": query},
+            headers={"User-Agent": USER_AGENT},
             timeout=self.timeout,
         )
         response.raise_for_status()

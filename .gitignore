@@ -8,3 +8,5 @@ dist/
 .vscode/
 .idea/
 *_test.py
+models/
+outputs/alignment/*/data/
