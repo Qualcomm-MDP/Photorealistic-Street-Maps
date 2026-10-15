@@ -1,4 +1,6 @@
 import json
+import tempfile
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -55,8 +57,55 @@ def _download_image(url: str) -> np.ndarray:
     return img
 
 
+def _save_preview(img: np.ndarray, path: Path, max_width: int = 640) -> None:
+    h, w = img.shape[:2]
+    if w > max_width:
+        img = cv2.resize(img, (max_width, int(h * max_width / w)), cv2.INTER_AREA)
+    cv2.imwrite(str(path), img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+
+
 def apply_textures(
-    mesh: trimesh.Trimesh, mapillary_data: dict, bbox, remove_obs: bool = True
+    mesh: trimesh.Trimesh,
+    mapillary_data: dict,
+    bbox,
+    remove_obs: bool = True,
+    seg_model: str | None = None,
+    seg_device: str | None = None,
+    image_dir: str | Path | None = None,
+    max_saved_images: int = 12,
+) -> trimesh.Trimesh:
+    """Project street photos onto the mesh.
+
+    If image_dir is set, the first max_saved_images photos are also saved there
+    as small JPEG previews (original and, when obstruction removal runs, cleaned),
+    with an index in images.json.
+    """
+    # Full-resolution photos are ~12 MP (~36 MB decoded) and an area can have
+    # ~1000 of them, so they're kept on disk and loaded one at a time.
+    with tempfile.TemporaryDirectory(prefix="posm-textures-") as work_dir:
+        return _apply_textures(
+            mesh,
+            mapillary_data,
+            bbox,
+            remove_obs,
+            seg_model,
+            seg_device,
+            image_dir,
+            max_saved_images,
+            Path(work_dir),
+        )
+
+
+def _apply_textures(
+    mesh: trimesh.Trimesh,
+    mapillary_data: dict,
+    bbox,
+    remove_obs: bool,
+    seg_model: str | None,
+    seg_device: str | None,
+    image_dir: str | Path | None,
+    max_saved_images: int,
+    work_dir: Path,
 ) -> trimesh.Trimesh:
     center_lon = (bbox.min_lon + bbox.max_lon) / 2
     center_lat = (bbox.min_lat + bbox.max_lat) / 2
@@ -75,6 +124,11 @@ def apply_textures(
         print("  No images with valid metadata, skipping texturing.")
         return mesh
 
+    saved: list[dict] = []
+    if image_dir is not None:
+        image_dir = Path(image_dir)
+        image_dir.mkdir(parents=True, exist_ok=True)
+
     cam_data: list[dict] = []
     for img_id, meta in tqdm(candidates, desc="Downloading images"):
         try:
@@ -82,15 +136,33 @@ def apply_textures(
         except Exception as exc:
             tqdm.write(f"  Download failed [{img_id}]: {exc}")
             continue
+        save = image_dir is not None and len(saved) < max_saved_images
+        if save:
+            _save_preview(img, image_dir / f"{img_id}_original.jpg")
         if remove_obs:
-            img = remove_obstructions(img)
+            img = remove_obstructions(img, seg_model, seg_device)
+            if save:
+                _save_preview(img, image_dir / f"{img_id}_cleaned.jpg")
+        if save:
+            yaw = meta.get("yaw")
+            saved.append(
+                {
+                    "id": str(img_id),
+                    "heading": None if yaw is None else round(float(yaw) % 360),
+                    "original": f"{img_id}_original.jpg",
+                    "cleaned": f"{img_id}_cleaned.jpg" if remove_obs else None,
+                }
+            )
+        img_path = work_dir / f"{img_id}.jpg"
+        cv2.imwrite(str(img_path), img, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        del img
         w = meta["original_width"]
         h = meta["original_height"]
         x, y = transformer.transform(meta["longitude"], meta["latitude"])
         cam_data.append(
             {
                 "id": img_id,
-                "img": img,
+                "img_path": img_path,
                 "w": w,
                 "h": h,
                 "K": _build_K(meta["focal_length_pixels"], w, h),
@@ -98,6 +170,10 @@ def apply_textures(
                 "Cw": np.array([x, y, CAMERA_HEIGHT_M]),
             }
         )
+
+    if image_dir is not None:
+        with open(image_dir / "images.json", "w") as f:
+            json.dump(saved, f, indent=2)
 
     if not cam_data:
         print("  All image downloads failed, skipping texturing.")
@@ -161,7 +237,13 @@ def apply_textures(
     print(f"  {len(best_hit)} / {len(faces)} faces assigned a camera")
 
     patch_records: list[dict] = []
-    for fi, (ci, uv_img, depths, _) in best_hit.items():
+    # Group faces by camera so each photo is read from disk once.
+    loaded_ci, loaded_img = None, None
+    for fi, (ci, uv_img, depths, _) in sorted(
+        best_hit.items(), key=lambda item: item[1][0]
+    ):
+        if ci != loaded_ci:
+            loaded_ci, loaded_img = ci, cv2.imread(str(cam_data[ci]["img_path"]))
         face = faces[fi]
         V0p, V1p, V2p = verts_proj[face]
         cd = cam_data[ci]
@@ -211,7 +293,7 @@ def apply_textures(
         H_atlas = H @ S
 
         patch_bgr = cv2.warpPerspective(
-            cd["img"],
+            loaded_img,
             H_atlas,
             (patch_w, patch_h),
             flags=cv2.WARP_INVERSE_MAP | cv2.INTER_LINEAR,
@@ -286,7 +368,14 @@ def tex_projection(value, state: PipelineState):
         with open(dump_path, "w") as f:
             json.dump(mapillary_data, f, indent=2)
     bbox = state.require_metadata("bbox")
-    remove_obs = state.get_metadata("remove_obstructions", True)
-    mesh = apply_textures(value, mapillary_data, bbox, remove_obs=remove_obs)
+    mesh = apply_textures(
+        value,
+        mapillary_data,
+        bbox,
+        remove_obs=state.get_metadata("remove_obstructions", True),
+        seg_model=state.get_metadata("seg_model", None),
+        seg_device=state.get_metadata("seg_device", None),
+        image_dir=state.get_metadata("image_dir", None),
+    )
     state.require_metadata("progress_monitor").next()
     return mesh
