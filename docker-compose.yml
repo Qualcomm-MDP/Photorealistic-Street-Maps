@@ -17,6 +17,9 @@ services:
   pipeline:
     <<: *pipeline
     image: photorealistic-street-maps:cpu
+    # triangle (used by trimesh to fill building floors/roofs) has no Linux ARM64
+    # build, so Apple Silicon Macs run this x86 image under emulation.
+    platform: linux/amd64
     build:
       context: .
       args:
