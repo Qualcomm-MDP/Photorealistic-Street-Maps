@@ -281,8 +281,10 @@ def apply_textures(
 
 def tex_projection(value, state: PipelineState):
     mapillary_data = state.get_metadata("provider_data", {})["mapillary"]
-    with open("test.json", "w") as f:
-        json.dump(mapillary_data, f, indent=2)
+    dump_path = state.get_metadata("mapillary_dump_path", None)
+    if dump_path:
+        with open(dump_path, "w") as f:
+            json.dump(mapillary_data, f, indent=2)
     bbox = state.require_metadata("bbox")
     remove_obs = state.get_metadata("remove_obstructions", True)
     mesh = apply_textures(value, mapillary_data, bbox, remove_obs=remove_obs)

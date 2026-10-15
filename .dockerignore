@@ -1,0 +1,16 @@
+.git
+.github
+.venv
+**/__pycache__
+**/*.pyc
+.env
+.env.*
+!.env.example
+.vscode
+.idea
+dist
+output
+tests
+docs
+site
+*.glb

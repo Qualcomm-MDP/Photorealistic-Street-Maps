@@ -1,9 +1,12 @@
 from enum import Enum
-from typing import Any
-
+from typing import Any, Dict, List, Optional
+import time
 import requests
 
-from ..constants import OVERPASS_URL, BoundingBox
+from ..constants import OVERPASS_FALLBACK_URLS, OVERPASS_URL, USER_AGENT, BoundingBox
+
+# Status codes Overpass returns when it is overloaded or rate limiting.
+RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
 
 # Refer https://wiki.openstreetmap.org/wiki/Map_features
@@ -13,8 +16,17 @@ class OSM_MAP_FEATURES(Enum):
 
 
 class OSMClient:
-    def __init__(self, timeout: int = 60):
+    def __init__(
+        self,
+        timeout: int = 60,
+        rounds: int = 3,
+        backoff_s: float = 5.0,
+        urls: tuple[str, ...] = (OVERPASS_URL, *OVERPASS_FALLBACK_URLS),
+    ):
         self.timeout = timeout
+        self.rounds = rounds
+        self.backoff_s = backoff_s
+        self.urls = urls
 
     def fetch(
         self,
@@ -36,13 +48,43 @@ class OSMClient:
         );
         out body geom;
         """
-        response = requests.post(
-            OVERPASS_URL,
-            data={"data": query},
-            timeout=self.timeout,
+        return self._post(query)
+
+    def _post(self, query: str) -> Dict[str, Any]:
+        """POST to each Overpass endpoint in turn, retrying with backoff.
+
+        The public servers regularly time out or rate limit under load, so a
+        single failure shouldn't abort the pipeline.
+        """
+        errors: List[str] = []
+        for round_idx in range(self.rounds):
+            if round_idx > 0:
+                delay = self.backoff_s * 2 ** (round_idx - 1)
+                print(f"  Overpass unavailable, retrying in {delay:.0f}s …")
+                time.sleep(delay)
+
+            for url in self.urls:
+                try:
+                    response = requests.post(
+                        url,
+                        data={"data": query},
+                        headers={"User-Agent": USER_AGENT},
+                        timeout=self.timeout,
+                    )
+                except (requests.ConnectionError, requests.Timeout) as exc:
+                    errors.append(f"{url}: {type(exc).__name__}")
+                    continue
+
+                if response.status_code in RETRYABLE_STATUS:
+                    errors.append(f"{url}: HTTP {response.status_code}")
+                    continue
+                response.raise_for_status()
+                return response.json()
+
+        raise RuntimeError(
+            f"All Overpass endpoints failed after {self.rounds} rounds: "
+            + "; ".join(errors[-len(self.urls) :])
         )
-        response.raise_for_status()
-        return response.json()
 
     def build_feature_query(
         self,

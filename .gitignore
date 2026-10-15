@@ -8,3 +8,7 @@ dist/
 .vscode/
 .idea/
 *_test.py
+
+# Pipeline outputs (Docker bind mount)
+output/*
+!output/.gitkeep
