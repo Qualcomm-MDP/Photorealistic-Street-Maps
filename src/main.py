@@ -1,19 +1,19 @@
-from dotenv import load_dotenv
-from common import ProgressMonitor, PipelineChain, export_to_glb
-from common.profiler import PipelineProfiler
-from common.constants import BoundingBox
-from common.providers import OSMClient, OSM_MAP_FEATURES
-from common.MeshUtils import _get_utm_transformer
-
-from mesh_builder.extrude import extrude_buildings
-from data_ingest.ingest import ingest_data
-from mesh_builder.extrude import build_mesh
-from texturing.tex_projection import tex_projection
-
 import argparse
 import os
+from tkinter import Tk, filedialog
+
 import numpy as np
 import trimesh
+from dotenv import load_dotenv
+
+from common import PipelineChain, ProgressMonitor, export_to_glb
+from common.constants import BoundingBox
+from common.MeshUtils import _get_utm_transformer
+from common.profiler import PipelineProfiler
+from common.providers import OSM_MAP_FEATURES, OSMClient
+from data_ingest.ingest import ingest_data
+from mesh_builder.extrude import build_mesh, extrude_buildings
+from texturing.tex_projection import tex_projection
 
 _env = os.environ.get("APP_ENV", "").lower()
 _env_file = {
@@ -58,7 +58,6 @@ pipeline_progress.add_task("Export mesh file")
 
 def ask_save_path(default_name: str = "combined.glb") -> str | None:
     # Imported lazily so headless runs (e.g. Docker with --output) never need Tk.
-    from tkinter import Tk, filedialog
 
     root = Tk()
     root.withdraw()

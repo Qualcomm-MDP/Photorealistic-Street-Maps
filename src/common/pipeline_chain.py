@@ -83,7 +83,7 @@ class PipelineChain:
                 names.update(stage.branches.keys())
         return names
 
-    def add_stage(self, name: str, handler: StageHandler) -> "PipelineChain":
+    def add_stage(self, name: str, handler: StageHandler) -> PipelineChain:
         if name in self._all_names():
             raise ValueError(f"Stage '{name}' already exists in pipeline '{self.name}'")
 
@@ -95,7 +95,7 @@ class PipelineChain:
         name: str,
         branches: dict[str, StageHandler],
         merge: MergeHandler | None = None,
-    ) -> "PipelineChain":
+    ) -> PipelineChain:
         existing = self._all_names()
         if name in existing:
             raise ValueError(f"Stage '{name}' already exists in pipeline '{self.name}'")
@@ -111,7 +111,7 @@ class PipelineChain:
         self,
         initial_input: Any,
         metadata: dict[str, Any] | None = None,
-        profiler: "PipelineProfiler | None" = None,
+        profiler: PipelineProfiler | None = None,
     ) -> PipelineState:
         state = PipelineState(
             initial_input=initial_input,
@@ -151,7 +151,7 @@ class PipelineChain:
         self,
         state: PipelineState,
         start_index: int,
-        profiler: "PipelineProfiler | None" = None,
+        profiler: PipelineProfiler | None = None,
     ) -> PipelineState:
         current_value = state.current_value
 

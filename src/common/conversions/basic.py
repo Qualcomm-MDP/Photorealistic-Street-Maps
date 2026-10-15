@@ -1,5 +1,6 @@
-from datetime import datetime, timezone
 import math
+from datetime import UTC, datetime
+
 from pint import UnitRegistry
 
 # initialize Unit Registry
@@ -92,20 +93,20 @@ def cartesian_to_compass(angle: float) -> float:
 # Time conversions
 def utc_now() -> datetime:
     """Get current UTC time"""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def to_utc(dt: datetime) -> datetime:
     """Convert datetime to UTC"""
     if dt.tzinfo is None:
         # Assume naive datetime is UTC
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 def unix_timestamp_to_utc(timestamp: float) -> datetime:
     """Convert Unix timestamp to UTC datetime"""
-    return datetime.fromtimestamp(timestamp, tz=timezone.utc)
+    return datetime.fromtimestamp(timestamp, tz=UTC)
 
 
 def utc_to_unix_timestamp(dt: datetime) -> float:
