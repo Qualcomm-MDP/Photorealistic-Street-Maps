@@ -12,11 +12,13 @@ TODO: Write about install and running the pipeline towards the end
 
 Docker is the easiest way to run the pipeline on any OS without installing Python, Poetry, or PyTorch yourself.
 
-1. Create a `.env` file with your Mapillary token (see `.env.example`):
+1. Create a `.env` file with your Mapillary token (see `.env.example`, or run `python dotenv_builder.py`):
 
     ```
     MAPILLARY_ACCESS_TOKEN="..."
     ```
+
+    To use `.env.development` or `.env.production` instead, set `APP_ENV` when running, e.g. `APP_ENV=development docker compose run ...`. Env files are read when the container starts and are never copied into the image.
 
 2. Build and run (CPU, works on Linux, macOS, and Windows):
 

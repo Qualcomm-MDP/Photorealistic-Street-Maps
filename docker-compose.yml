@@ -4,8 +4,10 @@
 #   docker compose --profile gpu run --rm pipeline-gpu --bbox W S E N --output output/map.glb
 
 x-pipeline: &pipeline
+  # Same convention as src/main.py: APP_ENV=development -> .env.development,
+  # APP_ENV=production -> .env.production, unset -> .env
   env_file:
-    - path: .env
+    - path: .env${APP_ENV:+.$APP_ENV}
       required: false
   volumes:
     - ./output:/app/output
