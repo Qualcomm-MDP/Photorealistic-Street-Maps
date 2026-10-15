@@ -9,7 +9,6 @@ from mesh_builder.extrude import extrude_buildings
 from data_ingest.ingest import ingest_data
 from mesh_builder.extrude import build_mesh
 from texturing.tex_projection import tex_projection
-from tkinter import Tk, filedialog
 
 import argparse
 import os
@@ -58,6 +57,9 @@ pipeline_progress.add_task("Export mesh file")
 
 
 def ask_save_path(default_name: str = "combined.glb") -> str | None:
+    # Imported lazily so headless runs (e.g. Docker with --output) never need Tk.
+    from tkinter import Tk, filedialog
+
     root = Tk()
     root.withdraw()
     root.attributes("-topmost", True)
@@ -91,9 +93,10 @@ def export_mesh(value, state):
     )
     value.apply_transform(rotation)
 
-    path = ask_save_path()
+    path = state.get_metadata("output_path", None) or ask_save_path()
     if path is not None:
-        export_to_glb(value, path or "combined.glb")
+        export_to_glb(value, path)
+        print(f"Saved mesh to {path}")
 
     state.require_metadata("progress_monitor").next()
 
@@ -109,12 +112,35 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", metavar="FILENAME", default=None)
     parser.add_argument("--no-seg", action="store_true", default=False)
+    parser.add_argument(
+        "--bbox",
+        nargs=4,
+        type=float,
+        metavar=("WEST", "SOUTH", "EAST", "NORTH"),
+        default=None,
+        help="Bounding box in degrees. Prompts interactively if omitted.",
+    )
+    parser.add_argument(
+        "--output",
+        metavar="PATH",
+        default=None,
+        help="Where to write the .glb. Opens a save dialog if omitted.",
+    )
+    parser.add_argument(
+        "--dump-mapillary",
+        metavar="PATH",
+        default=None,
+        help="Write the raw Mapillary metadata to this JSON file for debugging.",
+    )
     args = parser.parse_args()
 
-    min_lon = float(input("WEST (Minimum Longitude): "))
-    min_lat = float(input("SOUTH (Minimum Latitude): "))
-    max_lon = float(input("EAST (Minimum Longitude): "))
-    max_lat = float(input("NORTH (Minimum Latitude): "))
+    if args.bbox is not None:
+        min_lon, min_lat, max_lon, max_lat = args.bbox
+    else:
+        min_lon = float(input("WEST (Minimum Longitude): "))
+        min_lat = float(input("SOUTH (Minimum Latitude): "))
+        max_lon = float(input("EAST (Maximum Longitude): "))
+        max_lat = float(input("NORTH (Maximum Latitude): "))
 
     bbox = BoundingBox(min_lat, max_lat, min_lon, max_lon)
 
@@ -129,6 +155,8 @@ def main():
             "bbox": bbox,
             "progress_monitor": pipeline_progress,
             "remove_obstructions": not args.no_seg,
+            "output_path": args.output,
+            "mapillary_dump_path": args.dump_mapillary,
         },
         profiler=profiler,
     )
