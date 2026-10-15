@@ -15,11 +15,6 @@ from data_ingest.ingest import ingest_data
 from mesh_builder.extrude import build_mesh, extrude_buildings
 from texturing.tex_projection import tex_projection
 
-import argparse
-import os
-import numpy as np
-import trimesh
-
 _env = os.environ.get("APP_ENV", "").lower()
 _env_file = {
     "development": ".env.development",
@@ -63,7 +58,6 @@ pipeline_progress.add_task("Export mesh file")
 
 def ask_save_path(default_name: str = "combined.glb") -> str | None:
     # Imported lazily so headless runs (e.g. Docker with --output) never need Tk.
-    from tkinter import Tk, filedialog
 
     root = Tk()
     root.withdraw()

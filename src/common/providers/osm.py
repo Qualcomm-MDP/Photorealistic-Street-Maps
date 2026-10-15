@@ -1,6 +1,7 @@
-from enum import Enum
-from typing import Any, Dict, List, Optional
 import time
+from enum import Enum
+from typing import Any
+
 import requests
 
 from ..constants import OVERPASS_FALLBACK_URLS, OVERPASS_URL, USER_AGENT, BoundingBox
@@ -50,13 +51,13 @@ class OSMClient:
         """
         return self._post(query)
 
-    def _post(self, query: str) -> Dict[str, Any]:
+    def _post(self, query: str) -> dict[str, Any]:
         """POST to each Overpass endpoint in turn, retrying with backoff.
 
         The public servers regularly time out or rate limit under load, so a
         single failure shouldn't abort the pipeline.
         """
-        errors: List[str] = []
+        errors: list[str] = []
         for round_idx in range(self.rounds):
             if round_idx > 0:
                 delay = self.backoff_s * 2 ** (round_idx - 1)
