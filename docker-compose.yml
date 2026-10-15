@@ -1,0 +1,40 @@
+# CPU (works on any machine):
+#   docker compose run --rm pipeline --bbox W S E N --output output/map.glb
+# NVIDIA GPU (Linux, or Windows with WSL2, plus NVIDIA Container Toolkit):
+#   docker compose --profile gpu run --rm pipeline-gpu --bbox W S E N --output output/map.glb
+
+x-pipeline: &pipeline
+  env_file:
+    - path: .env
+      required: false
+  volumes:
+    - ./output:/app/output
+    - model-cache:/cache
+
+services:
+  pipeline:
+    <<: *pipeline
+    image: photorealistic-street-maps:cpu
+    build:
+      context: .
+      args:
+        TORCH_VARIANT: cpu
+
+  pipeline-gpu:
+    <<: *pipeline
+    image: photorealistic-street-maps:gpu
+    profiles: [gpu]
+    build:
+      context: .
+      args:
+        TORCH_VARIANT: cu130
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  model-cache:

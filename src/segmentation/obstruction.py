@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import cv2
 import numpy as np
 import torch
@@ -7,6 +9,9 @@ from PIL import Image
 from simple_lama_inpainting import SimpleLama
 from transformers import Mask2FormerForUniversalSegmentation, Mask2FormerImageProcessor
 
+# Override with the SEG_MODEL env var. Any Mask2Former Cityscapes semantic
+# checkpoint works (e.g. facebook/mask2former-swin-tiny-cityscapes-semantic),
+# since they share the 19 classes OBSTRUCTION_CLASSES refers to.
 SEG_MODEL_ID = "facebook/mask2former-swin-large-cityscapes-semantic"
 
 OBSTRUCTION_CLASSES = {
@@ -25,19 +30,27 @@ _seg_model: Mask2FormerForUniversalSegmentation | None = None
 _lama: SimpleLama | None = None
 
 
+def _select_device() -> torch.device:
+    """Pick the device from SEG_DEVICE (cuda/mps/cpu), or auto-detect."""
+    requested = os.environ.get("SEG_DEVICE", "").strip().lower()
+    if requested:
+        return torch.device(requested)
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("cpu")
+
+
 def _load_seg_model() -> None:
     global _seg_proc, _seg_model
     if _seg_model is not None:
         return
-    print(f"Loading segmentation model ({SEG_MODEL_ID}) …")
-    _seg_proc = Mask2FormerImageProcessor.from_pretrained(SEG_MODEL_ID)
-    _seg_model = Mask2FormerForUniversalSegmentation.from_pretrained(SEG_MODEL_ID)
+    device = _select_device()
+    model_id = os.environ.get("SEG_MODEL", "").strip() or SEG_MODEL_ID
+    print(f"Loading segmentation model ({model_id}) on {device} …")
+    _seg_proc = Mask2FormerImageProcessor.from_pretrained(model_id)
+    _seg_model = Mask2FormerForUniversalSegmentation.from_pretrained(model_id)
     _seg_model.eval()
-    if torch.cuda.is_available():
-        _seg_model = _seg_model.cuda()  # type: ignore[assignment]
-        print("  -> running on GPU")
-    else:
-        print("  -> running on CPU (this will be slow)")
+    _seg_model = _seg_model.to(device)  # type: ignore[assignment]
 
 
 def _load_lama() -> SimpleLama:
