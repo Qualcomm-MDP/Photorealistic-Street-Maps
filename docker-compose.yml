@@ -1,9 +1,13 @@
-# CPU (works on any machine):
+# Web app (CPU, works on any machine), then open http://localhost:8000
+#   docker compose up --build api
+# Web app with an NVIDIA GPU (Linux, or Windows with WSL2, plus NVIDIA Container Toolkit):
+#   docker compose --profile gpu up --build api-gpu
+#
+# Command-line pipeline:
 #   docker compose run --rm pipeline --bbox W S E N --output output/map.glb
-# NVIDIA GPU (Linux, or Windows with WSL2, plus NVIDIA Container Toolkit):
 #   docker compose --profile gpu run --rm pipeline-gpu --bbox W S E N --output output/map.glb
 
-x-pipeline: &pipeline
+x-common: &common
   # Same convention as src/main.py: APP_ENV=development -> .env.development,
   # APP_ENV=production -> .env.production, unset -> .env
   env_file:
@@ -13,30 +17,49 @@ x-pipeline: &pipeline
     - ./output:/app/output
     - model-cache:/cache
 
+x-cpu: &cpu
+  <<: *common
+  image: photorealistic-street-maps:cpu
+  build:
+    context: .
+    args:
+      TORCH_VARIANT: cpu
+
+x-gpu: &gpu
+  <<: *common
+  image: photorealistic-street-maps:gpu
+  profiles: [gpu]
+  build:
+    context: .
+    args:
+      TORCH_VARIANT: cu130
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+
+x-api: &api
+  entrypoint: ["uvicorn", "api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+  command: []
+  ports:
+    - "8000:8000"
+  restart: unless-stopped
+
 services:
   pipeline:
-    <<: *pipeline
-    image: photorealistic-street-maps:cpu
-    build:
-      context: .
-      args:
-        TORCH_VARIANT: cpu
+    <<: *cpu
 
   pipeline-gpu:
-    <<: *pipeline
-    image: photorealistic-street-maps:gpu
-    profiles: [gpu]
-    build:
-      context: .
-      args:
-        TORCH_VARIANT: cu130
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    <<: *gpu
+
+  api:
+    <<: [*cpu, *api]
+
+  api-gpu:
+    <<: [*gpu, *api]
 
 volumes:
   model-cache:
