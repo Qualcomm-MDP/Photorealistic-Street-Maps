@@ -40,10 +40,10 @@ Docker on macOS cannot use the GPU. CPU runs work, but obstruction removal takes
 
 Optional environment variables (set in `.env` or with `-e`):
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `SEG_DEVICE` | auto (`cuda` if available, else `cpu`) | Force the segmentation device (`cuda`, `mps`, `cpu`). |
-| `SEG_MODEL` | `facebook/mask2former-swin-large-cityscapes-semantic` | Any Mask2Former Cityscapes semantic checkpoint, e.g. `facebook/mask2former-swin-tiny-cityscapes-semantic` for faster CPU runs. |
+| Variable     | Default                                               | Purpose                                                                                                                        |
+| ------------ | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `SEG_DEVICE` | auto (`cuda` if available, else `cpu`)                | Force the segmentation device (`cuda`, `mps`, `cpu`).                                                                          |
+| `SEG_MODEL`  | `facebook/mask2former-swin-large-cityscapes-semantic` | Any Mask2Former Cityscapes semantic checkpoint, e.g. `facebook/mask2former-swin-tiny-cityscapes-semantic` for faster CPU runs. |
 
 # Contribution
 
