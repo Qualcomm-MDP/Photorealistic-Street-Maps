@@ -1,6 +1,7 @@
-import pytest
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from dotenv_builder import choose_environment, main
 
