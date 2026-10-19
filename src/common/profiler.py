@@ -6,7 +6,7 @@ import platform
 import time
 import tracemalloc
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import torch
@@ -106,7 +106,7 @@ class PipelineProfiler:
 
     def start(self) -> None:
         self._wall_start = time.perf_counter()
-        self._started_at = datetime.now(timezone.utc).isoformat()
+        self._started_at = datetime.now(UTC).isoformat()
 
     def begin_stage(self, name: str) -> StageMetrics:
         metrics = StageMetrics(name=name)
@@ -120,7 +120,7 @@ class PipelineProfiler:
         metrics._stop(status=status, error=error)
 
     def finish(self) -> None:
-        self._finished_at = datetime.now(timezone.utc).isoformat()
+        self._finished_at = datetime.now(UTC).isoformat()
 
     @property
     def total_wall_time_s(self) -> float:
