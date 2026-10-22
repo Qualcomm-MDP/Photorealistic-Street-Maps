@@ -22,8 +22,9 @@ def ingest_data(bbox: BoundingBox, state: PipelineState):
             "camera_parameters",
             "width",
             "height",
+            "quality_score",
         ],
-        limit=1000,
+        min_quality=state.get_metadata("min_quality", None),
     )
     state.require_metadata("progress_monitor").next()
 

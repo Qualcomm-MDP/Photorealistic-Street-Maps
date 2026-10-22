@@ -132,6 +132,14 @@ def main():
         default=None,
         help="Write the raw Mapillary metadata to this JSON file for debugging.",
     )
+    parser.add_argument(
+        "--min-quality",
+        metavar="SCORE",
+        type=float,
+        default=None,
+        help="Skip Mapillary images whose quality_score (0-1) is below SCORE, "
+        "e.g. 0.6. Off by default.",
+    )
     args = parser.parse_args()
 
     if args.bbox is not None:
@@ -157,6 +165,7 @@ def main():
             "remove_obstructions": not args.no_seg,
             "output_path": args.output,
             "mapillary_dump_path": args.dump_mapillary,
+            "min_quality": args.min_quality,
         },
         profiler=profiler,
     )
