@@ -195,6 +195,26 @@ instead of 9–14 m, and failures are reported as unreliable instead of passing.
 | main_street_east | motorcycle | 33/33 | 0.74 m |
 | roi_9 | iPhone, forward, 10 m apart, buildings far back | 0/33 | 3.2 m |
 
+### Example fits
+
+Each image shows one camera's reconstruction after alignment. On the left is a plan view:
+building points (red), other points (blue) and road points (grey) over the OSM footprints,
+with the camera path in black. On the right is the same in 3D against the footprints
+extruded to their OSM heights.
+
+**roi_19:** iPhone, 650 m processed as one leg, 84 frames. 0.80 m median to the footprints.
+![roi_19](example_results/roi_19_one_leg_650m.png)
+
+**roi_5:** iPhone, frames 9.9 m apart, 48 frames. 0.96 m median.
+![roi_5](example_results/roi_5.png)
+
+**roi_11, leg 1:** motorcycle rig, 50 frames. 0.89 m median.
+![roi_11 leg 1](example_results/roi_11_leg01.png)
+
+**roi_20:** GLOMAP put two cameras behind earlier ones, so the pipeline switched to the
+incremental mapper. 40 frames, 0.98 m median.
+![roi_20](example_results/roi_20_incremental_fallback.png)
+
 Typical time for 80–100 frames: about 5 minutes (GeoCalib 1 min, LightGlue matching 2.5
 min when used, COLMAP 0.5 min, alignment 0.3 min).
 

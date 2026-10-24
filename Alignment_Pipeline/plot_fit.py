@@ -127,7 +127,12 @@ def plot_leg(p, folder_dir, buildings):
     ax3.set_ylabel("north (m)")
     ax3.set_zlabel("height (m)")
     ax3.set_title("3D: points and OSM footprints extruded to their heights", fontsize=10, loc="left")
-    mapper = json.loads(p.legs_json.read_text()).get("mapper", "global") if p.legs_json.exists() else "global"
+    mapper = "global"
+    if p.legs_json.exists():
+        doc = json.loads(p.legs_json.read_text())
+        used = [c.get("mapper_used") for l in doc["legs"] if l["id"] == stats["leg"] for c in l["cameras"]
+                if c["folder"] == folder]
+        mapper = (used and used[0]) or doc.get("mapper", "global")
     fig.suptitle(f"{p.name} {stats['leg']}/{folder}: GeoCalib + ALIKED + "
                  f"{'GLOMAP' if mapper == 'global' else 'COLMAP incremental'}, "
                  f"scale x{stats['scale_vs_mapillary']:.2f} vs GPS placement, camera height {stats['camera_height_m']:.2f} m, "
