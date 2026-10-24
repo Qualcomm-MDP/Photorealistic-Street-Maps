@@ -5,3 +5,6 @@ opencv-python>=4.8
 torch>=2.2
 transformers>=4.40
 pillow>=10.0
+lightglue @ git+https://github.com/cvg/LightGlue.git
+geocalib @ git+https://github.com/cvg/GeoCalib
+# plus the COLMAP 4.2+ command-line tool (e.g. brew install colmap)

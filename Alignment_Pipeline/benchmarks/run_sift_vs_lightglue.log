@@ -1,0 +1,17 @@
+mapillary_roi_2: sift -> data/colmap_bench
+  86.1 s wall, 232.8 s CPU, 7041 MB; 9325 points (2694 building in 3+ frames), 29/30 aligned, 29 reliable, facade-to-wall 0.193 m
+mapillary_roi_2: aliked -> data/lightglue_bench
+  101.9 s wall, 33.0 s CPU, 776 MB; 7398 points (2614 building in 3+ frames), 30/30 aligned, 30 reliable, facade-to-wall 0.204 m
+mapillary_roi_7: sift -> data/colmap_bench
+  126.8 s wall, 305.2 s CPU, 5392 MB; 8197 points (1419 building in 3+ frames), 37/37 aligned, 21 reliable, facade-to-wall 0.165 m
+mapillary_roi_7: aliked -> data/lightglue_bench
+  133.2 s wall, 34.0 s CPU, 702 MB; 11515 points (1667 building in 3+ frames), 37/37 aligned, 37 reliable, facade-to-wall 0.067 m
+mapillary_roi_9: sift -> data/colmap_bench
+  92.6 s wall, 285.0 s CPU, 2936 MB; 6843 points (1376 building in 3+ frames), 27/33 aligned, 27 reliable, facade-to-wall 0.065 m
+mapillary_roi_9: aliked -> data/lightglue_bench
+  101.8 s wall, 36.6 s CPU, 711 MB; 7956 points (2303 building in 3+ frames), 33/33 aligned, 0 reliable, facade-to-wall 31.536 m
+mapillary_roi_17: sift -> data/colmap_bench
+  262.7 s wall, 773.6 s CPU, 2835 MB; 15149 points (2193 building in 3+ frames), 64/64 aligned, 64 reliable, facade-to-wall 1.844 m
+mapillary_roi_17: aliked -> data/lightglue_bench
+  270.2 s wall, 227.5 s CPU, 582 MB; 21337 points (2264 building in 3+ frames), 64/64 aligned, 64 reliable, facade-to-wall 0.585 m
+Wrote /Users/nickduggan/Desktop/umich/MDP/Testing_construction/Alignment_Pipeline/benchmarks/sift_vs_lightglue_20261015_1339.csv

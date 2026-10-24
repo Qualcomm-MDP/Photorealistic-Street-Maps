@@ -99,7 +99,10 @@ def segment_roi(roi_dir, model_name=DEFAULT_MODEL, device=None, previews=False, 
                 (out / "previews").mkdir(exist_ok=True)
             for p in frames:
                 img = cv2.imread(str(p))
-                inputs = processor(images=img[:, :, ::-1], return_tensors="pt").to(device)
+                # BGR -> RGB as a contiguous copy: with torchvision installed, transformers converts
+                # images with torch.from_numpy, which rejects the reversed (negative-stride) view
+                rgb = np.ascontiguousarray(img[:, :, ::-1])
+                inputs = processor(images=rgb, return_tensors="pt").to(device)
                 with torch.no_grad():
                     outputs = model(**inputs)
                 seg = processor.post_process_semantic_segmentation(outputs, target_sizes=[img.shape[:2]])[0]

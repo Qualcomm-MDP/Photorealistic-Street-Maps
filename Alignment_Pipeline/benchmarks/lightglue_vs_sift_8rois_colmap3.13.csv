@@ -1,0 +1,9 @@
+roi,exit_code,wall_min,recon_stage_min,osm_stage_min,features_extract_min,features_match_min,colmap_commands_min,sift_colmap_commands_min,legs,leg_frames,registered,frames,aligned,reliable,legs_aligned,facade_to_wall_m,gps_to_pipeline_m,flags,sift_legs,sift_leg_frames,sift_registered,sift_frames,sift_aligned,sift_reliable,sift_legs_aligned,sift_facade_to_wall_m,sift_gps_to_pipeline_m,sift_flags
+mapillary_roi_2,0,1.14,1.1,0.1,0.1,0.63,0.2,1.31,1,30,30,36,30,30,1,0.184,8.78,0,1,30,29,36,29,29,1,0.354,4.86,1
+mapillary_roi_4,0,1.69,1.2,0.5,0.1,0.68,0.28,1.62,1,30,30,36,30,30,1,0.447,9.23,0,1,30,30,36,30,30,1,0.227,7.45,1
+mapillary_roi_5,0,2.59,2.3,0.3,0.14,1.16,0.6,2.61,1,48,47,51,47,47,1,0.511,10.96,0,1,48,47,51,47,47,1,0.122,10.79,1
+mapillary_roi_7,0,2.58,2.5,0.1,0.19,1.12,0.53,1.27,2,37,37,60,37,37,2,0.184,5.18,1,2,37,37,60,21,21,1,0.086,4.89,1
+mapillary_roi_8,0,2.1,1.1,1.0,0.08,0.49,0.3,1.01,1,23,23,32,23,23,1,0.422,8.91,1,1,23,23,32,23,23,1,0.417,9.26,1
+mapillary_roi_9,0,1.52,1.4,0.1,0.11,0.75,0.3,1.84,1,33,33,38,33,0,1,39.909,10.55,2,1,33,27,38,27,27,1,0.076,10.7,1
+mapillary_roi_10,0,1.14,1.1,0.0,0.07,0.43,0.27,1.91,1,21,21,27,21,21,1,0.036,3.08,1,1,21,12,,,,,,,
+mapillary_roi_11,0,7.31,7.1,0.2,0.4,4.12,1.87,4.29,2,131,131,141,82,82,2,1.143,29.0,5,2,131,113,141,111,111,2,0.598,17.36,2

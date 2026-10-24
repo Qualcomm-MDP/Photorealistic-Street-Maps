@@ -1,0 +1,13 @@
+mapillary_roi_7: running lightglue_global (aliked, global mapper, --force)
+  1.58 min wall, 21/60 aligned, facade-to-wall 0.221 m (SIFT: 21/60, 0.086 m)
+# lightglue_global vs COLMAP (SIFT), 2026-10-15 02:08
+
+Variant: aliked + LightGlue, global mapper, extra options: --force. Times in minutes on this machine. SIFT time is COLMAP's own command time from its logs (the original runs' wall clock was not recorded); for the variant, both wall clock (whole run incl. OSM stage) and COLMAP command time are given.
+
+| ROI | frames | legs (SIFT/var) | registered (SIFT/var) | aligned (SIFT/var) | reliable (SIFT/var) | facade-to-wall m (SIFT/var) | GPS to pipeline m (SIFT/var) | features+match min | COLMAP min (SIFT/var) | var recon stage min | var OSM min | var wall min |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mapillary_roi_7 | 60 | 2/2 | 37/37 | 21/21 | 21/21 | 0.086/0.221 | 4.89/5.1 | 0.82 | 1.27/0.13 | 1.5 | 0.1 | 1.58 |
+
+Totals over 1 ROIs: 60 frames; aligned SIFT 21 vs lightglue_global 21; reliable SIFT 21 vs 21; wall clock 1.6 min (1.6 s per frame).
+
+Wrote /Users/nickduggan/Desktop/umich/MDP/Testing_construction/Alignment_Pipeline/benchmarks/lightglue_global_20261015_0206.csv and /Users/nickduggan/Desktop/umich/MDP/Testing_construction/Alignment_Pipeline/benchmarks/lightglue_global_20261015_0206.md

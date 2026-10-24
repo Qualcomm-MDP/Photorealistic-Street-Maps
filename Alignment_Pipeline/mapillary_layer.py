@@ -7,13 +7,13 @@ For each line of the ROI (route_gui.py):
   2. Group by sequence (one capture session of one camera), drop near-duplicate frames taken
      while stopped (no baseline for SfM), and split each sequence into continuous runs at
      time gaps and position jumps (separate passes along the line), and trim each run to
-     start and end inside the corridor. Turns are kept: the COLMAP layer splits the
+     start and end inside the corridor. Turns are kept: the reconstruct stage splits the
      capture into straight legs itself.
-  3. Take the best run: enough frames along its longest straight stretch first (what the
-     COLMAP layer will reconstruct; frames in a turn do not count), then frames dense
-     enough for COLMAP (median spacing <= --max-spacing), then the share of the drawn line
-     it covers (in 25% steps), then frame spacing (in 1 m steps), then the most frames. --view keeps only cameras
-     looking that way relative to travel; --sequence picks a sequence by id.
+  3. Take the best run: enough frames along its longest straight stretch first (frames in a
+     turn do not count), then frames dense enough to reconstruct (median spacing <=
+     --max-spacing), then the share of the drawn line it covers (in 25% steps), then frame
+     spacing (in 1 m steps), then the most frames. --view keeps only cameras looking that way
+     relative to travel; --sequence picks a sequence by id.
   4. Add every rig sibling: multi-camera rigs (e.g. a vehicle with left- and right-facing
      cameras) upload one sequence per camera; a sibling has the same make/model, overlaps
      the pick's capture window and was within 20 m of it at the same moments.
@@ -33,6 +33,7 @@ Needs a Mapillary client access token (https://www.mapillary.com/dashboard/devel
 Usage:
   python mapillary_layer.py --roi routes/my_route.json
   python mapillary_layer.py --roi routes/my_route.json --view right --list
+  python mapillary_layer.py --roi rois/mapillary_roi_18 --out rois/mapillary_roi_19   # reuse an ROI's route
 """
 
 import argparse
@@ -202,10 +203,11 @@ def spacing_bucket(run):
     return math.floor(run["spacing_m"]) if math.isfinite(run["spacing_m"]) else math.inf
 
 
-def rank_runs(runs, min_images=20, max_spacing=6.0, view=None, view_tol=35.0):
+def rank_runs(runs, min_images=20, max_spacing=10.0, view=None, view_tol=35.0):
     """Enough frames first, then frames dense enough for COLMAP (median spacing <=
-    max_spacing; tested: a 7 m run split in COLMAP and fitted the walls 3.3 m off, a 5.4 m
-    run of the same street 0.3 m), then coverage of the line in 25% steps, then spacing in
+    max_spacing: 10 m, as the reconstruct stage matches widely spaced frames with LightGlue: roi_4
+    at 8.6 m and roi_5 at 9.9 m came out reliable; roi_9 at 10.3 m, a forward camera with
+    buildings far back, did not), then coverage of the line in 25% steps, then spacing in
     1 m steps (2.1 vs 2.2 m is no real difference), then the most frames."""
     if view:
         runs = [r for r in runs if r["view_deg"] is not None
@@ -295,10 +297,10 @@ def download_sequence(imgs, folder, header, resolution="2048", workers=8):
     print(f"  saved {len(imgs)} frames and cameras.json to {folder}")
 
 
-def fetch_roi(roi, token, out=None, view=None, view_tol=35.0, sequence=None, min_images=20, max_spacing=6.0,
+def fetch_roi(roi, token, out=None, view=None, view_tol=35.0, sequence=None, min_images=20, max_spacing=10.0,
               max_images=None, no_rig=False, resolution="2048", list_only=False, rois_dir=ROIS_DIR):
-    """Find and download the best run plus rig siblings for every line of the ROI.
-    Returns the ROI folder (None with list_only)."""
+    """Find and download the best run plus rig siblings for every line of the ROI. Returns the
+    ROI folder (None with list_only)."""
     picks = []
     for k, line in enumerate(roi["lines"], start=1):
         print(f"Line {k}: {len(line)} points, {line_length_m(line):.0f} m, corridor {roi['corridor_m']:.0f} m")
@@ -340,7 +342,7 @@ def fetch_roi(roi, token, out=None, view=None, view_tol=35.0, sequence=None, min
             sequences.append({"folder": folder, **{key: header[key] for key in ("sequence", "line", "role", "camera",
                                                                                  "view_deg", "date")},
                               "frames": len(imgs), "spacing_m": round(r["spacing_m"], 2),
-                              "line_coverage": round(r["coverage"], 3) if j == 0 else None})
+                              "line_coverage": round(r["coverage"], 3) if role != "rig sibling" else None})
     paths.sequences_json.write_text(json.dumps(sequences, indent=1))
     print(f"\nROI folder {out}: {len(sequences)} sequence(s) on {len(picks)} line(s)")
     return out
@@ -354,7 +356,7 @@ def main():
     parser.add_argument("--view-tol", type=float, default=35.0, help="Allowed deviation (deg) for --view")
     parser.add_argument("--sequence", help="Start from this Mapillary sequence instead of the best one")
     parser.add_argument("--min-images", type=int, default=20, help="Ignore runs with fewer frames")
-    parser.add_argument("--max-spacing", type=float, default=6.0,
+    parser.add_argument("--max-spacing", type=float, default=10.0,
                         help="Prefer runs whose median frame spacing (m) is at most this")
     parser.add_argument("--max-images", type=int, help="Download at most this many frames per sequence")
     parser.add_argument("--no-rig", action="store_true", help="Do not add the rig's other cameras")
@@ -365,7 +367,7 @@ def main():
     if not args.token:
         raise SystemExit("Set MAPILLARY_TOKEN (client access token from https://www.mapillary.com/dashboard/developers) "
                          "or pass --token")
-    roi_file = args.roi / "roi.json" if args.roi.is_dir() else args.roi
+    roi_file = RoiPaths(args.roi).roi_json if args.roi.is_dir() else args.roi  # an ROI folder: its drawn route
     fetch_roi(json.loads(roi_file.read_text()), args.token, args.out, args.view, args.view_tol, args.sequence,
               args.min_images, args.max_spacing, args.max_images, args.no_rig, args.resolution, args.list)
 

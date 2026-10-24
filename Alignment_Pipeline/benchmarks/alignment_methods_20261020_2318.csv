@@ -1,0 +1,2 @@
+roi,recon,facades_s,facades_frames,facades_aligned,facades_reliable,facades_legs_aligned,facades_ptf_before_m,facades_ptf_after_m,facades_ptf_within_1m,facades_scale_vs_mapillary,points_s,points_frames,points_aligned,points_reliable,points_legs_aligned,points_ptf_before_m,points_ptf_after_m,points_ptf_within_1m,points_scale_vs_mapillary,common_frames,pos_diff_median_m,pos_diff_max_m,heading_diff_median_deg
+mapillary_roi_14,colmap,2.8,22,22,22,1/1,2.008,2.659,0.208,0.822,3.8,22,22,22,1/1,2.008,0.772,0.577,0.983,22,9.84,22.55,0.01

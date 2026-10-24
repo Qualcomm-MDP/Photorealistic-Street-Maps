@@ -1,0 +1,9 @@
+mapillary_roi_2 lightglue_global: facades 30/36 reliable, pts->footprint 2.128 m | points 30/36 reliable, 1.059 m | cameras differ 7.01 m median
+mapillary_roi_4 lightglue_global: facades 30/36 reliable, pts->footprint 1.638 m | points 30/36 reliable, 1.08 m | cameras differ 2.71 m median
+mapillary_roi_5 lightglue_global: facades 48/51 reliable, pts->footprint 1.062 m | points 48/51 reliable, 1.113 m | cameras differ 0.57 m median
+mapillary_roi_7 lightglue_global: facades 21/60 reliable, pts->footprint 0.68 m | points 37/60 reliable, 0.807 m | cameras differ 0.68 m median
+mapillary_roi_8 lightglue_global: facades 23/32 reliable, pts->footprint 0.595 m | points 23/32 reliable, 0.588 m | cameras differ 0.43 m median
+mapillary_roi_9 lightglue_global: facades 33/38 reliable, pts->footprint 1.852 m | points 33/38 reliable, 1.845 m | cameras differ 0.11 m median
+mapillary_roi_10 lightglue_global: facades 21/27 reliable, pts->footprint 7.922 m | points 0/27 reliable, 2.166 m | cameras differ 7.14 m median
+mapillary_roi_11 lightglue_global: facades 50/141 reliable, pts->footprint 1.831 m | points 82/141 reliable, 1.561 m | cameras differ 4.89 m median
+Wrote /Users/nickduggan/Desktop/umich/MDP/Testing_construction/Alignment_Pipeline/benchmarks/alignment_methods_20261020_2323.csv

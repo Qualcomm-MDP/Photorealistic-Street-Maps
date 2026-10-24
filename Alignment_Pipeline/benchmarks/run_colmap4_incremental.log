@@ -1,0 +1,34 @@
+mapillary_roi_2: running lightglue (aliked, incremental mapper, --force)
+  1.55 min wall, 30/36 aligned, facade-to-wall 0.165 m (SIFT: 29/36, 0.354 m)
+mapillary_roi_4: running lightglue (aliked, incremental mapper, --force)
+  1.52 min wall, 30/36 aligned, facade-to-wall 0.113 m (SIFT: 30/36, 0.227 m)
+mapillary_roi_5: running lightglue (aliked, incremental mapper, --force)
+  2.58 min wall, 48/51 aligned, facade-to-wall 0.636 m (SIFT: 47/51, 0.122 m)
+mapillary_roi_7: running lightglue (aliked, incremental mapper, --force)
+  1.76 min wall, 37/60 aligned, facade-to-wall 0.28 m (SIFT: 21/60, 0.086 m)
+mapillary_roi_8: running lightglue (aliked, incremental mapper, --force)
+  1.63 min wall, 23/32 aligned, facade-to-wall 0.491 m (SIFT: 23/32, 0.417 m)
+mapillary_roi_9: running lightglue (aliked, incremental mapper, --force)
+  2.55 min wall, 33/38 aligned, facade-to-wall 0.956 m (SIFT: 27/38, 0.076 m)
+mapillary_roi_10: running lightglue (aliked, incremental mapper, --force)
+  2.24 min wall, 21/27 aligned, facade-to-wall 0.036 m (SIFT: -/-, - m)
+mapillary_roi_11: running lightglue (aliked, incremental mapper, --force)
+  8.53 min wall, 82/141 aligned, facade-to-wall 1.321 m (SIFT: 111/141, 0.598 m)
+# lightglue vs COLMAP (SIFT), 2026-10-15 02:33
+
+Variant: aliked + LightGlue, incremental mapper, extra options: --force. Times in minutes on this machine. SIFT time is COLMAP's own command time from its logs (the original runs' wall clock was not recorded); for the variant, both wall clock (whole run incl. OSM stage) and COLMAP command time are given.
+
+| ROI | frames | legs (SIFT/var) | registered (SIFT/var) | aligned (SIFT/var) | reliable (SIFT/var) | facade-to-wall m (SIFT/var) | GPS to pipeline m (SIFT/var) | features+match min | COLMAP min (SIFT/var) | var recon stage min | var OSM min | var wall min |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mapillary_roi_2 | 36 | 1/1 | 29/30 | 29/30 | 29/30 | 0.354/0.165 | 4.86/8.84 | 0.72 | 1.31/0.15 | 1.5 | 0.1 | 1.55 |
+| mapillary_roi_4 | 36 | 1/1 | 30/30 | 30/30 | 30/30 | 0.227/0.113 | 7.45/8.95 | 0.75 | 1.62/0.24 | 1.4 | 0.1 | 1.52 |
+| mapillary_roi_5 | 51 | 1/1 | 47/48 | 47/48 | 47/48 | 0.122/0.636 | 10.79/8.33 | 1.30 | 2.61/0.51 | 2.5 | 0.1 | 2.58 |
+| mapillary_roi_7 | 60 | 2/2 | 37/37 | 21/37 | 21/37 | 0.086/0.28 | 4.89/5.16 | 1.34 | 1.27/0.46 | 1.7 | 0.1 | 1.76 |
+| mapillary_roi_8 | 32 | 1/1 | 23/23 | 23/23 | 23/23 | 0.417/0.491 | 9.26/8.94 | 0.55 | 1.01/0.27 | 1.5 | 0.1 | 1.63 |
+| mapillary_roi_9 | 38 | 1/1 | 27/33 | 27/33 | 27/33 | 0.076/0.956 | 10.7/10.23 | 0.85 | 1.84/0.26 | 2.5 | 0.1 | 2.55 |
+| mapillary_roi_10 | 27 | 1/1 | 12/21 | -/21 | -/21 | -/0.036 | -/3.08 | 1.00 | 1.91/0.58 | - | - | 2.24 |
+| mapillary_roi_11 | 141 | 2/2 | 113/131 | 111/82 | 111/50 | 0.598/1.321 | 17.36/25.53 | 4.52 | 4.29/1.47 | 8.3 | 0.2 | 8.53 |
+
+Totals over 8 ROIs: 421 frames; aligned SIFT 288 vs lightglue 304; reliable SIFT 288 vs 272; wall clock 22.4 min (3.2 s per frame).
+
+Wrote /Users/nickduggan/Desktop/umich/MDP/Testing_construction/Alignment_Pipeline/benchmarks/lightglue_20261015_0210.csv and /Users/nickduggan/Desktop/umich/MDP/Testing_construction/Alignment_Pipeline/benchmarks/lightglue_20261015_0210.md

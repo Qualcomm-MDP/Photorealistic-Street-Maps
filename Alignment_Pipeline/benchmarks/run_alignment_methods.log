@@ -1,0 +1,43 @@
+mapillary_roi_2 lightglue: facades 30/36 reliable, pts->footprint 0.973 m | points 30/36 reliable, 0.893 m | cameras differ 0.42 m median
+mapillary_roi_4 lightglue: facades 30/36 reliable, pts->footprint 0.892 m | points 30/36 reliable, 0.788 m | cameras differ 0.3 m median
+mapillary_roi_5 lightglue: facades 48/51 reliable, pts->footprint 1.112 m | points 48/51 reliable, 1.085 m | cameras differ 1.33 m median
+mapillary_roi_7 lightglue: facades 37/60 reliable, pts->footprint 1.286 m | points 37/60 reliable, 0.913 m | cameras differ 0.93 m median
+mapillary_roi_8 lightglue: facades 23/32 reliable, pts->footprint 0.673 m | points 23/32 reliable, 0.639 m | cameras differ 0.77 m median
+mapillary_roi_9 lightglue: facades 33/38 reliable, pts->footprint 2.523 m | points 33/38 reliable, 1.949 m | cameras differ 2.35 m median
+mapillary_roi_10 lightglue: facades 0/- reliable, pts->footprint - m | points 21/27 reliable, 1.667 m | cameras differ - m median
+mapillary_roi_11 lightglue: facades 50/141 reliable, pts->footprint 1.944 m | points 50/141 reliable, 1.916 m | cameras differ 9.42 m median
+mapillary_roi_14 lightglue: no reconstruction, skipped
+mapillary_roi_15 lightglue: facades 21/21 reliable, pts->footprint 2.742 m | points 21/21 reliable, 1.209 m | cameras differ 8.64 m median
+mapillary_roi_16 lightglue: facades 21/21 reliable, pts->footprint 1.363 m | points 21/21 reliable, 0.777 m | cameras differ 7.64 m median
+mapillary_roi_17 lightglue: facades 64/64 reliable, pts->footprint 0.743 m | points 64/64 reliable, 0.806 m | cameras differ 0.44 m median
+mapillary_roi_2 colmap: facades 29/36 reliable, pts->footprint 3.023 m | points 29/36 reliable, 1.845 m | cameras differ 2.63 m median
+mapillary_roi_4 colmap: facades 30/36 reliable, pts->footprint 0.834 m | points 30/36 reliable, 0.616 m | cameras differ 1.24 m median
+mapillary_roi_5 colmap: facades 47/51 reliable, pts->footprint 0.531 m | points 47/51 reliable, 0.624 m | cameras differ 4.4 m median
+mapillary_roi_7 colmap: facades 21/60 reliable, pts->footprint 0.468 m | points 37/60 reliable, 0.685 m | cameras differ 0.47 m median
+mapillary_roi_8 colmap: facades 23/32 reliable, pts->footprint 0.579 m | points 23/32 reliable, 0.562 m | cameras differ 0.18 m median
+mapillary_roi_9 colmap: facades 27/38 reliable, pts->footprint 0.915 m | points 27/38 reliable, 0.908 m | cameras differ 0.84 m median
+mapillary_roi_10 colmap: facades 0/- reliable, pts->footprint - m | points 12/27 reliable, 1.645 m | cameras differ - m median
+mapillary_roi_11 colmap: facades 111/141 reliable, pts->footprint 2.109 m | points 50/141 reliable, 1.964 m | cameras differ 2.35 m median
+Traceback (most recent call last):
+  File "/Users/nickduggan/Desktop/umich/MDP/Testing_construction/Alignment_Pipeline/compare_alignment.py", line 128, in <module>
+    main()
+    ~~~~^^
+  File "/Users/nickduggan/Desktop/umich/MDP/Testing_construction/Alignment_Pipeline/compare_alignment.py", line 104, in main
+    ok, secs, folder = run(roi, recon, method)
+                       ~~~^^^^^^^^^^^^^^^^^^^^
+  File "/Users/nickduggan/Desktop/umich/MDP/Testing_construction/Alignment_Pipeline/compare_alignment.py", line 38, in run
+    align_roi(roi, recon=recon, method=method, out_tag=f"cmp_{method}")
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/nickduggan/Desktop/umich/MDP/Testing_construction/Alignment_Pipeline/osm_alignment_layer.py", line 993, in align_roi
+    frames = {s["folder"]: paths.frames(s["folder"]) for s in sequences}
+                           ~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/Users/nickduggan/Desktop/umich/MDP/Testing_construction/Alignment_Pipeline/common.py", line 211, in frames
+    return {f["file"]: f for f in json.loads((self.images / folder / "cameras.json").read_text())["frames"]}
+                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/pathlib/__init__.py", line 787, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/pathlib/__init__.py", line 771, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/Users/nickduggan/Desktop/umich/MDP/Testing_construction/Alignment_Pipeline/rois/mapillary_roi_14/data/mapillary/line1_pass1_ohd9mhnw/cameras.json'

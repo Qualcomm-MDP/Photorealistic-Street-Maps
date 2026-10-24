@@ -1,0 +1,9 @@
+roi,method,exit,recon_wall_s,recon_cpu_s,recon_peak_mem_mb,osm_wall_s,step_features_s,step_matching_s,step_mapping_s,points,building_3plus,registered,frames,mean_track,mean_reproj_px,aligned,reliable,facade_to_wall_m,flags,step_import_s,step_matching+verification_s
+mapillary_roi_2,SIFT,0,86.1,232.8,7041,32.7,39.4,8.1,4.0,9325,2694,29,30,3.19,0.609,29,29,0.193,0,,
+mapillary_roi_2,ALIKED+LightGlue,0,101.9,33.0,776,11.2,6.0,36.7,5.3,7398,2614,30,30,4.2,1.022,30,30,0.204,0,1.3,2.4
+mapillary_roi_7,SIFT,0,126.8,305.2,5392,5.4,57.7,12.5,4.4,8197,1419,37,37,2.48,0.788,37,21,0.165,2,,
+mapillary_roi_7,ALIKED+LightGlue,0,133.2,34.0,702,5.5,8.2,51.3,7.3,11515,1667,37,37,2.85,1.16,37,37,0.067,1,1.9,6.0
+mapillary_roi_9,SIFT,0,92.6,285.0,2936,4.3,68.9,13.6,3.5,6843,1376,27,33,2.73,0.691,27,27,0.065,1,,
+mapillary_roi_9,ALIKED+LightGlue,0,101.8,36.6,711,5.1,6.1,45.4,8.9,7956,2303,33,33,3.4,1.023,33,0,31.536,2,1.7,5.2
+mapillary_roi_17,SIFT,0,262.7,773.6,2835,41.0,206.9,,22.0,15149,2193,64,64,2.7,0.56,64,64,1.844,1,,22.6
+mapillary_roi_17,ALIKED+LightGlue,0,270.2,227.5,582,11.1,11.2,132.6,45.4,21337,2264,64,64,3.44,1.165,64,64,0.585,0,3.4,21.0
