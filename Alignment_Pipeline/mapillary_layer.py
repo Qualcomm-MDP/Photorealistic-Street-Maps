@@ -49,7 +49,7 @@ from pathlib import Path
 
 import numpy as np
 
-from common import (ROIS_DIR, USER_AGENT, LocalFrame, RoiPaths, get_json, line_length_m, next_roi_dir,
+from common import (ROIS_DIR, SSL_CONTEXT, USER_AGENT, LocalFrame, RoiPaths, get_json, line_length_m, next_roi_dir,
                     straight_stretches, wrap_deg)
 
 MAPILLARY_URL = "https://graph.mapillary.com/images"
@@ -283,7 +283,7 @@ def download_sequence(imgs, folder, header, resolution="2048", workers=8):
         req = urllib.request.Request(img[url_field], headers={"User-Agent": USER_AGENT})
         for attempt in range(3):
             try:
-                with urllib.request.urlopen(req, timeout=120) as r, open(folder / name, "wb") as f:
+                with urllib.request.urlopen(req, timeout=120, context=SSL_CONTEXT) as r, open(folder / name, "wb") as f:
                     shutil.copyfileobj(r, f)
                 return
             except OSError:

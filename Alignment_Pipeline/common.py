@@ -4,6 +4,7 @@ values."""
 
 import json
 import math
+import ssl
 import time
 import urllib.error
 import urllib.parse
@@ -19,6 +20,12 @@ USER_AGENT = "umich-mdp-alignment-pipeline/1.0"
 OVERPASS_URLS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter",
                  "https://overpass.kumi.systems/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"]
 OSM_API_MAP = "https://api.openstreetmap.org/api/0.6/map"  # fallback for buildings when Overpass is down
+# certifi's certificates: python.org's macOS Python has none of its own until "Install Certificates" is run
+try:
+    import certifi
+    SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    SSL_CONTEXT = ssl.create_default_context()
 
 # Values in the segmentation masks (segmentation_layer.py). Spread over 0-255 so a mask PNG
 # is readable in any image viewer: black other, dark grey road, light grey building, white
@@ -36,7 +43,7 @@ def http_get(url, data=None, headers=None, retries=3, timeout=120):
     req = urllib.request.Request(url, data=data, headers={"User-Agent": USER_AGENT, **(headers or {})})
     for attempt in range(retries):
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
+            with urllib.request.urlopen(req, timeout=timeout, context=SSL_CONTEXT) as r:
                 return r.read()
         except urllib.error.HTTPError as e:
             if e.code != 429 and e.code < 500 or attempt == retries - 1:
