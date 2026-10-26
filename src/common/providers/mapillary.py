@@ -1,8 +1,10 @@
 import os
 import warnings
-from ..constants import MAPILLARY_URL, BoundingBox
-from scipy.spatial.transform import Rotation as R
+
 import requests
+from scipy.spatial.transform import Rotation as R
+
+from ..constants import MAPILLARY_URL, BoundingBox
 
 
 class MapillaryClient:
