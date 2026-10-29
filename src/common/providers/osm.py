@@ -4,6 +4,7 @@ import time
 import requests
 
 from ..constants import OVERPASS_FALLBACK_URLS, OVERPASS_URL, USER_AGENT, BoundingBox
+from ..reporter import Reporter, get_reporter
 
 # Status codes Overpass returns when it is overloaded or rate limiting.
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}
@@ -22,11 +23,13 @@ class OSMClient:
         rounds: int = 3,
         backoff_s: float = 5.0,
         urls: tuple[str, ...] = (OVERPASS_URL, *OVERPASS_FALLBACK_URLS),
+        reporter: Reporter | None = None,
     ):
         self.timeout = timeout
         self.rounds = rounds
         self.backoff_s = backoff_s
         self.urls = urls
+        self.reporter = reporter or get_reporter()
 
     def fetch(
         self,
@@ -60,7 +63,9 @@ class OSMClient:
         for round_idx in range(self.rounds):
             if round_idx > 0:
                 delay = self.backoff_s * 2 ** (round_idx - 1)
-                print(f"  Overpass unavailable, retrying in {delay:.0f}s …")
+                self.reporter.info(
+                    f"  Overpass unavailable, retrying in {delay:.0f}s …"
+                )
                 time.sleep(delay)
 
             for url in self.urls:

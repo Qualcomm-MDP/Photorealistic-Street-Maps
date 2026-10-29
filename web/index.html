@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>POSM</title>
+  <script>
+    // Apply the saved theme before first paint so the page doesn't flash.
+    (() => {
+      let saved = null;
+      try { saved = localStorage.getItem("posm-theme"); } catch {}
+      const root = document.documentElement;
+      if (saved === "light" || saved === "dark") root.dataset.theme = saved;
+      const dark = saved ? saved === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+      root.dataset.effectiveTheme = dark ? "dark" : "light";
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand">POSM</div>
+    <nav class="tabs" aria-label="Main">
+      <a href="#generate" aria-current="page">Generate</a>
+      <a href="#imagery">Imagery</a>
+      <a href="#jobs">Jobs</a>
+    </nav>
+    <div class="spacer"></div>
+    <button class="btn icon theme-toggle" id="themeToggle" type="button" aria-label="Switch to dark mode">
+      <svg class="sun" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="3.5" stroke="currentColor" stroke-width="1.6"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.3 4.3l1.4 1.4M14.3 14.3l1.4 1.4M4.3 15.7l1.4-1.4M14.3 5.7l1.4-1.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <svg class="moon" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16.5 12.3A6.5 6.5 0 0 1 7.7 3.5a6.5 6.5 0 1 0 8.8 8.8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="wrap" id="generate">
+  <div class="app">
+    <div class="rail">
+      <section class="card" aria-labelledby="areaTitle">
+        <div class="card-head">
+          <h2 id="areaTitle">Area</h2>
+        </div>
+
+        <div class="map-tool" id="mapTool">
+          <form class="search" id="searchForm" role="search">
+            <div class="search-box">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.75" stroke="currentColor" stroke-width="1.5"/><path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <input id="address" type="text" placeholder="Search an address or place" autocomplete="off"
+                     aria-label="Address or place" aria-controls="suggest" aria-expanded="false" aria-autocomplete="list" role="combobox">
+              <button type="submit" id="searchBtn">Search</button>
+            </div>
+            <ul class="suggest" id="suggest" role="listbox" hidden></ul>
+          </form>
+          <div class="map-box" id="mapBox">
+            <div id="map" aria-label="Map"></div>
+            <button class="btn map-draw" id="drawBtn" type="button" aria-pressed="false">Draw area</button>
+            <button class="btn map-expand" id="openMap" type="button">
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Open larger map
+            </button>
+            <span class="map-hint" id="mapHint">Press Draw area, then drag on the map</span>
+          </div>
+        </div>
+        <div class="map-placeholder" id="mapPlaceholder" hidden>Map is open in the larger view</div>
+
+        <button class="btn primary large" id="go" type="button">
+          <span>Generate model</span>
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <p class="form-error" id="formError" role="alert" hidden></p>
+
+        <div class="coords">
+          <div class="field"><label for="west">West</label><input id="west" type="number" step="0.00001"></div>
+          <div class="field"><label for="east">East</label><input id="east" type="number" step="0.00001"></div>
+          <div class="field"><label for="south">South</label><input id="south" type="number" step="0.00001"></div>
+          <div class="field"><label for="north">North</label><input id="north" type="number" step="0.00001"></div>
+        </div>
+        <div class="stats" id="stats"></div>
+      </section>
+
+      <section class="card" aria-labelledby="optTitle">
+        <div class="card-head"><h2 id="optTitle">Options</h2></div>
+        <div class="opt-row">
+          <div class="text">
+            <strong>Remove obstructions</strong>
+            <span>Erase cars, poles and people from facade photos</span>
+          </div>
+          <label class="switch" for="seg">
+            <input id="seg" type="checkbox" checked>
+            <span class="track"></span><span class="knob"></span>
+          </label>
+        </div>
+        <div class="field">
+          <label for="model">Segmentation model</label>
+          <select id="model">
+            <option value="large">Mask2Former Swin-Large · best quality</option>
+            <option value="tiny">Mask2Former Swin-Tiny · faster on CPU</option>
+          </select>
+        </div>
+        <div class="opt-row">
+          <div class="text"><strong>Device</strong></div>
+          <div class="segmented" role="group" aria-label="Device" id="device">
+            <button type="button" aria-pressed="true" data-v="auto">Auto</button>
+            <button type="button" aria-pressed="false" data-v="cpu">CPU</button>
+            <button type="button" aria-pressed="false" data-v="cuda" title="No CUDA GPU on this server" disabled>GPU</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="card" aria-labelledby="prevTitle">
+      <div class="card-head">
+        <h2 id="prevTitle">Preview</h2>
+        <span class="stats" id="meshStats"></span>
+      </div>
+      <div class="stage" id="stage">
+        <div id="scene" aria-label="3D preview. Drag to orbit, scroll to zoom."></div>
+        <div class="stage-empty" id="stageEmpty">Generate a model to preview it here.</div>
+        <div class="stage-busy" id="stageBusy" role="status" aria-live="polite" hidden>
+          <span class="spinner" aria-hidden="true"></span>
+          <strong id="busyLabel">Generating model</strong>
+          <small id="busyDetail"></small>
+        </div>
+        <div class="stage-placeholder" id="stagePlaceholder" hidden>Preview is open in the larger view</div>
+        <div class="stage-tools" id="stageTools">
+          <button class="btn" id="resetView" type="button">Reset view</button>
+          <a class="btn" id="download" aria-disabled="true">
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2v8M4.5 6.5 8 10l3.5-3.5M3 13h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            .glb
+          </a>
+          <button class="btn" id="openScene" type="button">
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Larger view
+          </button>
+        </div>
+        <span class="stage-hint" id="stageHint">Drag to orbit · scroll to zoom</span>
+      </div>
+
+      <div class="progress">
+        <div class="progress-head">
+          <div class="status" id="status"><strong id="progLabel">Ready to generate</strong><span id="progPct">0%</span></div>
+          <span class="live-status" id="liveStatus" hidden></span>
+        </div>
+        <div class="stepper" id="stepper">
+          <span class="track" aria-hidden="true"></span>
+          <span class="fill" id="fill" aria-hidden="true"></span>
+          <ol class="steps" id="steps"></ol>
+        </div>
+      </div>
+
+      <section class="log" aria-labelledby="logTitle">
+        <div class="log-head">
+          <button class="log-toggle" id="logToggle" type="button" aria-expanded="true" aria-controls="logWrap">
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span id="logTitle">Pipeline log</span>
+          </button>
+          <span class="log-meta" id="logMeta"></span>
+          <a class="btn small" id="logDownload" aria-disabled="true">Download log</a>
+        </div>
+        <div class="log-wrap" id="logWrap">
+          <pre class="log-body" id="logBody" tabindex="0" aria-live="off"></pre>
+          <div class="log-progress" id="logProgress" hidden></div>
+        </div>
+      </section>
+    </section>
+  </div>
+
+  <section class="block" id="imagery" aria-labelledby="imgTitle">
+    <div class="block-head">
+      <div>
+        <h2 id="imgTitle">Street imagery</h2>
+        <p>Mapillary photos projected onto the facades of the selected model.</p>
+      </div>
+      <div class="segmented" role="group" aria-label="Obstruction removal" id="beforeAfter">
+        <button type="button" aria-pressed="false" data-v="before">Original</button>
+        <button type="button" aria-pressed="true" data-v="after">Cleaned</button>
+      </div>
+    </div>
+    <div class="gallery" id="gallery"></div>
+    <p class="empty" id="galleryEmpty">Street photos appear here once a model has been generated.</p>
+  </section>
+
+  <section class="block" id="jobs" aria-labelledby="jobsTitle">
+    <div class="block-head">
+      <div>
+        <h2 id="jobsTitle">Recent jobs</h2>
+        <p>Select a job to load its model and photos.</p>
+      </div>
+    </div>
+    <div class="jobs">
+      <table>
+        <thead><tr><th>Area</th><th>Bounding box (W, S, E, N)</th><th>Status</th><th>Buildings</th><th>Duration</th></tr></thead>
+        <tbody id="jobRows"></tbody>
+      </table>
+    </div>
+    <p class="empty" id="jobsEmpty" hidden>No jobs yet.</p>
+  </section>
+
+  <footer>POSM · Map data © OpenStreetMap contributors · Street imagery from Mapillary</footer>
+</main>
+
+<dialog class="modal" id="mapModal" aria-labelledby="mapModalTitle">
+  <div class="modal-head">
+    <h2 id="mapModalTitle">Select area</h2>
+    <div class="grow"><span class="stats" id="modalStats"></span></div>
+    <button class="btn primary" type="button" data-close style="padding:9px 18px;font-size:14px">Done</button>
+  </div>
+  <div class="modal-body" id="mapModalBody"></div>
+</dialog>
+
+<dialog class="modal" id="sceneModal" aria-labelledby="sceneModalTitle">
+  <div class="modal-head">
+    <h2 id="sceneModalTitle">3D preview</h2>
+    <div class="grow"><span class="stats" id="sceneModalStats"></span></div>
+    <button class="btn" type="button" id="resetView2">Reset view</button>
+    <button class="btn icon" type="button" data-close aria-label="Close">
+      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+  <div class="modal-body flush" id="sceneModalBody"></div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite" popover="manual"></div>
+</body>
+</html>

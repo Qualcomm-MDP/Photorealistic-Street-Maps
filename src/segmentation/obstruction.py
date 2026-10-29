@@ -9,6 +9,8 @@ from PIL import Image
 from simple_lama_inpainting import SimpleLama
 from transformers import Mask2FormerForUniversalSegmentation, Mask2FormerImageProcessor
 
+from common.reporter import Reporter, get_reporter
+
 # Override with the SEG_MODEL env var. Any Mask2Former Cityscapes semantic
 # checkpoint works (e.g. facebook/mask2former-swin-tiny-cityscapes-semantic),
 # since they share the 19 classes OBSTRUCTION_CLASSES refers to.
@@ -27,37 +29,48 @@ LAMA_MAX_DIM = 1024
 
 _seg_proc: Mask2FormerImageProcessor | None = None
 _seg_model: Mask2FormerForUniversalSegmentation | None = None
+_seg_key: tuple[str, str] | None = None
 _lama: SimpleLama | None = None
 
 
-def _select_device() -> torch.device:
-    """Pick the device from SEG_DEVICE (cuda/mps/cpu), or auto-detect."""
-    requested = os.environ.get("SEG_DEVICE", "").strip().lower()
-    if requested:
+def _select_device(requested: str | None = None) -> torch.device:
+    """Use the requested device, else SEG_DEVICE (cuda/mps/cpu), else auto-detect."""
+    requested = (requested or os.environ.get("SEG_DEVICE", "")).strip().lower()
+    if requested and requested != "auto":
         return torch.device(requested)
     if torch.cuda.is_available():
         return torch.device("cuda")
     return torch.device("cpu")
 
 
-def _load_seg_model() -> None:
-    global _seg_proc, _seg_model
-    if _seg_model is not None:
+def _load_seg_model(
+    model_id: str | None = None,
+    device: str | None = None,
+    reporter: Reporter | None = None,
+) -> None:
+    """Load the segmentation model, reloading only if the model or device changed."""
+    global _seg_proc, _seg_model, _seg_key
+    resolved_device = _select_device(device)
+    model_id = model_id or os.environ.get("SEG_MODEL", "").strip() or SEG_MODEL_ID
+    key = (model_id, str(resolved_device))
+    if _seg_model is not None and _seg_key == key:
         return
-    device = _select_device()
-    model_id = os.environ.get("SEG_MODEL", "").strip() or SEG_MODEL_ID
-    print(f"Loading segmentation model ({model_id}) on {device} …")
+    device = resolved_device
+    (reporter or get_reporter()).info(
+        f"Loading segmentation model ({model_id}) on {device} …"
+    )
     _seg_proc = Mask2FormerImageProcessor.from_pretrained(model_id)
     _seg_model = Mask2FormerForUniversalSegmentation.from_pretrained(model_id)
     _seg_model.eval()
     _seg_model = _seg_model.to(device)  # type: ignore[assignment]
+    _seg_key = key
 
 
-def _load_lama() -> SimpleLama:
+def _load_lama(reporter: Reporter | None = None) -> SimpleLama:
     global _lama
     if _lama is not None:
         return _lama
-    print("Loading LaMa inpainting model …")
+    (reporter or get_reporter()).info("Loading LaMa inpainting model …")
     _orig = torch.jit.load
     torch.jit.load = lambda *a, **kw: _orig(*a, **{**kw, "map_location": "cpu"})
     try:
@@ -67,8 +80,13 @@ def _load_lama() -> SimpleLama:
     return _lama
 
 
-def build_obstruction_mask(img_bgr: np.ndarray) -> np.ndarray:
-    _load_seg_model()
+def build_obstruction_mask(
+    img_bgr: np.ndarray,
+    model_id: str | None = None,
+    device: str | None = None,
+    reporter: Reporter | None = None,
+) -> np.ndarray:
+    _load_seg_model(model_id, device, reporter)
     assert _seg_model is not None
     assert _seg_proc is not None
     h, w = img_bgr.shape[:2]
@@ -90,8 +108,10 @@ def build_obstruction_mask(img_bgr: np.ndarray) -> np.ndarray:
     return mask
 
 
-def synthesize_texture(img_bgr: np.ndarray, mask: np.ndarray) -> np.ndarray:
-    lama = _load_lama()
+def synthesize_texture(
+    img_bgr: np.ndarray, mask: np.ndarray, reporter: Reporter | None = None
+) -> np.ndarray:
+    lama = _load_lama(reporter)
     h, w = img_bgr.shape[:2]
 
     scale = min(1.0, LAMA_MAX_DIM / max(h, w))
@@ -109,7 +129,12 @@ def synthesize_texture(img_bgr: np.ndarray, mask: np.ndarray) -> np.ndarray:
     return out
 
 
-def remove_obstructions(img_bgr: np.ndarray) -> np.ndarray:
-    mask = build_obstruction_mask(img_bgr)
+def remove_obstructions(
+    img_bgr: np.ndarray,
+    model_id: str | None = None,
+    device: str | None = None,
+    reporter: Reporter | None = None,
+) -> np.ndarray:
+    mask = build_obstruction_mask(img_bgr, model_id, device, reporter)
     # n_obs = int((mask > 0).sum())
-    return synthesize_texture(img_bgr, mask)
+    return synthesize_texture(img_bgr, mask, reporter)
