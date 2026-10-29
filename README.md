@@ -36,7 +36,7 @@ Docker is the easiest way to run the pipeline on any OS without installing Pytho
     docker compose --profile gpu run --rm pipeline-gpu --bbox -83.71978 42.29025 -83.71205 42.29422 --output output/map.glb
     ```
 
-Docker on macOS cannot use the GPU. CPU runs work, but obstruction removal takes a few seconds per image; pass `--no-seg` to skip it.
+Docker on macOS cannot use the GPU. CPU runs work, but obstruction removal takes a few seconds per image; pass `--no-seg` to skip it. On Apple Silicon (M1/M2/M3) the CPU image is built for x86 (`linux/amd64`) and runs under emulation, because one dependency (`triangle`) has no Linux ARM build. Turn on "Use Rosetta for x86/amd64 emulation" in Docker Desktop's settings for better speed.
 
 Optional environment variables (set in `.env` or with `-e`):
 
