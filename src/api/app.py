@@ -6,6 +6,7 @@ With Docker:   docker compose up api   (then open http://localhost:8000)
 
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 import os
@@ -15,13 +16,14 @@ from pathlib import Path
 from typing import Any, Literal
 
 import requests
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
 
 from api import geocode
 from api.jobs import SEG_MODELS, JobManager
+from api.live import JobHub
 from common import PipelineChain
 from common.env import load_app_env
 
@@ -88,7 +90,8 @@ def create_app(
 ) -> FastAPI:
     load_app_env()
     data_dir = Path(data_dir or os.environ.get("POSM_DATA_DIR") or DEFAULT_DATA_DIR)
-    jobs = JobManager(data_dir, pipeline_factory)
+    hub = JobHub()
+    jobs = JobManager(data_dir, pipeline_factory, publish=hub.publish)
     app = FastAPI(title="POSM", docs_url="/api/docs", openapi_url="/api/openapi.json")
     app.state.jobs = jobs
 
@@ -132,6 +135,45 @@ def create_app(
         except requests.RequestException as exc:
             raise HTTPException(502, f"Suggestions are unavailable: {exc}") from exc
 
+    @app.websocket("/api/ws")
+    async def live_updates(ws: WebSocket) -> None:
+        """Sends {"type": "snapshot", "jobs": [...]} on connect, then
+        {"type": "job", "job": {...}} whenever a job is created or changes,
+        {"type": "log", "job_id", "n", "line"} for each new pipeline log line and
+        {"type": "progress", "job_id", "text"} for in-place progress bar updates."""
+        await ws.accept()
+        hub.attach_loop(asyncio.get_running_loop())
+        # Subscribe before the snapshot so no update falls in between; a
+        # duplicate is harmless because the page replaces jobs by id.
+        updates = hub.subscribe()
+
+        async def wait_for_close() -> None:
+            try:
+                while True:
+                    await ws.receive_text()  # clients don't send anything we use
+            except WebSocketDisconnect:
+                pass
+
+        closed = asyncio.create_task(wait_for_close())
+        try:
+            await ws.send_json(
+                {"type": "snapshot", "jobs": [j.to_dict() for j in jobs.list_jobs()]}
+            )
+            while not closed.done():
+                update = asyncio.create_task(updates.get())
+                done, _ = await asyncio.wait(
+                    {update, closed}, return_when=asyncio.FIRST_COMPLETED
+                )
+                if update in done:
+                    await ws.send_json(update.result())
+                else:
+                    update.cancel()
+        except (WebSocketDisconnect, RuntimeError):
+            pass  # the browser went away mid-send
+        finally:
+            closed.cancel()
+            hub.unsubscribe(updates)
+
     @app.get("/api/jobs")
     def list_jobs() -> dict[str, Any]:
         return {"jobs": [j.to_dict() for j in jobs.list_jobs()]}
@@ -167,6 +209,21 @@ def create_app(
             media_type="model/gltf-binary",
             filename=f"posm-{slug}-{job.id}.glb" if download else None,
         )
+
+    @app.get("/api/jobs/{job_id}/log", response_model=None)
+    def get_log(
+        job_id: str, download: bool = False
+    ) -> FileResponse | PlainTextResponse:
+        """The job's pipeline output, one timestamped line per entry."""
+        job = _job_or_404(job_id)
+        path = jobs.job_dir(job.id) / "pipeline.log"
+        if not path.exists():
+            return PlainTextResponse("")
+        if download:
+            return FileResponse(
+                path, media_type="text/plain", filename=f"posm-{job.id}-pipeline.log"
+            )
+        return PlainTextResponse(path.read_text(encoding="utf-8", errors="replace"))
 
     @app.get("/api/jobs/{job_id}/images")
     def list_images(job_id: str) -> dict[str, Any]:

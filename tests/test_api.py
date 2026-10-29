@@ -8,11 +8,16 @@ from fastapi.testclient import TestClient
 from api import geocode
 from api.app import create_app
 from common import PipelineChain
+from common.reporter import get_reporter
 
 BBOX = {"west": -83.71978, "south": 42.29025, "east": -83.71205, "north": 42.29422}
 
 
 def fetch(value, state):
+    reporter = get_reporter(state)
+    reporter.info("Fetched 2 OSM elements")
+    for _ in reporter.progress(range(2), desc="Downloading images"):
+        pass
     return {
         "osm": {"elements": [{"id": 1, "geometry": []}, {"id": 2}]},
         "mapillary": {"img1": {}, "img2": {}},
@@ -267,3 +272,93 @@ def test_suggest_ignores_short_queries(tmp_path):
     client = make_client(tmp_path)
 
     assert client.get("/api/suggest", params={"q": "ab"}).json() == {"results": []}
+
+
+def test_websocket_sends_snapshot_then_live_job_updates(tmp_path):
+    client = make_client(tmp_path)
+
+    with client.websocket_connect("/api/ws") as ws:
+        snapshot = ws.receive_json()
+        assert snapshot == {"type": "snapshot", "jobs": []}
+
+        job_id = client.post("/api/jobs", json={"bbox": BBOX}).json()["id"]
+
+        updates = []
+        while True:
+            msg = ws.receive_json()
+            if msg["type"] != "job":
+                continue  # log and progress messages are covered separately
+            assert msg["job"]["id"] == job_id
+            updates.append(msg["job"])
+            if msg["job"]["status"] in ("done", "failed"):
+                break
+
+    statuses = [u["status"] for u in updates]
+    assert statuses[0] == "queued"
+    assert statuses[-1] == "done"
+    assert "running" in statuses
+    # Each stage is reported as it starts and finishes.
+    fetch_states = [u["stages"]["fetch"] for u in updates]
+    assert "running" in fetch_states and fetch_states[-1] == "done"
+
+
+def test_websocket_snapshot_includes_existing_jobs(tmp_path):
+    client = make_client(tmp_path)
+    job_id = client.post("/api/jobs", json={"bbox": BBOX}).json()["id"]
+    wait_for(client, job_id)
+
+    with client.websocket_connect("/api/ws") as ws:
+        snapshot = ws.receive_json()
+
+    assert [j["id"] for j in snapshot["jobs"]] == [job_id]
+    assert snapshot["jobs"][0]["status"] == "done"
+
+
+def test_job_log_is_saved_and_served(tmp_path):
+    client = make_client(tmp_path)
+    job_id = client.post("/api/jobs", json={"bbox": BBOX, "name": "Log test"}).json()[
+        "id"
+    ]
+    wait_for(client, job_id)
+
+    text = client.get(f"/api/jobs/{job_id}/log").text
+    lines = [line.split("  ", 1)[1] for line in text.splitlines()]
+
+    assert lines[0].startswith(f"Job {job_id} · Log test")
+    assert "── Fetch data ──" in lines
+    assert "Fetched 2 OSM elements" in lines
+    assert lines[-1].startswith("Done in")
+    download = client.get(f"/api/jobs/{job_id}/log?download=true")
+    assert f"posm-{job_id}-pipeline.log" in download.headers["content-disposition"]
+
+
+def test_failed_job_log_contains_traceback(tmp_path):
+    client = make_client(tmp_path, failing_pipeline)
+    job_id = client.post("/api/jobs", json={"bbox": BBOX}).json()["id"]
+    wait_for(client, job_id)
+
+    text = client.get(f"/api/jobs/{job_id}/log").text
+
+    assert "Traceback (most recent call last)" in text
+    assert "RuntimeError: No images found." in text
+    assert text.splitlines()[-1].endswith("Failed after 0s: No images found.")
+
+
+def test_websocket_streams_log_lines_before_final_status(tmp_path):
+    client = make_client(tmp_path)
+
+    with client.websocket_connect("/api/ws") as ws:
+        ws.receive_json()  # snapshot
+        job_id = client.post("/api/jobs", json={"bbox": BBOX}).json()["id"]
+        messages = []
+        while True:
+            msg = ws.receive_json()
+            messages.append(msg)
+            if msg["type"] == "job" and msg["job"]["status"] == "done":
+                break
+
+    logs = [m for m in messages if m["type"] == "log"]
+    assert all(m["job_id"] == job_id for m in logs)
+    assert [m["n"] for m in logs] == list(range(1, len(logs) + 1))
+    assert any(m["line"].endswith("Fetched 2 OSM elements") for m in logs)
+    assert logs[-1]["line"].split("  ", 1)[1].startswith("Done in")
