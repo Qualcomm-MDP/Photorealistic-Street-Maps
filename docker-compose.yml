@@ -20,6 +20,10 @@ x-common: &common
 x-cpu: &cpu
   <<: *common
   image: photorealistic-street-maps:cpu
+  # triangle (used by trimesh to fill building floors/roofs) has no Linux ARM64
+  # build, so the CPU image is always x86: native on Intel/AMD machines,
+  # emulated on Apple Silicon. Same command on every OS.
+  platform: linux/amd64
   build:
     context: .
     args:
