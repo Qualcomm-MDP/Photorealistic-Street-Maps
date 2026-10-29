@@ -4,7 +4,6 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from tqdm import tqdm
 import requests
 import trimesh
 from PIL import Image
@@ -13,6 +12,7 @@ from trimesh import visual
 
 from common import PipelineState
 from common.MeshUtils import _get_utm_transformer
+from common.reporter import Reporter, get_reporter
 from segmentation import remove_obstructions
 
 CAMERA_HEIGHT_M = 1.6
@@ -73,6 +73,7 @@ def apply_textures(
     seg_device: str | None = None,
     image_dir: str | Path | None = None,
     max_saved_images: int = 12,
+    reporter: Reporter | None = None,
 ) -> trimesh.Trimesh:
     """Project street photos onto the mesh.
 
@@ -93,6 +94,7 @@ def apply_textures(
             image_dir,
             max_saved_images,
             Path(work_dir),
+            reporter or get_reporter(),
         )
 
 
@@ -106,6 +108,7 @@ def _apply_textures(
     image_dir: str | Path | None,
     max_saved_images: int,
     work_dir: Path,
+    reporter: Reporter,
 ) -> trimesh.Trimesh:
     center_lon = (bbox.min_lon + bbox.max_lon) / 2
     center_lat = (bbox.min_lat + bbox.max_lat) / 2
@@ -121,7 +124,7 @@ def _apply_textures(
         and v.get("original_height")
     ]
     if not candidates:
-        print("  No images with valid metadata, skipping texturing.")
+        reporter.info("  No images with valid metadata, skipping texturing.")
         return mesh
 
     saved: list[dict] = []
@@ -130,17 +133,17 @@ def _apply_textures(
         image_dir.mkdir(parents=True, exist_ok=True)
 
     cam_data: list[dict] = []
-    for img_id, meta in tqdm(candidates, desc="Downloading images"):
+    for img_id, meta in reporter.progress(candidates, desc="Downloading images"):
         try:
             img = _download_image(meta["image_url"])
         except Exception as exc:
-            tqdm.write(f"  Download failed [{img_id}]: {exc}")
+            reporter.info(f"  Download failed [{img_id}]: {exc}")
             continue
         save = image_dir is not None and len(saved) < max_saved_images
         if save:
             _save_preview(img, image_dir / f"{img_id}_original.jpg")
         if remove_obs:
-            img = remove_obstructions(img, seg_model, seg_device)
+            img = remove_obstructions(img, seg_model, seg_device, reporter)
             if save:
                 _save_preview(img, image_dir / f"{img_id}_cleaned.jpg")
         if save:
@@ -176,7 +179,7 @@ def _apply_textures(
             json.dump(saved, f, indent=2)
 
     if not cam_data:
-        print("  All image downloads failed, skipping texturing.")
+        reporter.info("  All image downloads failed, skipping texturing.")
         return mesh
 
     verts = mesh.vertices
@@ -190,7 +193,7 @@ def _apply_textures(
     occ_mesh = trimesh.Trimesh(vertices=verts_proj, faces=faces, process=False)
 
     best_hit: dict[int, tuple] = {}
-    for ci, cd in enumerate(tqdm(cam_data, desc="Visibility")):
+    for ci, cd in enumerate(reporter.progress(cam_data, desc="Visibility")):
         Cw, R, K = cd["Cw"], cd["R"], cd["K"]
         w, h = cd["w"], cd["h"]
 
@@ -234,7 +237,7 @@ def _apply_textures(
             if fi not in best_hit or frontality > best_hit[fi][3]:
                 best_hit[fi] = (ci, uv_img.astype(np.float32), depths, frontality)
 
-    print(f"  {len(best_hit)} / {len(faces)} faces assigned a camera")
+    reporter.info(f"  {len(best_hit)} / {len(faces)} faces assigned a camera")
 
     patch_records: list[dict] = []
     # Group faces by camera so each photo is read from disk once.
@@ -357,7 +360,7 @@ def _apply_textures(
     new_mesh = trimesh.Trimesh(vertices=new_verts, faces=new_faces, process=False)
     mat = visual.material.PBRMaterial(baseColorTexture=tex_pil, doubleSided=True)
     new_mesh.visual = visual.TextureVisuals(uv=new_uvs, material=mat, image=tex_pil)
-    print(f"  Atlas: {ATLAS_W}x{atlas_h} px, {len(patch_records)} face patches")
+    reporter.info(f"  Atlas: {ATLAS_W}x{atlas_h} px, {len(patch_records)} face patches")
     return new_mesh
 
 
@@ -376,6 +379,7 @@ def tex_projection(value, state: PipelineState):
         seg_model=state.get_metadata("seg_model", None),
         seg_device=state.get_metadata("seg_device", None),
         image_dir=state.get_metadata("image_dir", None),
+        reporter=get_reporter(state),
     )
     state.require_metadata("progress_monitor").next()
     return mesh

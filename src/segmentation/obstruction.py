@@ -9,6 +9,8 @@ from PIL import Image
 from simple_lama_inpainting import SimpleLama
 from transformers import Mask2FormerForUniversalSegmentation, Mask2FormerImageProcessor
 
+from common.reporter import Reporter, get_reporter
+
 # Override with the SEG_MODEL env var. Any Mask2Former Cityscapes semantic
 # checkpoint works (e.g. facebook/mask2former-swin-tiny-cityscapes-semantic),
 # since they share the 19 classes OBSTRUCTION_CLASSES refers to.
@@ -41,7 +43,11 @@ def _select_device(requested: str | None = None) -> torch.device:
     return torch.device("cpu")
 
 
-def _load_seg_model(model_id: str | None = None, device: str | None = None) -> None:
+def _load_seg_model(
+    model_id: str | None = None,
+    device: str | None = None,
+    reporter: Reporter | None = None,
+) -> None:
     """Load the segmentation model, reloading only if the model or device changed."""
     global _seg_proc, _seg_model, _seg_key
     resolved_device = _select_device(device)
@@ -50,7 +56,9 @@ def _load_seg_model(model_id: str | None = None, device: str | None = None) -> N
     if _seg_model is not None and _seg_key == key:
         return
     device = resolved_device
-    print(f"Loading segmentation model ({model_id}) on {device} …")
+    (reporter or get_reporter()).info(
+        f"Loading segmentation model ({model_id}) on {device} …"
+    )
     _seg_proc = Mask2FormerImageProcessor.from_pretrained(model_id)
     _seg_model = Mask2FormerForUniversalSegmentation.from_pretrained(model_id)
     _seg_model.eval()
@@ -58,11 +66,11 @@ def _load_seg_model(model_id: str | None = None, device: str | None = None) -> N
     _seg_key = key
 
 
-def _load_lama() -> SimpleLama:
+def _load_lama(reporter: Reporter | None = None) -> SimpleLama:
     global _lama
     if _lama is not None:
         return _lama
-    print("Loading LaMa inpainting model …")
+    (reporter or get_reporter()).info("Loading LaMa inpainting model …")
     _orig = torch.jit.load
     torch.jit.load = lambda *a, **kw: _orig(*a, **{**kw, "map_location": "cpu"})
     try:
@@ -73,9 +81,12 @@ def _load_lama() -> SimpleLama:
 
 
 def build_obstruction_mask(
-    img_bgr: np.ndarray, model_id: str | None = None, device: str | None = None
+    img_bgr: np.ndarray,
+    model_id: str | None = None,
+    device: str | None = None,
+    reporter: Reporter | None = None,
 ) -> np.ndarray:
-    _load_seg_model(model_id, device)
+    _load_seg_model(model_id, device, reporter)
     assert _seg_model is not None
     assert _seg_proc is not None
     h, w = img_bgr.shape[:2]
@@ -97,8 +108,10 @@ def build_obstruction_mask(
     return mask
 
 
-def synthesize_texture(img_bgr: np.ndarray, mask: np.ndarray) -> np.ndarray:
-    lama = _load_lama()
+def synthesize_texture(
+    img_bgr: np.ndarray, mask: np.ndarray, reporter: Reporter | None = None
+) -> np.ndarray:
+    lama = _load_lama(reporter)
     h, w = img_bgr.shape[:2]
 
     scale = min(1.0, LAMA_MAX_DIM / max(h, w))
@@ -117,8 +130,11 @@ def synthesize_texture(img_bgr: np.ndarray, mask: np.ndarray) -> np.ndarray:
 
 
 def remove_obstructions(
-    img_bgr: np.ndarray, model_id: str | None = None, device: str | None = None
+    img_bgr: np.ndarray,
+    model_id: str | None = None,
+    device: str | None = None,
+    reporter: Reporter | None = None,
 ) -> np.ndarray:
-    mask = build_obstruction_mask(img_bgr, model_id, device)
+    mask = build_obstruction_mask(img_bgr, model_id, device, reporter)
     # n_obs = int((mask > 0).sum())
-    return synthesize_texture(img_bgr, mask)
+    return synthesize_texture(img_bgr, mask, reporter)

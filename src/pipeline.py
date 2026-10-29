@@ -9,6 +9,7 @@ import trimesh
 
 from common import PipelineChain, export_to_glb
 from common.MeshUtils import _get_utm_transformer
+from common.reporter import get_reporter
 from data_ingest.ingest import ingest_data
 from mesh_builder.extrude import build_mesh
 from texturing.tex_projection import tex_projection
@@ -39,7 +40,7 @@ def export_mesh(value, state):
         path = ask() if ask else None
     if path is not None:
         export_to_glb(value, path)
-        print(f"Saved mesh to {path}")
+        get_reporter(state).info(f"Saved mesh to {path}")
 
     state.require_metadata("progress_monitor").next()
     return value
