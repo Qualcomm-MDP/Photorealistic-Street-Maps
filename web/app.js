@@ -11,11 +11,20 @@ const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const toast = (() => {
   const el = $("toast");
   let t;
+  const canPopover = typeof el.showPopover === "function";
   return (msg) => {
     el.textContent = msg;
-    el.classList.add("show");
+    if (canPopover) {
+      // Re-show so it's on top of any dialog opened since last time.
+      if (el.matches(":popover-open")) el.hidePopover();
+      el.showPopover();
+    }
+    requestAnimationFrame(() => el.classList.add("show"));
     clearTimeout(t);
-    t = setTimeout(() => el.classList.remove("show"), 3000);
+    t = setTimeout(() => {
+      el.classList.remove("show");
+      if (canPopover) setTimeout(() => el.matches(":popover-open") && el.hidePopover(), 250);
+    }, 3000);
   };
 })();
 
@@ -49,7 +58,8 @@ const state = {
   placeName: null,
   images: [],
   showCleaned: true,
-  pollTimer: null,
+  socket: null,
+  reconnectDelay: 1000,
 };
 
 // ---------- Bounding box ----------
@@ -131,6 +141,17 @@ function setDrawMode(on) {
   $("mapHint").textContent = on ? "Drag a rectangle over the buildings you want" : "Press Draw area, then drag on the map";
 }
 drawBtn.addEventListener("click", () => setDrawMode(!drawing));
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || !drawing) return;
+  dragStart = null;
+  setBox(box);
+  setDrawMode(false);
+});
+mapEl.addEventListener("pointercancel", () => {
+  if (!dragStart) return;
+  dragStart = null;
+  setBox(box);
+});
 mapEl.addEventListener("pointerdown", (e) => {
   if (!drawing || e.button !== 0 || e.target.closest(".leaflet-control")) return;
   mapEl.setPointerCapture(e.pointerId);
@@ -194,6 +215,7 @@ function suggestMessage(msg) {
   results = [];
   suggest.innerHTML = `<li class="empty">${esc(msg)}</li>`;
   suggest.hidden = false;
+  addr.setAttribute("aria-expanded", "true");
 }
 function renderResults(list, query, emptyMessage = `No places found for "${query}".`) {
   results = list;
@@ -254,8 +276,17 @@ $("searchForm").addEventListener("submit", async (e) => {
 addr.addEventListener("input", () => {
   cancelSuggestions();
   const q = addr.value.trim();
-  if (q.length < 3) return closeSuggest();
-  suggestTimer = setTimeout(() => fetchSuggestions(q), 250);
+  if (!q) return closeSuggest();
+  if (q.length < 3) return suggestMessage("Keep typing to see suggestions…");
+  // Show feedback right away; keep earlier suggestions visible until new ones arrive.
+  if (!results.length) suggestMessage("Searching…");
+  suggestTimer = setTimeout(() => fetchSuggestions(q), 200);
+});
+addr.addEventListener("focus", () => {
+  if (addr.value.trim().length >= 3 && results.length) {
+    suggest.hidden = false;
+    addr.setAttribute("aria-expanded", "true");
+  }
 });
 addr.addEventListener("keydown", (e) => {
   if (suggest.hidden || !results.length) return;
@@ -265,7 +296,10 @@ addr.addEventListener("keydown", (e) => {
     choosePlace(results[active]);
   } else if (e.key === "ArrowDown") (active = (active + 1) % results.length), highlight(), e.preventDefault();
   else if (e.key === "ArrowUp") (active = (active - 1 + results.length) % results.length), highlight(), e.preventDefault();
-  else if (e.key === "Escape") closeSuggest();
+  else if (e.key === "Escape") {
+    e.preventDefault(); // close only the dropdown, not the larger-map dialog around it
+    closeSuggest();
+  }
 });
 suggest.addEventListener("mousedown", (e) => {
   const li = e.target.closest("li[data-i]");
@@ -478,7 +512,85 @@ function buildStepper() {
     )
     .join("");
 }
+// ---------- Pipeline log ----------
+// Shows the log of the job in the timeline: loads the saved file over HTTP,
+// then appends lines pushed over the WebSocket. Lines are numbered so nothing
+// is shown twice when the two overlap.
+const logState = { jobId: null, count: 0, loading: false, pending: [] };
+const logBody = $("logBody");
+logBody.dataset.empty = "Logs appear here when a job runs.";
+
+function appendLogLine(line) {
+  const nearBottom = logBody.scrollHeight - logBody.scrollTop - logBody.clientHeight < 40;
+  const [ts, ...rest] = line.split("  ");
+  const text = rest.join("  ");
+  const row = document.createElement("div");
+  const time = document.createElement("span");
+  time.className = "ts";
+  time.textContent = ts + "  ";
+  const body = document.createElement("span");
+  if (/^(Warning|Error):|^Traceback|Error: /.test(text)) body.className = "warn";
+  body.textContent = text;
+  row.append(time, body);
+  logBody.append(row);
+  if (nearBottom) logBody.scrollTop = logBody.scrollHeight;
+}
+
+async function loadLog(job) {
+  logState.jobId = job.id;
+  logState.count = 0;
+  logState.pending = [];
+  logState.loading = true;
+  logBody.replaceChildren();
+  $("logProgress").hidden = true;
+  $("logMeta").textContent = job.name;
+  const dl = $("logDownload");
+  dl.href = `/api/jobs/${job.id}/log?download=true`;
+  dl.setAttribute("aria-disabled", "false");
+  let text = "";
+  try {
+    text = await (await fetch(`/api/jobs/${job.id}/log`)).text();
+  } catch {
+    /* the live stream still fills in new lines */
+  }
+  if (logState.jobId !== job.id) return; // another job was selected meanwhile
+  for (const line of text.split("\n")) {
+    if (!line) continue;
+    logState.count++;
+    appendLogLine(line);
+  }
+  logState.loading = false;
+  for (const msg of logState.pending) onLogMessage(msg);
+  logState.pending = [];
+  logBody.scrollTop = logBody.scrollHeight;
+}
+
+function syncLog(job) {
+  if (!job) return;
+  if (job.id !== logState.jobId) loadLog(job);
+}
+
+function onLogMessage(msg) {
+  if (msg.job_id !== logState.jobId) return;
+  if (logState.loading) return void logState.pending.push(msg);
+  if (msg.type === "progress") {
+    $("logProgress").textContent = msg.text;
+    $("logProgress").hidden = !msg.text;
+    return;
+  }
+  if (msg.n <= logState.count) return; // already loaded from the file
+  logState.count = msg.n;
+  appendLogLine(msg.line);
+}
+
+$("logToggle").addEventListener("click", () => {
+  const open = $("logToggle").getAttribute("aria-expanded") !== "true";
+  $("logToggle").setAttribute("aria-expanded", String(open));
+  $("logWrap").hidden = !open;
+});
+
 function renderProgress(job) {
+  syncLog(job);
   const n = state.stages.length;
   const steps = $("steps").children;
   let done = 0;
@@ -555,43 +667,120 @@ function showJob(job) {
     loadImages(job);
   }
   renderJobs();
-  if (isActive(job)) poll(job.id);
 }
 
-function poll(jobId) {
-  clearTimeout(state.pollTimer);
-  const tick = async () => {
-    let job;
-    try {
-      job = await api(`/api/jobs/${jobId}`);
-    } catch {
-      state.pollTimer = setTimeout(tick, 2000);
-      return;
+// ---------- Live updates over WebSocket ----------
+// The server pushes {"type":"snapshot","jobs":[...]} on connect and
+// {"type":"job","job":{...}} whenever a job is created or a stage changes.
+
+function stageProgress(job) {
+  const i = state.stages.findIndex((s) => job.stages?.[s.name] === "running");
+  return i >= 0 ? `${state.stages[i].label} · step ${i + 1} of ${state.stages.length}` : "Waiting to start";
+}
+
+// Grey out the preview and disable Generate while any job is queued or running.
+function renderBusy() {
+  const active = state.jobs.find(isActive);
+  const busy = Boolean(active);
+  $("stage").classList.toggle("busy", busy);
+  sceneEl.classList.toggle("busy", busy);
+  $("stageBusy").hidden = !busy;
+  $("stageEmpty").classList.toggle("under-busy", busy);
+  if (busy) {
+    $("busyLabel").textContent = active.status === "queued" ? "Job queued" : "Generating model";
+    $("busyDetail").textContent = active.status === "queued" ? "Starts when the current job finishes" : stageProgress(active);
+  }
+  $("go").disabled = busy || !state.stages.length;
+  $("go").querySelector("span").textContent = busy ? "Generating…" : "Generate model";
+}
+
+function finishJob(job) {
+  if (job.status === "done") {
+    toast(`Model ready: ${job.result?.buildings ?? 0} buildings`);
+    if (state.current?.id === job.id) {
+      state.shown = job;
+      loadModel(job);
+      loadImages(job);
     }
-    upsertJob(job);
-    if (state.current?.id === jobId) {
-      state.current = job;
-      renderProgress(job);
-    }
-    if (isActive(job)) {
-      renderJobs();
-      state.pollTimer = setTimeout(tick, 1000);
-      return;
-    }
-    $("go").disabled = false;
-    if (job.status === "done") {
-      toast(`Model ready: ${job.result?.buildings ?? 0} buildings`);
-      if (state.current?.id === jobId) {
-        state.shown = job;
-        loadModel(job);
-        loadImages(job);
+  } else if (job.status === "failed") {
+    toast("The job failed. See the details under the preview.");
+  }
+}
+
+function onJobUpdate(job) {
+  const prev = state.jobs.find((j) => j.id === job.id);
+  upsertJob(job);
+  // Follow a job that starts while nothing else is being watched (e.g. from another tab).
+  if (isActive(job) && !(state.current && isActive(state.current) && state.current.id !== job.id)) {
+    state.current = job;
+  }
+  if (state.current?.id === job.id) {
+    state.current = job;
+    renderProgress(job);
+  }
+  if (prev && isActive(prev) && !isActive(job)) finishJob(job);
+  renderJobs();
+  renderBusy();
+}
+
+function onSnapshot(jobs) {
+  const before = new Map(state.jobs.map((j) => [j.id, j]));
+  const firstLoad = state.jobs.length === 0 && !state.current;
+  state.jobs = jobs;
+  const active = jobs.find(isActive);
+  const lastDone = jobs.find((j) => j.status === "done");
+
+  if (firstLoad) {
+    if (lastDone) showJob(lastDone);
+    if (active) state.current = active;
+    renderProgress(state.current);
+  } else {
+    // Reconnected: anything that finished while we were offline.
+    for (const job of jobs) {
+      const prev = before.get(job.id);
+      if (prev && isActive(prev) && !isActive(job)) {
+        if (state.current?.id === job.id) state.current = job;
+        finishJob(job);
       }
-    } else {
-      toast("The job failed. See the details under the preview.");
     }
-    renderJobs();
-  };
-  tick();
+    if (active) state.current = active;
+    if (state.current) state.current = jobs.find((j) => j.id === state.current.id) || state.current;
+    renderProgress(state.current);
+  }
+  renderJobs();
+  renderBusy();
+}
+
+function setConnection(text) {
+  $("liveStatus").textContent = text;
+  $("liveStatus").hidden = !text;
+}
+
+function connectLive() {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  const ws = new WebSocket(`${proto}://${location.host}/api/ws`);
+  state.socket = ws;
+  ws.addEventListener("open", () => {
+    state.reconnectDelay = 1000;
+    setConnection("");
+  });
+  ws.addEventListener("message", (e) => {
+    let msg;
+    try {
+      msg = JSON.parse(e.data);
+    } catch {
+      return;
+    }
+    if (msg.type === "snapshot") onSnapshot(msg.jobs);
+    else if (msg.type === "job") onJobUpdate(msg.job);
+    else if (msg.type === "log" || msg.type === "progress") onLogMessage(msg);
+  });
+  ws.addEventListener("close", () => {
+    if (state.socket !== ws) return;
+    setConnection("Reconnecting to the server…");
+    setTimeout(connectLive, state.reconnectDelay);
+    state.reconnectDelay = Math.min(state.reconnectDelay * 2, 10000);
+  });
 }
 
 // ---------- Generate ----------
@@ -611,11 +800,17 @@ $("go").addEventListener("click", async () => {
         device,
       }),
     });
-    upsertJob(job);
-    state.current = job;
-    renderProgress(job);
-    renderJobs();
-    poll(job.id);
+    // The socket often delivers newer updates for this job (running, first
+    // stage) before this response arrives, so don't overwrite them.
+    const known = state.jobs.find((j) => j.id === job.id);
+    state.current = known || job;
+    if (known) {
+      renderProgress(known);
+      renderJobs();
+      renderBusy();
+    } else {
+      onJobUpdate(job);
+    }
   } catch (e) {
     err.textContent = e.message;
     err.hidden = false;
@@ -624,11 +819,40 @@ $("go").addEventListener("click", async () => {
 });
 
 // ---------- Theme ----------
+const root = document.documentElement;
+const systemDark = matchMedia("(prefers-color-scheme: dark)");
+const themeBtn = $("themeToggle");
+
+function effectiveTheme() {
+  return root.dataset.theme || (systemDark.matches ? "dark" : "light");
+}
+function syncThemeButton() {
+  const theme = effectiveTheme();
+  root.dataset.effectiveTheme = theme;
+  themeBtn.setAttribute("aria-label", theme === "dark" ? "Switch to light mode" : "Switch to dark mode");
+  themeBtn.title = themeBtn.getAttribute("aria-label");
+}
+themeBtn.addEventListener("click", () => {
+  const next = effectiveTheme() === "dark" ? "light" : "dark";
+  if (!reduceMotion) {
+    root.classList.add("theme-switching");
+    setTimeout(() => root.classList.remove("theme-switching"), 300);
+  }
+  root.dataset.theme = next;
+  try {
+    localStorage.setItem("posm-theme", next);
+  } catch {
+    /* private mode: the choice just isn't remembered */
+  }
+});
+
 function onTheme() {
+  syncThemeButton();
   rect.setStyle(rectStyle());
   applySceneTheme();
 }
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", onTheme);
+systemDark.addEventListener("change", onTheme);
+syncThemeButton();
 new MutationObserver(onTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
 // ---------- Start ----------
@@ -639,10 +863,9 @@ renderGallery();
 
 (async () => {
   try {
-    const [pipeline, system, jobs] = await Promise.all([api("/api/pipeline"), api("/api/system"), api("/api/jobs")]);
+    const [pipeline, system] = await Promise.all([api("/api/pipeline"), api("/api/system")]);
     state.stages = pipeline.stages;
     state.system = system;
-    state.jobs = jobs.jobs;
   } catch (e) {
     $("formError").textContent = `Can't reach the POSM server: ${e.message}`;
     $("formError").hidden = false;
@@ -654,18 +877,6 @@ renderGallery();
   gpu.title = state.system.cuda ? "" : "No CUDA GPU on this server";
   buildStepper();
   renderStats();
-  renderJobs();
-
-  const activeJob = state.jobs.find(isActive);
-  const lastDone = state.jobs.find((j) => j.status === "done");
-  if (lastDone) showJob(lastDone);
-  if (activeJob) {
-    $("go").disabled = true;
-    state.current = activeJob;
-    renderProgress(activeJob);
-    renderJobs();
-    poll(activeJob.id);
-  } else if (!lastDone) {
-    renderProgress(null);
-  }
+  renderProgress(null);
+  connectLive();
 })();

@@ -4,6 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>POSM</title>
+  <script>
+    // Apply the saved theme before first paint so the page doesn't flash.
+    (() => {
+      let saved = null;
+      try { saved = localStorage.getItem("posm-theme"); } catch {}
+      const root = document.documentElement;
+      if (saved === "light" || saved === "dark") root.dataset.theme = saved;
+      const dark = saved ? saved === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+      root.dataset.effectiveTheme = dark ? "dark" : "light";
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
@@ -29,6 +40,11 @@
       <a href="#imagery">Imagery</a>
       <a href="#jobs">Jobs</a>
     </nav>
+    <div class="spacer"></div>
+    <button class="btn icon theme-toggle" id="themeToggle" type="button" aria-label="Switch to dark mode">
+      <svg class="sun" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="3.5" stroke="currentColor" stroke-width="1.6"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.3 4.3l1.4 1.4M14.3 14.3l1.4 1.4M4.3 15.7l1.4-1.4M14.3 5.7l1.4-1.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <svg class="moon" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16.5 12.3A6.5 6.5 0 0 1 7.7 3.5a6.5 6.5 0 1 0 8.8 8.8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+    </button>
   </div>
 </header>
 
@@ -115,6 +131,11 @@
       <div class="stage" id="stage">
         <div id="scene" aria-label="3D preview. Drag to orbit, scroll to zoom."></div>
         <div class="stage-empty" id="stageEmpty">Generate a model to preview it here.</div>
+        <div class="stage-busy" id="stageBusy" role="status" aria-live="polite" hidden>
+          <span class="spinner" aria-hidden="true"></span>
+          <strong id="busyLabel">Generating model</strong>
+          <small id="busyDetail"></small>
+        </div>
         <div class="stage-placeholder" id="stagePlaceholder" hidden>Preview is open in the larger view</div>
         <div class="stage-tools" id="stageTools">
           <button class="btn" id="resetView" type="button">Reset view</button>
@@ -133,6 +154,7 @@
       <div class="progress">
         <div class="progress-head">
           <div class="status" id="status"><strong id="progLabel">Ready to generate</strong><span id="progPct">0%</span></div>
+          <span class="live-status" id="liveStatus" hidden></span>
         </div>
         <div class="stepper" id="stepper">
           <span class="track" aria-hidden="true"></span>
@@ -140,6 +162,21 @@
           <ol class="steps" id="steps"></ol>
         </div>
       </div>
+
+      <section class="log" aria-labelledby="logTitle">
+        <div class="log-head">
+          <button class="log-toggle" id="logToggle" type="button" aria-expanded="true" aria-controls="logWrap">
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span id="logTitle">Pipeline log</span>
+          </button>
+          <span class="log-meta" id="logMeta"></span>
+          <a class="btn small" id="logDownload" aria-disabled="true">Download log</a>
+        </div>
+        <div class="log-wrap" id="logWrap">
+          <pre class="log-body" id="logBody" tabindex="0" aria-live="off"></pre>
+          <div class="log-progress" id="logProgress" hidden></div>
+        </div>
+      </section>
     </section>
   </div>
 
@@ -198,6 +235,6 @@
   <div class="modal-body flush" id="sceneModalBody"></div>
 </dialog>
 
-<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="toast" id="toast" role="status" aria-live="polite" popover="manual"></div>
 </body>
 </html>
