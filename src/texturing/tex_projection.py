@@ -2,11 +2,11 @@ import json
 
 import cv2
 import numpy as np
-from tqdm import tqdm
 import requests
 import trimesh
 from PIL import Image
 from scipy.spatial.transform import Rotation as SciR
+from tqdm import tqdm
 from trimesh import visual
 
 from common import PipelineState

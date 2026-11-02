@@ -14,6 +14,7 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
   "dotenv>=0.9.9,<0.10",
@@ -39,12 +40,12 @@ dependencies = [
 dev = [ "mkdocs>=1.6.1,<2", "pre-commit>=4.3,<5", "pytest>=9.0.2,<10", "ruff>=0.15.5,<0.16" ]
 
 [tool.poetry]
-packages = [ { include = "photorealistic_street_maps", from = "src" } ]
 package-mode = false
+packages = [ { include = "photorealistic_street_maps", from = "src" } ]
 
 [tool.pyright]
 extraPaths = [ "src" ]
 
 [tool.pytest]
-ini_options.pythonpath = [ "src" ]
 ini_options.testpaths = [ "tests" ]
+ini_options.pythonpath = [ "src" ]

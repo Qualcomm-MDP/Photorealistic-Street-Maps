@@ -1,8 +1,8 @@
+import numpy as np
 import trimesh
+from pyproj import Transformer
 from trimesh.path import entities
 
-import numpy as np
-from pyproj import Transformer
 from .constants import BoundingBox
 
 
