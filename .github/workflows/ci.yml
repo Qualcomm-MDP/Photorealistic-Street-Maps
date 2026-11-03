@@ -1,8 +1,10 @@
 name: Run Tests
 
+# Pull requests are tested through pull_request; push only covers main (e.g.
+# after a merge), so a PR's checks don't run twice.
 on:
   push:
-    branches: ["**"]
+    branches: ["main"]
   pull_request:
     branches: ["**"]
 
