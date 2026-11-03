@@ -23,6 +23,12 @@ ENABLE_OCCLUSION = True
 UNTEXTURED_GREY = 225
 
 
+def camera_position(x: float, y: float, terrain=None) -> np.ndarray:
+    """Camera centre in projection space: CAMERA_HEIGHT_M above the ground."""
+    ground_z = float(terrain.ground(x, y)) if terrain is not None else 0.0
+    return np.array([x, y, ground_z + CAMERA_HEIGHT_M])
+
+
 def _build_K(focal_px: float, w: int, h: int) -> np.ndarray:
     return np.array(
         [[focal_px, 0, w / 2.0], [0, focal_px, h / 2.0], [0, 0, 1.0]],
@@ -77,12 +83,16 @@ def apply_textures(
     image_dir: str | Path | None = None,
     max_saved_images: int = 12,
     reporter: Reporter | None = None,
+    terrain=None,
 ) -> trimesh.Trimesh:
     """Project street photos onto the mesh.
 
     If image_dir is set, the first max_saved_images photos are also saved there
     as small JPEG previews (original and, when obstruction removal runs, cleaned),
     with an index in images.json.
+
+    If terrain is given, each camera sits CAMERA_HEIGHT_M above the ground at
+    its position instead of above z = 0.
     """
     # Full-resolution photos are ~12 MP (~36 MB decoded) and an area can have
     # ~1000 of them, so they're kept on disk and loaded one at a time.
@@ -98,6 +108,7 @@ def apply_textures(
             max_saved_images,
             Path(work_dir),
             reporter or get_reporter(),
+            terrain,
         )
 
 
@@ -112,6 +123,7 @@ def _apply_textures(
     max_saved_images: int,
     work_dir: Path,
     reporter: Reporter,
+    terrain=None,
 ) -> trimesh.Trimesh:
     center_lon = (bbox.min_lon + bbox.max_lon) / 2
     center_lat = (bbox.min_lat + bbox.max_lat) / 2
@@ -180,7 +192,7 @@ def _apply_textures(
                 "h": h,
                 "K": _build_K(meta["focal_length_pixels"], w, h),
                 "R": _build_R(meta),
-                "Cw": np.array([x, y, CAMERA_HEIGHT_M]),
+                "Cw": camera_position(x, y, terrain),
             }
         )
 
@@ -388,6 +400,7 @@ def tex_projection(value, state: PipelineState):
         remove_obs=state.get_metadata("remove_obstructions", True),
         seg_model=state.get_metadata("seg_model", None),
         seg_device=state.get_metadata("seg_device", None),
+        terrain=state.get_metadata("terrain", None),
         image_dir=state.get_metadata("image_dir", None),
         reporter=get_reporter(state),
     )

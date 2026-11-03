@@ -203,6 +203,7 @@ def test_real_pipeline_stages_drive_the_timeline():
 
     assert [s["name"] for s in build_pipeline().describe()] == [
         "fetch",
+        "terrain",
         "build_mesh",
         "texturing",
         "export",
