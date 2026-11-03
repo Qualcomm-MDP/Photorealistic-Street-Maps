@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 jobs:
-  build-and-test:
+  tests:
     name: Tests (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -101,3 +101,16 @@ jobs:
           stages = [s['name'] for s in build_pipeline().describe()]
           print(platform.machine(), 'torch', torch.__version__, 'engine', engine, 'stages', stages)
           "
+
+  # The branch rule on main requires a check called "build-and-test". It passes
+  # only when every platform's tests and both Docker builds passed, so the rule
+  # doesn't need updating when platforms are added or renamed.
+  build-and-test:
+    if: always()
+    needs: [tests, docker]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All platforms passed
+        run: |
+          echo "tests: ${{ needs.tests.result }}, docker: ${{ needs.docker.result }}"
+          [ "${{ needs.tests.result }}" = success ] && [ "${{ needs.docker.result }}" = success ]
