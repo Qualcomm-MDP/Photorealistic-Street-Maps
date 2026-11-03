@@ -56,6 +56,9 @@ def _load_seg_model(
     if _seg_model is not None and _seg_key == key:
         return
     device = resolved_device
+    # Forget the cached key first, so a load that fails halfway (e.g. out of
+    # GPU memory in .to()) can't leave a half-replaced model that looks cached.
+    _seg_key = None
     (reporter or get_reporter()).info(
         f"Loading segmentation model ({model_id}) on {device} …"
     )

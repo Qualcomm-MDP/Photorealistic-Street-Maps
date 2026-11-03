@@ -15,6 +15,7 @@ from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any, TypeVar
 
+from common.redact import redact
 from common.reporter import Reporter
 
 T = TypeVar("T")
@@ -77,6 +78,8 @@ class JobReporter(Reporter):
     # ---- internals -------------------------------------------------------
 
     def _lines(self, message: str, label: str = "") -> None:
+        # Everything here is shown in browsers and saved for download.
+        message = redact(message)
         with self._lock:
             for i, text in enumerate(message.rstrip().splitlines() or [""]):
                 text = (label if i == 0 else "") + text.rstrip()

@@ -24,6 +24,7 @@ from typing import Any
 from api.joblog import JobReporter
 from common import PipelineChain, ProgressMonitor
 from common.constants import BoundingBox
+from common.redact import redact
 
 SEG_MODELS = {
     "large": "facebook/mask2former-swin-large-cityscapes-semantic",
@@ -138,12 +139,42 @@ class JobManager:
             self._jobs[job.id] = job
 
     def _run_forever(self) -> None:
+        # This is the only worker, so nothing a single job does (e.g. a disk
+        # error writing its log or job.json) may stop it: later jobs would
+        # stay queued forever.
         while True:
             job_id = self._queue.get()
-            job = self.get(job_id)
-            if job is not None:
-                self._run(job)
-            self._queue.task_done()
+            try:
+                job = self.get(job_id)
+                if job is not None:
+                    self._run(job)
+            except Exception as exc:
+                print(f"[{job_id}] Job crashed outside the pipeline:", flush=True)
+                print(redact(traceback.format_exc()), flush=True)
+                self._mark_crashed(job_id, exc)
+            finally:
+                self._queue.task_done()
+
+    def _mark_crashed(self, job_id: str, exc: Exception) -> None:
+        """Best effort: record the failure; the job may not even be writable."""
+        job = self.get(job_id)
+        if job is None or job.status in ("done", "failed"):
+            return
+        try:
+            self._update(
+                job,
+                status="failed",
+                error=_describe_error(exc),
+                finished_at=_now(),
+                stages={
+                    k: ("error" if v == "running" else v) for k, v in job.stages.items()
+                },
+            )
+        except Exception:
+            # Can't save it; at least tell connected browsers.
+            job.status = "failed"
+            if self._publish:
+                self._publish({"type": "job", "job": job.to_dict()})
 
     def _run(self, job: Job) -> None:
         job_dir = self.job_dir(job.id)
@@ -218,7 +249,7 @@ class JobManager:
 
 
 def _describe_error(exc: Exception) -> str:
-    msg = str(exc).strip() or type(exc).__name__
+    msg = redact(str(exc)).strip() or type(exc).__name__
     return msg if len(msg) <= 300 else msg[:297] + "..."
 
 

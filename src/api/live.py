@@ -11,9 +11,13 @@ import asyncio
 import threading
 from typing import Any
 
-# A client that falls this far behind just misses updates; it receives a full
-# snapshot again when it reconnects.
+# A client that falls this far behind is disconnected rather than left to miss
+# updates silently (such as a job's final status): the page reconnects and gets
+# a fresh snapshot.
 _MAX_QUEUED = 1000
+# Put in place of a lagging client's backlog; the WebSocket handler closes the
+# connection when it reads this.
+OVERFLOW: dict[str, Any] = {"type": "_overflow"}
 
 
 class JobHub:
@@ -47,4 +51,9 @@ class JobHub:
             try:
                 q.put_nowait(message)
             except asyncio.QueueFull:
-                pass
+                # Drop the backlog (it's stale anyway) and tell the handler to
+                # close; the client stops getting updates until it reconnects.
+                while not q.empty():
+                    q.get_nowait()
+                q.put_nowait(OVERFLOW)
+                self._clients.discard(q)

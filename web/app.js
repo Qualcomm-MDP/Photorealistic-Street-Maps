@@ -57,6 +57,8 @@ const state = {
   shown: null, // job whose model and photos are loaded
   modelJobId: null, // job whose model has finished loading into the scene
   imagesJobId: null, // job whose photos are in state.images
+  modelWanted: null, // job whose model was last requested
+  imagesWanted: null, // job whose photos were last requested
   modalJobId: null, // job open in the job details dialog
   placeName: null,
   images: [],
@@ -213,25 +215,37 @@ function cancelSuggestions() {
 function closeSuggest() {
   suggest.hidden = true;
   addr.setAttribute("aria-expanded", "false");
+  addr.removeAttribute("aria-activedescendant");
 }
 function suggestMessage(msg) {
   results = [];
   suggest.innerHTML = `<li class="empty">${esc(msg)}</li>`;
   suggest.hidden = false;
   addr.setAttribute("aria-expanded", "true");
+  addr.removeAttribute("aria-activedescendant");
 }
 function renderResults(list, query, emptyMessage = `No places found for "${query}".`) {
   results = list;
   active = 0;
   if (!list.length) return suggestMessage(emptyMessage);
   suggest.innerHTML = list
-    .map((p, i) => `<li role="option" aria-selected="${i === 0}" data-i="${i}">${esc(p.name)}<span>${esc(p.address)}</span></li>`)
+    .map(
+      (p, i) =>
+        `<li role="option" id="suggest-${i}" aria-selected="false" data-i="${i}">${esc(p.name)}<span>${esc(p.address)}</span></li>`,
+    )
     .join("");
+  openSuggest();
+}
+function openSuggest() {
   suggest.hidden = false;
   addr.setAttribute("aria-expanded", "true");
+  highlight();
 }
+// Focus stays in the input, so aria-activedescendant tells screen readers
+// which suggestion Enter will pick.
 function highlight() {
   suggest.querySelectorAll("li[data-i]").forEach((li, i) => li.setAttribute("aria-selected", String(i === active)));
+  if (results.length) addr.setAttribute("aria-activedescendant", `suggest-${active}`);
 }
 function choosePlace(p) {
   addr.value = p.address;
@@ -286,10 +300,7 @@ addr.addEventListener("input", () => {
   suggestTimer = setTimeout(() => fetchSuggestions(q), 200);
 });
 addr.addEventListener("focus", () => {
-  if (addr.value.trim().length >= 3 && results.length) {
-    suggest.hidden = false;
-    addr.setAttribute("aria-expanded", "true");
-  }
+  if (addr.value.trim().length >= 3 && results.length) openSuggest();
 });
 addr.addEventListener("keydown", (e) => {
   if (suggest.hidden || !results.length) return;
@@ -385,9 +396,21 @@ const sceneEl = $("scene");
 // which keeps the facade photos at their real brightness.
 const AMBIENT_LIGHT = 0.7 * Math.PI;
 const CORNER_LIGHT = 0.25 * Math.PI;
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
-sceneEl.appendChild(renderer.domElement);
+// Without WebGL (turned off, blocked, or no GPU driver) there's no 3D preview,
+// but everything else (generating, logs, photos, downloads) still works.
+let renderer = null;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
+  sceneEl.appendChild(renderer.domElement);
+} catch (err) {
+  console.warn("3D preview unavailable:", err);
+  renderer = null;
+  const note = document.createElement("div");
+  note.className = "stage-fallback";
+  note.textContent = "The 3D preview needs WebGL, which this browser has turned off. You can still download the .glb.";
+  sceneEl.appendChild(note);
+}
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(40, 1, 0.5, 20000);
 // Even light from all sides: a soft overall light plus four gentle lights from
@@ -401,7 +424,7 @@ for (const angle of [45, 135, 225, 315]) {
   light.position.set(Math.cos(a), 0.7, Math.sin(a));
   scene.add(light);
 }
-const controls = new OrbitControls(camera, renderer.domElement);
+const controls = new OrbitControls(camera, renderer?.domElement ?? sceneEl);
 controls.enableDamping = true;
 controls.autoRotate = !reduceMotion;
 controls.autoRotateSpeed = 0.6;
@@ -416,13 +439,13 @@ function applySceneTheme() {
 }
 function resizeScene() {
   const r = sceneEl.getBoundingClientRect();
-  if (!r.width || !r.height) return;
+  if (!renderer || !r.width || !r.height) return;
   renderer.setSize(r.width, r.height, false);
   camera.aspect = r.width / r.height;
   camera.updateProjectionMatrix();
 }
 new ResizeObserver(resizeScene).observe(sceneEl);
-renderer.setAnimationLoop(() => {
+renderer?.setAnimationLoop(() => {
   controls.update();
   renderer.render(scene, camera);
 });
@@ -460,12 +483,26 @@ $("resetView").addEventListener("click", resetView);
 $("resetView2").addEventListener("click", resetView);
 
 async function loadModel(job) {
+  // Only the latest request may change the scene: switching jobs quickly can
+  // make an older model (or its error) arrive after the newer one.
+  state.modelWanted = job.id;
   const empty = $("stageEmpty");
+  if (!renderer) {
+    state.modelJobId = job.id; // nothing to load; the WebGL note shows instead
+    empty.hidden = true;
+    jobStageNote(job, "");
+    showModelInfo(job);
+    return;
+  }
   empty.textContent = "Loading model…";
   empty.hidden = false;
   jobStageNote(job, "Loading model…");
   try {
     const gltf = await loader.loadAsync(`/api/jobs/${job.id}/model.glb`);
+    if (state.modelWanted !== job.id) {
+      disposeModel(gltf.scene);
+      return;
+    }
     if (model) {
       scene.remove(model);
       disposeModel(model);
@@ -486,10 +523,14 @@ async function loadModel(job) {
     empty.hidden = true;
     jobStageNote(job, "");
   } catch (err) {
+    if (state.modelWanted !== job.id) return;
     empty.textContent = `Couldn't load the model: ${err.message || err}`;
     jobStageNote(job, empty.textContent);
     return;
   }
+  showModelInfo(job);
+}
+function showModelInfo(job) {
   const dl = $("download");
   dl.href = `/api/jobs/${job.id}/model.glb?download=true`;
   dl.setAttribute("aria-disabled", "false");
@@ -508,11 +549,16 @@ function modelStatsHtml(job) {
 
 // ---------- Street imagery ----------
 async function loadImages(job) {
+  // As with models, ignore a response for a job that's no longer selected.
+  state.imagesWanted = job.id;
+  let images = [];
   try {
-    state.images = (await api(`/api/jobs/${job.id}/images`)).images;
+    images = (await api(`/api/jobs/${job.id}/images`)).images;
   } catch {
-    state.images = [];
+    /* no photos for this job */
   }
+  if (state.imagesWanted !== job.id) return;
+  state.images = images;
   state.imagesJobId = job.id;
   renderGallery();
 }
@@ -902,8 +948,13 @@ function onSnapshot(jobs) {
         finishJob(job);
       }
     }
-    if (active) state.current = active;
+    // Follow the running job, unless another job's details are open (the
+    // dialog shares the log and 3D preview with the page).
+    if (active && !state.modalJobId) state.current = active;
     if (state.current) state.current = jobs.find((j) => j.id === state.current.id) || state.current;
+    // Lines logged while we were offline never arrive live, so reload the
+    // saved log; live lines that overlap it are skipped by their number.
+    logState.jobId = null;
     renderProgress(state.current);
     const modalJob = jobs.find((j) => j.id === state.modalJobId);
     if (modalJob) renderJobModal(modalJob);

@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from api import geocode
 from api.jobs import SEG_MODELS, JobManager
-from api.live import JobHub
+from api.live import OVERFLOW, JobHub
 from common import PipelineChain
 from common.env import load_app_env
 
@@ -165,7 +165,12 @@ def create_app(
                     {update, closed}, return_when=asyncio.FIRST_COMPLETED
                 )
                 if update in done:
-                    await ws.send_json(update.result())
+                    message = update.result()
+                    if message is OVERFLOW:
+                        # Fell too far behind; the page reconnects and resyncs.
+                        await ws.close(code=1013)
+                        break
+                    await ws.send_json(message)
                 else:
                     update.cancel()
         except (WebSocketDisconnect, RuntimeError):

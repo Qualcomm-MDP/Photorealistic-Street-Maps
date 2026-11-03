@@ -97,11 +97,11 @@
         <div class="card-head"><h2 id="optTitle">Options</h2></div>
         <div class="opt-row">
           <div class="text">
-            <strong>Remove obstructions</strong>
-            <span>Erase cars, poles and people from facade photos</span>
+            <strong id="segLabel">Remove obstructions</strong>
+            <span id="segHint">Erase cars, poles and people from facade photos</span>
           </div>
           <label class="switch" for="seg">
-            <input id="seg" type="checkbox" checked>
+            <input id="seg" type="checkbox" checked aria-labelledby="segLabel" aria-describedby="segHint">
             <span class="track"></span><span class="knob"></span>
           </label>
         </div>

@@ -362,3 +362,70 @@ def test_websocket_streams_log_lines_before_final_status(tmp_path):
     assert [m["n"] for m in logs] == list(range(1, len(logs) + 1))
     assert any(m["line"].endswith("Fetched 2 OSM elements") for m in logs)
     assert logs[-1]["line"].split("  ", 1)[1].startswith("Done in")
+
+
+def test_mapillary_token_is_redacted_from_logs_and_errors(tmp_path, monkeypatch):
+    secret = "MLY|1234567890|abcdefsecret"
+    monkeypatch.setenv("MAPILLARY_ACCESS_TOKEN", secret)
+
+    def leaky(value, state):
+        raise RuntimeError(
+            "403 Client Error for url: https://graph.mapillary.com/images"
+            f"?access_token={secret}&bbox=1,2,3,4 (token {secret})"
+        )
+
+    pipeline = PipelineChain("leaky")
+    pipeline.add_stage("fetch", leaky, label="Fetch data")
+    client = make_client(tmp_path, lambda: pipeline)
+
+    job_id = client.post("/api/jobs", json={"bbox": BBOX}).json()["id"]
+    job = wait_for(client, job_id)
+    log = client.get(f"/api/jobs/{job_id}/log").text
+
+    assert job["status"] == "failed"
+    for text in (job["error"], log):
+        assert secret not in text
+        assert "access_token=[REDACTED]" in text
+
+
+def test_worker_keeps_running_after_a_job_crashes_outside_the_pipeline(
+    tmp_path, monkeypatch
+):
+    import api.jobs
+
+    real_reporter = api.jobs.JobReporter
+    calls = []
+
+    def flaky_reporter(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise OSError("disk full")
+        return real_reporter(*args, **kwargs)
+
+    monkeypatch.setattr(api.jobs, "JobReporter", flaky_reporter)
+    client = make_client(tmp_path)
+
+    first = client.post("/api/jobs", json={"bbox": BBOX}).json()["id"]
+    second = client.post("/api/jobs", json={"bbox": BBOX}).json()["id"]
+
+    crashed = wait_for(client, first)
+    assert crashed["status"] == "failed"
+    assert crashed["error"] == "disk full"
+    assert wait_for(client, second)["status"] == "done"
+
+
+def test_lagging_live_client_is_cut_off_instead_of_missing_updates():
+    from api.live import _MAX_QUEUED, OVERFLOW, JobHub
+
+    hub = JobHub()
+    lagging = hub.subscribe()
+
+    for i in range(_MAX_QUEUED + 1):
+        hub._fan_out({"type": "job", "n": i})
+
+    # The backlog is replaced by one message telling the handler to close, and
+    # the client gets nothing more until it reconnects (with a fresh snapshot).
+    assert lagging.qsize() == 1
+    assert lagging.get_nowait() is OVERFLOW
+    hub._fan_out({"type": "job", "n": "later"})
+    assert lagging.empty()

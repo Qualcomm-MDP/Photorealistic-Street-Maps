@@ -1,5 +1,6 @@
 import os
 from ..constants import MAPILLARY_URL, BoundingBox
+from ..redact import redact
 from ..reporter import Reporter, get_reporter
 from scipy.spatial.transform import Rotation as R
 import requests
@@ -35,7 +36,9 @@ class MapillaryClient:
             resp = requests.get(MAPILLARY_URL, params=params)
             resp.raise_for_status()
         except requests.exceptions.RequestException as e:
-            raise RuntimeError(f"API Request Error: {e}")
+            # The request URL carries the token; keep it out of the message and
+            # drop the original exception, whose message and traceback have it.
+            raise RuntimeError(f"API Request Error: {redact(str(e))}") from None
 
         data = resp.json().get("data", [])
 

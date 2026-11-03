@@ -29,6 +29,9 @@ _CACHE_SIZE = 256
 _lock = threading.Lock()
 _last_request = 0.0
 _cache: OrderedDict[str, list[dict[str, Any]]] = OrderedDict()
+# suggest() runs on several request threads at once and doesn't take _lock
+# (Photon has no one-per-second rule), so its cache has its own lock.
+_suggest_lock = threading.Lock()
 _suggest_cache: OrderedDict[str, list[dict[str, Any]]] = OrderedDict()
 
 
@@ -75,9 +78,11 @@ def suggest(
         (round(lat, 2), round(lon, 2)) if lat is not None and lon is not None else None
     )
     key = f"{limit}:{bias}:{query.strip().lower()}"
-    if key in _suggest_cache:
-        _suggest_cache.move_to_end(key)
-        return _suggest_cache[key]
+    with _suggest_lock:
+        cached = _suggest_cache.get(key)
+        if cached is not None:
+            _suggest_cache.move_to_end(key)
+            return cached
 
     params: dict[str, Any] = {"q": query, "limit": limit, "lang": "en"}
     if bias:
@@ -87,7 +92,8 @@ def suggest(
     )
     resp.raise_for_status()
     results = [_photon_to_place(f) for f in resp.json().get("features", [])]
-    _remember(_suggest_cache, key, results)
+    with _suggest_lock:
+        _remember(_suggest_cache, key, results)
     return results
 
 

@@ -49,14 +49,15 @@ def _project(
     return uv[:, :2], z
 
 
-def _download_image(url: str) -> np.ndarray:
+def _download_image(url: str) -> tuple[np.ndarray, bytes]:
+    """The decoded photo and the file exactly as downloaded."""
     resp = requests.get(url, timeout=30)
     resp.raise_for_status()
     arr = np.frombuffer(resp.content, np.uint8)
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     if img is None:
         raise ValueError(f"Failed to decode image from {url}")
-    return img
+    return img, resp.content
 
 
 def _save_preview(img: np.ndarray, path: Path, max_width: int = 640) -> None:
@@ -137,7 +138,7 @@ def _apply_textures(
     cam_data: list[dict] = []
     for img_id, meta in reporter.progress(candidates, desc="Downloading images"):
         try:
-            img = _download_image(meta["image_url"])
+            img, raw = _download_image(meta["image_url"])
         except Exception as exc:
             reporter.info(f"  Download failed [{img_id}]: {exc}")
             continue
@@ -159,9 +160,15 @@ def _apply_textures(
                     "cleaned": f"{img_id}_cleaned.jpg" if remove_obs else None,
                 }
             )
-        img_path = work_dir / f"{img_id}.jpg"
-        cv2.imwrite(str(img_path), img, [cv2.IMWRITE_JPEG_QUALITY, 95])
-        del img
+        # Spool to disk without losing quality: the downloaded file as is, or a
+        # lossless PNG once obstruction removal has changed the pixels.
+        if remove_obs:
+            img_path = work_dir / f"{img_id}.png"
+            cv2.imwrite(str(img_path), img, [cv2.IMWRITE_PNG_COMPRESSION, 1])
+        else:
+            img_path = work_dir / f"{img_id}.jpg"
+            img_path.write_bytes(raw)
+        del img, raw
         w = meta["original_width"]
         h = meta["original_height"]
         x, y = transformer.transform(meta["longitude"], meta["latitude"])
