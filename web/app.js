@@ -97,6 +97,18 @@ function sizeHtml() {
 function renderStats() {
   $("stats").innerHTML = sizeHtml();
   $("modalStats").innerHTML = sizeHtml();
+  renderNaipNote();
+}
+
+// NAIP covers the continental US. This rough box can't tell a border town
+// from its neighbour across the border; it's there to catch obvious misses.
+const NAIP_COVERAGE = { west: -124.9, south: 24.4, east: -66.9, north: 49.5 };
+function renderNaipNote() {
+  const lat = (box.south + box.north) / 2;
+  const lon = (box.west + box.east) / 2;
+  const c = NAIP_COVERAGE;
+  const inside = lat >= c.south && lat <= c.north && lon >= c.west && lon <= c.east;
+  $("naipNote").hidden = !$("naip").checked || inside;
 }
 function syncInputs() {
   ids.forEach((k) => (inputs[k].value = box[k].toFixed(5)));
@@ -382,6 +394,17 @@ function segmented(id, onChange) {
 }
 let device = "auto";
 segmented("device", (v) => (device = v));
+
+// Aerial photos are draped on the terrain, so turning them on turns Terrain on
+// and locks it; turning them off restores whatever Terrain was set to before.
+let terrainWanted = false;
+$("terrain").addEventListener("change", () => (terrainWanted = $("terrain").checked));
+$("naip").addEventListener("change", () => {
+  const naip = $("naip").checked;
+  $("terrain").checked = naip || terrainWanted;
+  $("terrain").disabled = naip;
+  renderNaipNote();
+});
 for (const id of ["beforeAfter", "jobBeforeAfter"]) {
   segmented(id, (v) => {
     state.showCleaned = v === "after";
@@ -693,16 +716,24 @@ function renderProgress(job) {
   const n = state.stages.length;
   const steps = $("steps").children;
   let done = 0;
+  let skipped = 0;
   let reach = null;
+  let finished = -1; // last stage of the unbroken run of done/skipped ones
   state.stages.forEach((s, i) => {
-    const v = job?.stages?.[s.name] || "pending";
+    let v = job?.stages?.[s.name];
+    // Jobs from before a stage existed never ran it.
+    if (!v) v = job && !isActive(job) ? "skipped" : "pending";
     steps[i].dataset.state = v;
+    steps[i].querySelector("small").textContent = v === "skipped" ? "Off for this job" : s.detail;
     if (v === "done") done++;
+    if (v === "skipped") skipped++;
+    if ((v === "done" || v === "skipped") && finished === i - 1) finished = i;
     if (v === "running" || v === "error") reach = i;
   });
-  if (reach == null) reach = Math.max(0, done - 1);
+  if (reach == null) reach = Math.max(0, finished);
   $("fill").style.width = n > 1 && job ? `calc(${reach / (n - 1)} * (100% - 100% / ${n}))` : "0";
-  $("progPct").textContent = `${n ? Math.round((done / n) * 100) : 0}%`;
+  const counted = n - skipped; // skipped stages don't count toward the percentage
+  $("progPct").textContent = `${counted ? Math.round((done / counted) * 100) : 0}%`;
 
   let label = "Ready to generate";
   if (job?.status === "queued") label = "Waiting in queue";
@@ -854,6 +885,9 @@ function jobFactsHtml(job) {
     ["Obstructions", o.remove_obstructions ? `Removed · ${esc(o.seg_model)} model` : "Kept"],
     ["Device", esc(o.device || "auto")],
   ];
+  // Jobs from before these options existed don't have them.
+  if ("terrain" in o) rows.push(["Terrain", o.terrain ? "On" : "Off"]);
+  if ("naip" in o) rows.push(["Aerial photos", o.naip ? "NAIP ground and roofs" : "Off"]);
   if (job.result?.photos != null) rows.push(["Photos", `<span class="mono">${job.result.photos}</span>`]);
   if (job.error) rows.push(["Error", `<span class="bad">${esc(job.error)}</span>`]);
   return rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
@@ -1010,6 +1044,8 @@ $("go").addEventListener("click", async () => {
         remove_obstructions: $("seg").checked,
         seg_model: $("model").value,
         device,
+        terrain: $("terrain").checked,
+        naip: $("naip").checked,
       }),
     });
     // The socket often delivers newer updates for this job (running, first

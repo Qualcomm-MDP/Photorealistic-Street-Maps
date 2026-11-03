@@ -120,6 +120,29 @@
             <button type="button" aria-pressed="false" data-v="cuda" title="No CUDA GPU on this server" disabled>GPU</button>
           </div>
         </div>
+        <div class="opt-row">
+          <div class="text">
+            <strong id="terrainLabel">Terrain</strong>
+            <span id="terrainHint">Put buildings on real ground heights and add the ground</span>
+          </div>
+          <label class="switch" for="terrain">
+            <input id="terrain" type="checkbox" aria-labelledby="terrainLabel" aria-describedby="terrainHint">
+            <span class="track"></span><span class="knob"></span>
+          </label>
+        </div>
+        <div class="opt-row">
+          <div class="text">
+            <strong id="naipLabel">Aerial photos</strong>
+            <span id="naipHint">Texture the ground and roofs with NAIP aerial photos (US only). Turns on Terrain.</span>
+          </div>
+          <label class="switch" for="naip">
+            <input id="naip" type="checkbox" aria-labelledby="naipLabel" aria-describedby="naipHint">
+            <span class="track"></span><span class="knob"></span>
+          </label>
+        </div>
+        <p class="opt-note" id="naipNote" role="status" hidden>
+          This area looks outside the continental US, which NAIP covers, so the ground and roofs would stay untextured.
+        </p>
       </section>
     </div>
 

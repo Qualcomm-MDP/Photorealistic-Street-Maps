@@ -64,6 +64,9 @@ class JobRequest(BaseModel):
     remove_obstructions: bool = True
     seg_model: Literal["large", "tiny"] = "large"
     device: Literal["auto", "cpu", "cuda"] = "auto"
+    # Same as the CLI's --terrain and --naip; aerial photos need the terrain.
+    terrain: bool = False
+    naip: bool = False
 
 
 def _default_pipeline() -> PipelineChain:
@@ -194,6 +197,8 @@ def create_app(
                 "remove_obstructions": req.remove_obstructions,
                 "seg_model": req.seg_model,
                 "device": req.device,
+                "terrain": req.terrain or req.naip,
+                "naip": req.naip,
             },
         )
         return job.to_dict()
