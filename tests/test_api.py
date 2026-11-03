@@ -203,7 +203,9 @@ def test_real_pipeline_stages_drive_the_timeline():
 
     assert [s["name"] for s in build_pipeline().describe()] == [
         "fetch",
+        "terrain",
         "build_mesh",
+        "naip",
         "texturing",
         "export",
     ]
@@ -429,3 +431,62 @@ def test_lagging_live_client_is_cut_off_instead_of_missing_updates():
     assert lagging.get_nowait() is OVERFLOW
     hub._fan_out({"type": "job", "n": "later"})
     assert lagging.empty()
+
+
+def optional_stages_pipeline(seen):
+    def record(value, state):
+        seen["use_terrain"] = state.get_metadata("use_terrain", None)
+        seen["use_naip"] = state.get_metadata("use_naip", None)
+        return {"osm": {"elements": []}, "mapillary": {}}
+
+    def stage(value, state):
+        return value
+
+    def factory():
+        pipeline = PipelineChain("optional")
+        pipeline.add_stage("fetch", record, label="Fetch data")
+        pipeline.add_stage("terrain", stage, label="Terrain")
+        pipeline.add_stage("naip", stage, label="Aerial photo")
+        return pipeline
+
+    return factory
+
+
+@pytest.mark.parametrize(
+    "request_options, options, use, stages",
+    [
+        (
+            {},
+            {"terrain": False, "naip": False},
+            (False, False),
+            {"fetch": "done", "terrain": "skipped", "naip": "skipped"},
+        ),
+        (
+            {"terrain": True},
+            {"terrain": True, "naip": False},
+            (True, False),
+            {"fetch": "done", "terrain": "done", "naip": "skipped"},
+        ),
+        (
+            # Aerial photos are draped on the terrain, so they turn it on.
+            {"naip": True},
+            {"terrain": True, "naip": True},
+            (True, True),
+            {"fetch": "done", "terrain": "done", "naip": "done"},
+        ),
+    ],
+)
+def test_terrain_and_naip_options(tmp_path, request_options, options, use, stages):
+    seen = {}
+    client = make_client(tmp_path, optional_stages_pipeline(seen))
+
+    created = client.post("/api/jobs", json={"bbox": BBOX, **request_options}).json()
+    assert {k: created["options"][k] for k in options} == options
+    job = wait_for(client, created["id"])
+
+    assert job["status"] == "done"
+    assert (seen["use_terrain"], seen["use_naip"]) == use
+    assert job["stages"] == stages
+    log = client.get(f"/api/jobs/{job['id']}/log").text
+    # A skipped stage doesn't get a section in the log either.
+    assert ("── Terrain ──" in log) == options["terrain"]

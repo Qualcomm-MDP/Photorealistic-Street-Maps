@@ -91,6 +91,20 @@ def main():
         default=None,
         help="Write the raw Mapillary metadata to this JSON file for debugging.",
     )
+    parser.add_argument(
+        "--terrain",
+        action="store_true",
+        default=False,
+        help="Place buildings and cameras on real ground heights (Terrarium "
+        "elevation tiles) and add the ground to the .glb. Off by default.",
+    )
+    parser.add_argument(
+        "--naip",
+        action="store_true",
+        default=False,
+        help="Texture the ground and roofs with NAIP aerial photos (USGS, "
+        "~0.6 m/px). Turns on --terrain. Off by default.",
+    )
     args = parser.parse_args()
 
     if args.bbox is not None:
@@ -117,6 +131,8 @@ def main():
             "output_path": args.output,
             "ask_output_path": ask_save_path,
             "mapillary_dump_path": args.dump_mapillary,
+            "use_terrain": args.terrain or args.naip,
+            "use_naip": args.naip,
         },
         profiler=profiler,
     )

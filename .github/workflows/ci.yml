@@ -24,16 +24,13 @@ jobs:
             os: ubuntu-latest
           - name: Linux ARM64
             os: ubuntu-24.04-arm
-          - name: macOS Apple Silicon
-            os: macos-latest
           - name: Windows x86_64
             os: windows-latest
-    # Intel Macs aren't tested: PyTorch has no Intel macOS builds after 2.2.2.
     defaults:
       run:
         shell: bash
 
-    steps:
+    steps: &test-steps
       - name: Checkout Repository
         uses: actions/checkout@v4
 
@@ -65,6 +62,18 @@ jobs:
 
       - name: Run Tests
         run: poetry run pytest tests/
+
+  # Its own job so build-and-test doesn't wait on it: free macOS runners are
+  # scarce and the job can sit queued for many minutes. It still runs on every
+  # PR and shows its result. Intel Macs aren't tested: PyTorch has no Intel
+  # macOS builds after 2.2.2.
+  tests-macos:
+    name: Tests (macOS Apple Silicon)
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash
+    steps: *test-steps
 
   docker:
     name: Docker CPU image (${{ matrix.name }})
@@ -103,8 +112,9 @@ jobs:
           "
 
   # The branch rule on main requires a check called "build-and-test". It passes
-  # only when every platform's tests and both Docker builds passed, so the rule
-  # doesn't need updating when platforms are added or renamed.
+  # only when the Linux and Windows tests and both Docker builds passed, so the
+  # rule doesn't need updating when platforms are added or renamed. macOS
+  # (tests-macos) isn't included, so a long wait for a Mac doesn't block PRs.
   build-and-test:
     if: always()
     needs: [tests, docker]

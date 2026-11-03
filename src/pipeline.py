@@ -12,6 +12,8 @@ from common.MeshUtils import _get_utm_transformer
 from common.reporter import get_reporter
 from data_ingest.ingest import ingest_data
 from mesh_builder.extrude import build_mesh
+from naip import naip_stage
+from terrain import terrain_stage
 from texturing.tex_projection import tex_projection
 
 
@@ -24,14 +26,34 @@ def export_mesh(value, state):
 
     value.vertices -= np.array([ox, oy, 0.0])
     value.vertices[:, 2] *= -1
-    center = value.bounding_box.centroid
-    value.apply_translation(-center)
+    parts = [value]
+
+    terrain = state.get_metadata("terrain", None)
+    if terrain is not None:
+        ground = terrain.to_mesh()
+        naip = state.get_metadata("naip", None)
+        if naip is not None:
+            ground.visual = naip.drape(ground.vertices)
+        ground.vertices -= np.array([ox, oy, 0.0])
+        parts.append(ground)
+
+    bounds = np.vstack([p.bounds for p in parts])
+    center = (bounds.min(axis=0) + bounds.max(axis=0)) / 2
     rotation = trimesh.transformations.rotation_matrix(
         angle=np.radians(-90.0),
         direction=[1.0, 0.0, 0.0],
         point=[0.0, 0.0, 0.0],
     )
-    value.apply_transform(rotation)
+    for p in parts:
+        p.apply_translation(-center)
+        p.apply_transform(rotation)
+
+    # Buildings and ground stay separate objects: merging them into one mesh
+    # would drop the buildings' photo texture.
+    if terrain is not None:
+        value = trimesh.Scene()
+        value.add_geometry(parts[0], node_name="buildings", geom_name="buildings")
+        value.add_geometry(parts[1], node_name="terrain", geom_name="terrain")
 
     # The CLI may pass a callable that asks the user (e.g. a save dialog).
     path = state.get_metadata("output_path", None)
@@ -52,7 +74,19 @@ def build_pipeline() -> PipelineChain:
         "fetch", ingest_data, label="Fetch data", detail="OSM + Mapillary"
     )
     pipeline.add_stage(
+        "terrain",
+        terrain_stage,
+        label="Terrain",
+        detail="Ground heights (when enabled)",
+    )
+    pipeline.add_stage(
         "build_mesh", build_mesh, label="Build mesh", detail="Extrude footprints"
+    )
+    pipeline.add_stage(
+        "naip",
+        naip_stage,
+        label="Aerial photo",
+        detail="NAIP ground and roofs (when enabled)",
     )
     pipeline.add_stage(
         "texturing", tex_projection, label="Texture", detail="Project street photos"

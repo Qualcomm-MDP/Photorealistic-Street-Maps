@@ -26,6 +26,9 @@ from common import PipelineChain, ProgressMonitor
 from common.constants import BoundingBox
 from common.redact import redact
 
+# Stages that only do something when their job option is on.
+OPTIONAL_STAGES = {"terrain": "terrain", "naip": "naip"}
+
 SEG_MODELS = {
     "large": "facebook/mask2former-swin-large-cityscapes-semantic",
     "tiny": "facebook/mask2former-swin-tiny-cityscapes-semantic",
@@ -85,7 +88,10 @@ class JobManager:
             name=name,
             bbox=bbox,
             options=options,
-            stages={s["name"]: "pending" for s in self.stages},
+            stages={
+                s["name"]: "skipped" if _turned_off(s["name"], options) else "pending"
+                for s in self.stages
+            },
         )
         with self._lock:
             self._jobs[job.id] = job
@@ -214,6 +220,8 @@ class JobManager:
         labels = {s["name"]: s["label"] for s in self.stages}
 
         def on_stage(name: str, event: str) -> None:
+            if job.stages.get(name) == "skipped":
+                return  # the stage runs but does nothing for this job
             if event == "start":
                 log.info(f"── {labels.get(name, name)} ──")
             state = {"start": "running", "done": "done", "error": "error"}[event]
@@ -235,6 +243,8 @@ class JobManager:
                     "remove_obstructions": opts.get("remove_obstructions", True),
                     "seg_model": SEG_MODELS.get(opts.get("seg_model", "large")),
                     "seg_device": opts.get("device", "auto"),
+                    "use_terrain": opts.get("terrain", False),
+                    "use_naip": opts.get("naip", False),
                     "output_path": str(model_path),
                     "image_dir": str(job_dir / "images"),
                     "reporter": log,
@@ -246,6 +256,12 @@ class JobManager:
             return {"status": "failed", "error": _describe_error(exc)}
 
         return {"status": "done", "result": _summarize(state, job_dir)}
+
+
+def _turned_off(stage: str, options: dict[str, Any]) -> bool:
+    """Whether an optional stage is off for a job (shown as skipped)."""
+    option = OPTIONAL_STAGES.get(stage)
+    return option is not None and not options.get(option, False)
 
 
 def _describe_error(exc: Exception) -> str:
