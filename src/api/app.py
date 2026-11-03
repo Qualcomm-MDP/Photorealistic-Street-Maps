@@ -17,13 +17,14 @@ from typing import Any, Literal
 
 import requests
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
 
 from api import geocode
 from api.jobs import SEG_MODELS, JobManager
 from api.live import OVERFLOW, JobHub
+from api.settings import Settings, check_token
 from common import PipelineChain
 from common.env import load_app_env
 
@@ -58,6 +59,36 @@ class BBox(BaseModel):
         return self
 
 
+class JobDefaults(BaseModel):
+    remove_obstructions: bool | None = None
+    seg_model: Literal["large", "tiny"] | None = None
+    device: Literal["auto", "cpu", "cuda"] | None = None
+
+
+class SettingsUpdate(BaseModel):
+    # Leave out to keep the current token; clear_mapillary_token removes the
+    # one saved here (falling back to the .env file's, if any).
+    mapillary_token: str | None = Field(default=None, max_length=500)
+    clear_mapillary_token: bool = False
+    defaults: JobDefaults | None = None
+
+    @model_validator(mode="after")
+    def check_token(self) -> "SettingsUpdate":
+        if self.mapillary_token is not None:
+            token = self.mapillary_token.strip()
+            if not token:
+                raise ValueError("Paste a token, or remove the saved one instead.")
+            if any(c.isspace() for c in token):
+                raise ValueError("A Mapillary token has no spaces in it.")
+            self.mapillary_token = token
+        return self
+
+
+class TokenTest(BaseModel):
+    # Test this token without saving it; leave out to test the current one.
+    token: str | None = Field(default=None, max_length=500)
+
+
 class JobRequest(BaseModel):
     bbox: BBox
     name: str = Field(default="Custom area", max_length=120)
@@ -90,10 +121,13 @@ def create_app(
 ) -> FastAPI:
     load_app_env()
     data_dir = Path(data_dir or os.environ.get("POSM_DATA_DIR") or DEFAULT_DATA_DIR)
+    # Saved next to the jobs, so it lives in the same (mounted) data folder.
+    settings = Settings(data_dir / "settings.json")
     hub = JobHub()
     jobs = JobManager(data_dir, pipeline_factory, publish=hub.publish)
     app = FastAPI(title="POSM", docs_url="/api/docs", openapi_url="/api/openapi.json")
     app.state.jobs = jobs
+    app.state.settings = settings
 
     def _job_or_404(job_id: str):
         job = jobs.get(job_id)
@@ -112,6 +146,38 @@ def create_app(
             "seg_models": list(SEG_MODELS),
             "max_side_m": MAX_SIDE_M,
         }
+
+    @app.get("/api/settings")
+    def get_settings() -> dict[str, Any]:
+        return settings.public()
+
+    @app.put("/api/settings")
+    def update_settings(req: SettingsUpdate) -> dict[str, Any]:
+        saved_to = settings.update(
+            mapillary_token=req.mapillary_token,
+            clear_token=req.clear_mapillary_token,
+            defaults=req.defaults.model_dump(exclude_none=True)
+            if req.defaults
+            else None,
+        )
+        # token_saved_to: "env_file" when a new env file was created for it.
+        return {**settings.public(), "token_saved_to": saved_to}
+
+    @app.get("/api/settings/mapillary/token")
+    def get_mapillary_token() -> JSONResponse:
+        # Only for the Settings dialog to show it. The API is reachable from
+        # this machine only unless POSM_HOST opens it up (docker-compose.yml).
+        return JSONResponse(
+            {"token": settings.token()}, headers={"Cache-Control": "no-store"}
+        )
+
+    @app.post("/api/settings/mapillary/test")
+    def test_mapillary_token(req: TokenTest) -> dict[str, Any]:
+        token = (req.token or "").strip() or settings.token()
+        if not token:
+            raise HTTPException(422, "There's no token to test yet. Paste one first.")
+        ok, message = check_token(token)
+        return {"ok": ok, "message": message}
 
     @app.get("/api/geocode")
     def search_address(q: str) -> dict[str, Any]:

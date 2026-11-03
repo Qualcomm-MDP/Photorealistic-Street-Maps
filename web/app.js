@@ -59,6 +59,7 @@ const state = {
   imagesJobId: null, // job whose photos are in state.images
   modelWanted: null, // job whose model was last requested
   imagesWanted: null, // job whose photos were last requested
+  settings: null, // from /api/settings: token status and defaults for new jobs
   modalJobId: null, // job open in the job details dialog
   placeName: null,
   images: [],
@@ -344,9 +345,13 @@ function modal(dialogId, bodyId, elId, placeholderId, onToggle) {
   dlg.addEventListener("close", () => {
     home.insertBefore(el, next);
     ph.hidden = true;
+    ph.style.height = "";
     onToggle(false);
   });
   return () => {
+    // The placeholder takes the element's exact height, so the page behind
+    // the dialog doesn't shift while it's away.
+    ph.style.height = `${el.offsetHeight}px`;
     body.appendChild(el);
     ph.hidden = false;
     dlg.showModal();
@@ -995,10 +1000,295 @@ function connectLive() {
   });
 }
 
+// ---------- Settings ----------
+// /api/settings says whether a token is set, where it came from (saved here,
+// or the APP_ENV's env file) and its last characters. The token itself comes
+// from its own endpoint, only while this dialog is open, and shows as dots
+// until "Show". Changing it takes Change, Save token, then a confirmation.
+const settingsDlg = $("settingsModal");
+const tokenInput = $("tokenInput");
+let defDevice = "auto";
+segmented("defDevice", (v) => (defDevice = v));
+
+const tokenUi = { current: "", editing: false, confirm: null };
+const hasToken = () => Boolean(state.settings?.mapillary.set);
+const envFile = () => state.settings?.mapillary.env_file || ".env";
+
+function renderTokenStatus() {
+  const m = state.settings?.mapillary;
+  const status = !m?.set
+    ? `<span class="chip bad">Not set</span>`
+    : `<span class="chip ok">${m.source === "saved" ? "Saved here" : `From ${esc(m.env_file)}`}${m.hint ? ` · ends ${esc(m.hint)}` : ""}</span>`;
+  $("tokenStatus").innerHTML = status;
+  $("tokenNotice").hidden = !state.settings || m.set;
+}
+
+// View mode: the current token, read-only. Edit mode: an empty field to paste
+// a new one. There's nothing to view without a token, so that's always edit.
+function renderTokenControls() {
+  const m = state.settings?.mapillary;
+  const editing = tokenUi.editing || !m?.set;
+  const confirming = Boolean(tokenUi.confirm);
+  tokenInput.readOnly = !editing || confirming;
+  $("tokenInputLabel").textContent = editing ? (m?.set ? "New token" : "Paste a token") : "Token";
+  $("tokenChange").hidden = editing || confirming;
+  $("tokenSave").hidden = !editing || confirming;
+  $("tokenCancel").hidden = !editing || !m?.set || confirming;
+  $("tokenTest").hidden = confirming;
+  $("tokenClear").hidden = editing || confirming || m?.source !== "saved";
+  $("tokenClear").textContent = m?.env_available ? `Use the ${envFile()} token instead` : "Remove saved token";
+  $("tokenConfirm").hidden = !confirming;
+  if (confirming) {
+    $("tokenConfirmText").textContent = tokenUi.confirm.text;
+    $("tokenConfirmYes").textContent = tokenUi.confirm.yes;
+    $("tokenConfirmNo").textContent = tokenUi.confirm.no;
+  }
+}
+
+function showTokenValue(show) {
+  tokenInput.type = show ? "text" : "password";
+  $("tokenShow").setAttribute("aria-pressed", String(show));
+  $("tokenShow").setAttribute("aria-label", show ? "Hide token" : "Show token");
+  $("tokenShow").textContent = show ? "Hide" : "Show";
+}
+
+function setDeviceButtons(id, value) {
+  $(id)
+    .querySelectorAll("button")
+    .forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === value)));
+}
+
+// Put the saved defaults into the Options panel (on load, and after saving).
+function applyDefaults(d) {
+  $("seg").checked = d.remove_obstructions;
+  $("model").value = d.seg_model;
+  device = d.device === "cuda" && !state.system.cuda ? "auto" : d.device;
+  setDeviceButtons("device", device);
+}
+
+function tokenMessage(text, kind = "") {
+  const msg = $("tokenMsg");
+  msg.textContent = text;
+  msg.className = `set-msg ${kind}`;
+  msg.hidden = !text;
+}
+
+// Back to view mode with the current token (fetched fresh from the server).
+async function showCurrentToken() {
+  tokenUi.editing = false;
+  tokenUi.confirm = null;
+  tokenUi.current = "";
+  if (hasToken()) {
+    try {
+      tokenUi.current = (await api("/api/settings/mapillary/token")).token || "";
+    } catch {
+      /* the status chip still says it's set */
+    }
+  }
+  tokenInput.value = tokenUi.current;
+  renderTokenStatus();
+  renderTokenControls();
+}
+
+async function openSettings(intro = "") {
+  const d = state.settings?.defaults;
+  showTokenValue(false);
+  tokenMessage("");
+  $("settingsError").hidden = true;
+  $("settingsIntro").textContent = intro;
+  $("settingsIntro").hidden = !intro;
+  if (d) {
+    $("defSeg").checked = d.remove_obstructions;
+    $("defModel").value = d.seg_model;
+    defDevice = d.device;
+    setDeviceButtons("defDevice", d.device);
+  }
+  $("defDevice").querySelector('[data-v="cuda"]').disabled = !state.system.cuda;
+  tokenInput.value = "";
+  renderTokenStatus();
+  renderTokenControls();
+  settingsDlg.showModal();
+  await showCurrentToken();
+  if (!hasToken()) tokenInput.focus();
+}
+
+async function loadSettings() {
+  state.settings = await api("/api/settings");
+  renderTokenStatus();
+}
+
+async function saveToken(body) {
+  state.settings = await api("/api/settings", { method: "PUT", body: JSON.stringify(body) });
+}
+
+$("openSettings").addEventListener("click", () => openSettings());
+$("tokenNoticeBtn").addEventListener("click", () => openSettings());
+settingsDlg.addEventListener("click", (e) => {
+  if (e.target === settingsDlg || e.target.closest("[data-close]")) settingsDlg.close();
+});
+// Don't keep the token in the page once the dialog is closed.
+settingsDlg.addEventListener("close", () => {
+  tokenInput.value = "";
+  tokenUi.current = "";
+  tokenUi.editing = false;
+  tokenUi.confirm = null;
+});
+
+$("tokenShow").addEventListener("click", () => showTokenValue(tokenInput.type === "password"));
+// Enter in the token field means "Save token", not the footer's Save.
+tokenInput.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  if (!$("tokenSave").hidden) $("tokenSave").click();
+});
+
+$("tokenChange").addEventListener("click", () => {
+  tokenUi.editing = true;
+  tokenInput.value = "";
+  tokenMessage("");
+  renderTokenControls();
+  tokenInput.focus();
+});
+
+$("tokenCancel").addEventListener("click", () => {
+  tokenMessage("");
+  showCurrentToken();
+});
+
+$("tokenSave").addEventListener("click", () => {
+  const token = tokenInput.value.trim();
+  if (!token) {
+    tokenMessage("Paste the new token first.", "bad");
+    tokenInput.focus();
+    return;
+  }
+  if (token === tokenUi.current) {
+    tokenMessage("That's the token you already have.", "bad");
+    return;
+  }
+  const m = state.settings.mapillary;
+  // Without an env file yet, saving creates it (e.g. .env) with this token.
+  const where = m.env_file_exists ? "" : ` POSM will create ${envFile()} with it.`;
+  tokenMessage("");
+  tokenUi.confirm = {
+    text: m.set
+      ? `Replace the current token (ends ${m.hint || "…"}) with this one? Jobs started after this use the new token.${where}`
+      : `Save this token? POSM uses it to download street photos for every job.${where}`,
+    yes: m.set ? "Replace token" : "Save token",
+    no: m.set ? "Keep current" : "Not yet",
+    run: async () => {
+      const res = await api("/api/settings", { method: "PUT", body: JSON.stringify({ mapillary_token: token }) });
+      state.settings = res;
+      await showCurrentToken();
+      tokenMessage(
+        res.token_saved_to === "env_file"
+          ? `Token saved in a new ${envFile()} file. It's used from the next job.`
+          : "Token saved. It's used from the next job.",
+        "ok",
+      );
+    },
+  };
+  renderTokenControls();
+  $("tokenConfirmYes").focus();
+});
+
+$("tokenClear").addEventListener("click", () => {
+  const m = state.settings.mapillary;
+  tokenMessage("");
+  tokenUi.confirm = {
+    text: m.env_available
+      ? `Remove the token saved here? POSM goes back to the token in ${envFile()}.`
+      : "Remove the saved token? You won't be able to generate models until you add one again.",
+    yes: "Remove token",
+    no: "Keep it",
+    run: async () => {
+      await saveToken({ clear_mapillary_token: true });
+      await showCurrentToken();
+      tokenMessage(hasToken() ? `Removed. Using the token from ${envFile()}.` : "Removed. No token is set now.");
+    },
+  };
+  renderTokenControls();
+  $("tokenConfirmNo").focus();
+});
+
+$("tokenConfirmYes").addEventListener("click", async () => {
+  const { run } = tokenUi.confirm || {};
+  if (!run) return;
+  $("tokenConfirmYes").disabled = true;
+  try {
+    await run();
+  } catch (e) {
+    tokenUi.confirm = null;
+    renderTokenControls();
+    tokenMessage(e.message, "bad");
+  } finally {
+    $("tokenConfirmYes").disabled = false;
+  }
+});
+
+$("tokenConfirmNo").addEventListener("click", () => {
+  tokenUi.confirm = null;
+  renderTokenControls();
+  (tokenUi.editing || !hasToken() ? tokenInput : $("tokenChange")).focus();
+});
+
+$("tokenTest").addEventListener("click", async () => {
+  const btn = $("tokenTest");
+  const typed = tokenUi.editing || !hasToken() ? tokenInput.value.trim() : "";
+  btn.disabled = true;
+  tokenMessage(typed ? "Validating the new token…" : "Validating the current token…");
+  try {
+    const res = await api("/api/settings/mapillary/test", {
+      method: "POST",
+      body: JSON.stringify({ token: typed || null }),
+    });
+    tokenMessage(res.message, res.ok ? "ok" : "bad");
+  } catch (e) {
+    tokenMessage(e.message, "bad");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// The footer's Save is for the defaults; the token has its own Save + confirm.
+$("settingsForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const save = $("settingsSave");
+  const err = $("settingsError");
+  err.hidden = true;
+  if ((tokenUi.editing && tokenInput.value.trim()) || tokenUi.confirm) {
+    err.textContent = "Save or cancel the token change first.";
+    err.hidden = false;
+    return;
+  }
+  save.disabled = true;
+  try {
+    state.settings = await api("/api/settings", {
+      method: "PUT",
+      body: JSON.stringify({
+        defaults: { remove_obstructions: $("defSeg").checked, seg_model: $("defModel").value, device: defDevice },
+      }),
+    });
+    applyDefaults(state.settings.defaults);
+    renderTokenStatus();
+    settingsDlg.close();
+    toast("Settings saved");
+  } catch (e) {
+    err.textContent = e.message;
+    err.hidden = false;
+  } finally {
+    save.disabled = false;
+  }
+});
+
 // ---------- Generate ----------
 $("go").addEventListener("click", async () => {
   const err = $("formError");
   err.hidden = true;
+  if (state.settings && !hasToken()) {
+    openSettings("Add your Mapillary token to generate a model. POSM uses it to download the street photos.");
+    return;
+  }
   const go = $("go");
   go.disabled = true;
   try {
@@ -1087,6 +1377,12 @@ renderGallery();
   const gpu = $("device").querySelector('[data-v="cuda"]');
   gpu.disabled = !state.system.cuda;
   gpu.title = state.system.cuda ? "" : "No CUDA GPU on this server";
+  try {
+    await loadSettings();
+    applyDefaults(state.settings.defaults);
+  } catch {
+    /* an older server without settings; the Options panel keeps its defaults */
+  }
   buildStepper();
   renderStats();
   renderProgress(null);

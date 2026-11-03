@@ -13,9 +13,10 @@ class MapillaryClient:
         self.reporter = reporter or get_reporter()
 
     def get_token(self):
-        if "MAPILLARY_ACCESS_TOKEN" not in os.environ:
+        if not os.environ.get("MAPILLARY_ACCESS_TOKEN"):
             raise ValueError(
-                "'MAPILLARY_ACCESS_TOKEN' not found on environment variable. Ensure in your `.env` you have 'MAPILLARY_ACCESS_TOKEN=...'"
+                "No Mapillary token. Add it in Settings in the web app, or put "
+                "MAPILLARY_ACCESS_TOKEN=... in your .env file."
             )
 
         return os.environ["MAPILLARY_ACCESS_TOKEN"]
