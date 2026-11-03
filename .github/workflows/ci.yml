@@ -11,7 +11,25 @@ permissions:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    name: Tests (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Let every platform finish, so one failure doesn't hide the others.
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64
+            os: ubuntu-latest
+          - name: Linux ARM64
+            os: ubuntu-24.04-arm
+          - name: macOS Apple Silicon
+            os: macos-latest
+          - name: Windows x86_64
+            os: windows-latest
+    # Intel Macs aren't tested: PyTorch has no Intel macOS builds after 2.2.2.
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Checkout Repository
@@ -34,7 +52,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+          key: venv-${{ runner.os }}-${{ runner.arch }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
 
       - name: Install Dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
@@ -45,3 +63,39 @@ jobs:
 
       - name: Run Tests
         run: poetry run pytest tests/
+
+  docker:
+    name: Docker CPU image (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux/amd64
+            os: ubuntu-latest
+          - name: linux/arm64
+            os: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Built natively on each architecture, as `docker compose build` does on
+      # an Intel/AMD machine or an Apple Silicon Mac.
+      - name: Build CPU image
+        run: docker build --build-arg TORCH_VARIANT=cpu -t posm:cpu .
+
+      - name: Smoke test
+        run: |
+          docker run --rm --entrypoint python posm:cpu -c "
+          import platform, torch, trimesh, trimesh.creation as tc
+          from shapely.geometry import Polygon
+          from pipeline import build_pipeline
+          engine = next(name for name, ok in tc._engines if ok)
+          assert engine == 'earcut', engine
+          footprint = Polygon([(0, 0), (10, 0), (10, 6), (4, 6), (4, 10), (0, 10)])
+          mesh = trimesh.creation.extrude_polygon(footprint, 8)
+          assert mesh.is_watertight and abs(mesh.volume - 8 * 76) < 1e-6
+          stages = [s['name'] for s in build_pipeline().describe()]
+          print(platform.machine(), 'torch', torch.__version__, 'engine', engine, 'stages', stages)
+          "
