@@ -57,9 +57,7 @@ class MapillaryClient:
                 if attempt == REQUEST_RETRIES - 1:
                     # The request URL carries the token; keep it out of the
                     # message and drop the original exception.
-                    raise RuntimeError(
-                        f"API Request Error: {redact(str(e))}"
-                    ) from None
+                    raise RuntimeError(f"API Request Error: {redact(str(e))}") from None
                 time.sleep(2**attempt)
 
         data = resp.json().get("data", [])
