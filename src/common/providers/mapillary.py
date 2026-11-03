@@ -1,15 +1,16 @@
 import os
-import warnings
 from ..constants import MAPILLARY_URL, BoundingBox
+from ..redact import redact
+from ..reporter import Reporter, get_reporter
 from scipy.spatial.transform import Rotation as R
 import requests
 
 
 class MapillaryClient:
-    def __init__(self):
+    def __init__(self, reporter: Reporter | None = None):
         # NOTE: Ensure you use `os.environ['MAPILLARY_ACCESS_TOKEN']`
         # when you need to send the mapillary token
-        pass
+        self.reporter = reporter or get_reporter()
 
     def get_token(self):
         if "MAPILLARY_ACCESS_TOKEN" not in os.environ:
@@ -35,7 +36,9 @@ class MapillaryClient:
             resp = requests.get(MAPILLARY_URL, params=params)
             resp.raise_for_status()
         except requests.exceptions.RequestException as e:
-            raise RuntimeError(f"API Request Error: {e}")
+            # The request URL carries the token; keep it out of the message and
+            # drop the original exception, whose message and traceback have it.
+            raise RuntimeError(f"API Request Error: {redact(str(e))}") from None
 
         data = resp.json().get("data", [])
 
@@ -58,7 +61,9 @@ class MapillaryClient:
                     pitch = round(float(pitch_deg), 2)
                     roll = round(float(roll_deg), 2)
                 except Exception as e:
-                    warnings.warn(f"Rotation conversion failed for {img_id}: {e}")
+                    self.reporter.warning(
+                        f"Rotation conversion failed for {img_id}: {e}"
+                    )
                     continue
             else:
                 continue

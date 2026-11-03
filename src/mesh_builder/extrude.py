@@ -1,22 +1,23 @@
 import trimesh
-from tqdm import tqdm
 from common.MeshUtils import get_corners, get_lines, get_height
+from common.reporter import Reporter, get_reporter
 
 
 def build_mesh(value, state):
     bbox = state.require_metadata("bbox")
-    data = extrude_buildings(value["osm"], bbox)
+    data = extrude_buildings(value["osm"], bbox, reporter=get_reporter(state))
     state.require_metadata("progress_monitor").next()
     return data
 
 
-def extrude_buildings(input_data, area_bbox):
+def extrude_buildings(input_data, area_bbox, reporter: Reporter | None = None):
+    reporter = reporter or get_reporter()
     buildings = {}
 
-    for _, element in tqdm(
+    for _, element in reporter.progress(
         enumerate(input_data["elements"]),
-        "Generating Building Mesh(s)",
-        len(input_data["elements"]),
+        desc="Generating Building Mesh(s)",
+        total=len(input_data["elements"]),
     ):
         if "geometry" not in element:
             continue

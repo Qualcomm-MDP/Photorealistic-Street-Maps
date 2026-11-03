@@ -60,6 +60,9 @@ RUN mkdir -p /cache /app/output && chown -R app:app /cache /app
 
 WORKDIR /app
 COPY --chown=app:app src ./src
+COPY --chown=app:app web ./web
+
+EXPOSE 8000
 
 USER app
 

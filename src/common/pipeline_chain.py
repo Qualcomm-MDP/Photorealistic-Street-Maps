@@ -11,12 +11,16 @@ _T = TypeVar("_T")
 
 StageHandler = Callable[[Any, "PipelineState"], Any]
 MergeHandler = Callable[[dict[str, Any], "PipelineState"], Any]
+# Called as (stage_name, event) where event is "start", "done" or "error".
+StageListener = Callable[[str, str], None]
 
 
 @dataclass(slots=True)
 class PipelineStage:
     name: str
     handler: StageHandler
+    label: str = ""
+    detail: str = ""
 
 
 @dataclass(slots=True)
@@ -24,6 +28,8 @@ class PipelineFork:
     name: str
     branches: dict[str, StageHandler]
     merge: MergeHandler | None = None
+    label: str = ""
+    detail: str = ""
 
 
 _AnyStage = PipelineStage | PipelineFork
@@ -83,11 +89,22 @@ class PipelineChain:
                 names.update(stage.branches.keys())
         return names
 
-    def add_stage(self, name: str, handler: StageHandler) -> "PipelineChain":
+    def describe(self) -> list[dict[str, str]]:
+        """Top-level stages in run order, for progress displays."""
+        return [
+            {"name": s.name, "label": s.label or s.name, "detail": s.detail}
+            for s in self._stages
+        ]
+
+    def add_stage(
+        self, name: str, handler: StageHandler, label: str = "", detail: str = ""
+    ) -> "PipelineChain":
         if name in self._all_names():
             raise ValueError(f"Stage '{name}' already exists in pipeline '{self.name}'")
 
-        self._stages.append(PipelineStage(name=name, handler=handler))
+        self._stages.append(
+            PipelineStage(name=name, handler=handler, label=label, detail=detail)
+        )
         return self
 
     def add_fork(
@@ -95,6 +112,8 @@ class PipelineChain:
         name: str,
         branches: dict[str, StageHandler],
         merge: MergeHandler | None = None,
+        label: str = "",
+        detail: str = "",
     ) -> "PipelineChain":
         existing = self._all_names()
         if name in existing:
@@ -104,7 +123,11 @@ class PipelineChain:
                 raise ValueError(
                     f"Branch '{branch_name}' already exists in pipeline '{self.name}'"
                 )
-        self._stages.append(PipelineFork(name=name, branches=branches, merge=merge))
+        self._stages.append(
+            PipelineFork(
+                name=name, branches=branches, merge=merge, label=label, detail=detail
+            )
+        )
         return self
 
     def run(
@@ -112,6 +135,7 @@ class PipelineChain:
         initial_input: Any,
         metadata: dict[str, Any] | None = None,
         profiler: "PipelineProfiler | None" = None,
+        on_stage: StageListener | None = None,
     ) -> PipelineState:
         state = PipelineState(
             initial_input=initial_input,
@@ -120,12 +144,19 @@ class PipelineChain:
         )
         if profiler is not None:
             profiler.start()
-        result = self._execute(state, start_index=0, profiler=profiler)
+        result = self._execute(
+            state, start_index=0, profiler=profiler, on_stage=on_stage
+        )
         if profiler is not None:
             profiler.finish()
         return result
 
-    def resume(self, state: PipelineState, from_stage: str) -> PipelineState:
+    def resume(
+        self,
+        state: PipelineState,
+        from_stage: str,
+        on_stage: StageListener | None = None,
+    ) -> PipelineState:
         start_index = self._get_stage_index(from_stage)
 
         if start_index == 0:
@@ -145,18 +176,21 @@ class PipelineChain:
                 for branch_name in stage.branches:
                     state.stage_outputs.pop(branch_name, None)
 
-        return self._execute(state, start_index=start_index)
+        return self._execute(state, start_index=start_index, on_stage=on_stage)
 
     def _execute(
         self,
         state: PipelineState,
         start_index: int,
         profiler: "PipelineProfiler | None" = None,
+        on_stage: StageListener | None = None,
     ) -> PipelineState:
         current_value = state.current_value
 
         for stage in self._stages[start_index:]:
             metrics = profiler.begin_stage(stage.name) if profiler else None
+            if on_stage:
+                on_stage(stage.name, "start")
             try:
                 if isinstance(stage, PipelineFork):
                     branch_outputs: dict[str, Any] = {}
@@ -179,7 +213,11 @@ class PipelineChain:
             except Exception as exc:
                 if profiler and metrics:
                     profiler.end_stage(metrics, status="error", error=str(exc))
+                if on_stage:
+                    on_stage(stage.name, "error")
                 raise
+            if on_stage:
+                on_stage(stage.name, "done")
 
             state.current_value = current_value
 

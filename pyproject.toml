@@ -17,6 +17,7 @@ classifiers = [
 ]
 dependencies = [
   "dotenv>=0.9.9,<0.10",
+  "fastapi>=0.115,<1",
   "mapillary>=1.0.15,<2",
   "matplotlib>=3.10.8,<4",
   "networkx>=3.6.1,<4",
@@ -32,11 +33,13 @@ dependencies = [
   "tqdm>=4.67.3,<5",
   "transformers>=4.45,<5",
   "triangle>=20250106,<20250107",
-  "trimesh>=4.11.3,<5"
+  "trimesh>=4.11.3,<5",
+  "uvicorn>=0.30,<1",
+  "websockets>=13,<18"
 ]
 
 [dependency-groups]
-dev = [ "mkdocs>=1.6.1,<2", "pre-commit>=4.3,<5", "pytest>=9.0.2,<10", "ruff>=0.15.5,<0.16" ]
+dev = [ "httpx>=0.27,<1", "mkdocs>=1.6.1,<2", "pre-commit>=4.3,<5", "pytest>=9.0.2,<10", "ruff>=0.15.5,<0.16" ]
 
 [tool.poetry]
 packages = [ { include = "photorealistic_street_maps", from = "src" } ]

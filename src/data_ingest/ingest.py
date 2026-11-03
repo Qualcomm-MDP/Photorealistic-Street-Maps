@@ -1,11 +1,13 @@
 from common import PipelineState
 from common.constants import BoundingBox
 from common.providers import OSMClient, OSM_MAP_FEATURES, MapillaryClient
+from common.reporter import get_reporter
 
 
 def ingest_data(bbox: BoundingBox, state: PipelineState):
-    osm_client = OSMClient()
-    mapillary_client = MapillaryClient()
+    reporter = get_reporter(state)
+    osm_client = OSMClient(reporter=reporter)
+    mapillary_client = MapillaryClient(reporter=reporter)
     state.require_metadata("progress_monitor").next()
 
     osm_data = osm_client.fetch(bbox, [OSM_MAP_FEATURES.BUILDING])
