@@ -12,6 +12,7 @@ from common.MeshUtils import _get_utm_transformer
 from common.reporter import get_reporter
 from data_ingest.ingest import ingest_data
 from mesh_builder.extrude import build_mesh
+from naip import naip_stage
 from terrain import terrain_stage
 from texturing.tex_projection import tex_projection
 
@@ -30,6 +31,9 @@ def export_mesh(value, state):
     terrain = state.get_metadata("terrain", None)
     if terrain is not None:
         ground = terrain.to_mesh()
+        naip = state.get_metadata("naip", None)
+        if naip is not None:
+            ground.visual = naip.drape(ground.vertices)
         ground.vertices -= np.array([ox, oy, 0.0])
         parts.append(ground)
 
@@ -77,6 +81,12 @@ def build_pipeline() -> PipelineChain:
     )
     pipeline.add_stage(
         "build_mesh", build_mesh, label="Build mesh", detail="Extrude footprints"
+    )
+    pipeline.add_stage(
+        "naip",
+        naip_stage,
+        label="Aerial photo",
+        detail="NAIP ground and roofs (when enabled)",
     )
     pipeline.add_stage(
         "texturing", tex_projection, label="Texture", detail="Project street photos"

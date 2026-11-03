@@ -13,6 +13,7 @@ from trimesh import visual
 from common import PipelineState
 from common.MeshUtils import _get_utm_transformer
 from common.reporter import Reporter, get_reporter
+from naip.naip import roof_faces, roof_patches
 from segmentation import remove_obstructions
 
 CAMERA_HEIGHT_M = 1.6
@@ -84,6 +85,7 @@ def apply_textures(
     max_saved_images: int = 12,
     reporter: Reporter | None = None,
     terrain=None,
+    aerial=None,
 ) -> trimesh.Trimesh:
     """Project street photos onto the mesh.
 
@@ -93,6 +95,9 @@ def apply_textures(
 
     If terrain is given, each camera sits CAMERA_HEIGHT_M above the ground at
     its position instead of above z = 0.
+
+    If aerial (a naip.Ortho) is given, roofs are textured from it instead of
+    from street photos.
     """
     # Full-resolution photos are ~12 MP (~36 MB decoded) and an area can have
     # ~1000 of them, so they're kept on disk and loaded one at a time.
@@ -109,6 +114,7 @@ def apply_textures(
             Path(work_dir),
             reporter or get_reporter(),
             terrain,
+            aerial,
         )
 
 
@@ -124,6 +130,7 @@ def _apply_textures(
     work_dir: Path,
     reporter: Reporter,
     terrain=None,
+    aerial=None,
 ) -> trimesh.Trimesh:
     center_lon = (bbox.min_lon + bbox.max_lon) / 2
     center_lat = (bbox.min_lat + bbox.max_lat) / 2
@@ -138,7 +145,7 @@ def _apply_textures(
         and v.get("original_width")
         and v.get("original_height")
     ]
-    if not candidates:
+    if not candidates and aerial is None:
         reporter.info("  No images with valid metadata, skipping texturing.")
         return mesh
 
@@ -200,7 +207,7 @@ def _apply_textures(
         with open(image_dir / "images.json", "w") as f:
             json.dump(saved, f, indent=2)
 
-    if not cam_data:
+    if not cam_data and aerial is None:
         reporter.info("  All image downloads failed, skipping texturing.")
         return mesh
 
@@ -214,12 +221,17 @@ def _apply_textures(
 
     occ_mesh = trimesh.Trimesh(vertices=verts_proj, faces=faces, process=False)
 
+    roof_idx = roof_faces(mesh) if aerial is not None else np.array([], dtype=int)
+    skip = set(roof_idx.tolist())
+
     best_hit: dict[int, tuple] = {}
     for ci, cd in enumerate(reporter.progress(cam_data, desc="Visibility")):
         Cw, R, K = cd["Cw"], cd["R"], cd["K"]
         w, h = cd["w"], cd["h"]
 
         for fi, face in enumerate(faces):
+            if fi in skip:
+                continue
             V0p, V1p, V2p = verts_proj[face]
             center_p = (V0p + V1p + V2p) / 3.0
 
@@ -341,6 +353,11 @@ def _apply_textures(
             }
         )
 
+    if aerial is not None:
+        roofs = roof_patches(verts_proj, faces, roof_idx, aerial)
+        reporter.info(f"  {len(roofs)} / {len(roof_idx)} roof faces from NAIP")
+        patch_records.extend(roofs)
+
     cx, cy, row_h = 0, 0, 0
     for p in patch_records:
         if cx + p["pw"] > ATLAS_W:
@@ -401,6 +418,7 @@ def tex_projection(value, state: PipelineState):
         seg_model=state.get_metadata("seg_model", None),
         seg_device=state.get_metadata("seg_device", None),
         terrain=state.get_metadata("terrain", None),
+        aerial=state.get_metadata("naip", None),
         image_dir=state.get_metadata("image_dir", None),
         reporter=get_reporter(state),
     )

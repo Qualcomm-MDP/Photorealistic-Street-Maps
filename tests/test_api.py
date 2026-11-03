@@ -205,6 +205,7 @@ def test_real_pipeline_stages_drive_the_timeline():
         "fetch",
         "terrain",
         "build_mesh",
+        "naip",
         "texturing",
         "export",
     ]
