@@ -19,6 +19,8 @@ CAMERA_HEIGHT_M = 1.6
 ATLAS_W = 4096
 MAX_PATCH = 1024
 ENABLE_OCCLUSION = True
+# Colour (0-255) of faces no street photo covers: roofs, back walls, gaps.
+UNTEXTURED_GREY = 225
 
 
 def _build_K(focal_px: float, w: int, h: int) -> np.ndarray:
@@ -139,14 +141,15 @@ def _apply_textures(
         except Exception as exc:
             reporter.info(f"  Download failed [{img_id}]: {exc}")
             continue
-        save = image_dir is not None and len(saved) < max_saved_images
-        if save:
-            _save_preview(img, image_dir / f"{img_id}_original.jpg")
+        # Folder for this photo's previews, or None once enough are saved.
+        preview_dir = image_dir if len(saved) < max_saved_images else None
+        if preview_dir is not None:
+            _save_preview(img, preview_dir / f"{img_id}_original.jpg")
         if remove_obs:
             img = remove_obstructions(img, seg_model, seg_device, reporter)
-            if save:
-                _save_preview(img, image_dir / f"{img_id}_cleaned.jpg")
-        if save:
+            if preview_dir is not None:
+                _save_preview(img, preview_dir / f"{img_id}_cleaned.jpg")
+        if preview_dir is not None:
             yaw = meta.get("yaw")
             saved.append(
                 {
@@ -333,7 +336,7 @@ def _apply_textures(
 
     GRAY_H = 16
     atlas_h = photo_h + GRAY_H
-    atlas = np.full((atlas_h, ATLAS_W, 3), 180, dtype=np.uint8)
+    atlas = np.full((atlas_h, ATLAS_W, 3), UNTEXTURED_GREY, dtype=np.uint8)
     for p in patch_records:
         atlas[p["ay"] : p["ay"] + p["ph"], p["ax"] : p["ax"] + p["pw"]] = p["patch"]
 

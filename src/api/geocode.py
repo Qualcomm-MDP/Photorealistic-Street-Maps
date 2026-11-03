@@ -49,10 +49,11 @@ def search(query: str, limit: int = 5) -> list[dict[str, Any]]:
         wait = _MIN_INTERVAL_S - (time.monotonic() - _last_request)
         if wait > 0:
             time.sleep(wait)
+        params: dict[str, Any] = {"q": query, "format": "jsonv2", "limit": limit}
         try:
             resp = requests.get(
                 NOMINATIM_URL,
-                params={"q": query, "format": "jsonv2", "limit": limit},
+                params=params,
                 headers={"User-Agent": USER_AGENT},
                 timeout=15,
             )
