@@ -55,6 +55,9 @@ const state = {
   jobs: [],
   current: null, // job shown in the progress timeline
   shown: null, // job whose model and photos are loaded
+  modelJobId: null, // job whose model has finished loading into the scene
+  imagesJobId: null, // job whose photos are in state.images
+  modalJobId: null, // job open in the job details dialog
   placeName: null,
   images: [],
   showCleaned: true,
@@ -368,22 +371,36 @@ function segmented(id, onChange) {
 }
 let device = "auto";
 segmented("device", (v) => (device = v));
-segmented("beforeAfter", (v) => {
-  state.showCleaned = v === "after";
-  renderGallery();
-});
+for (const id of ["beforeAfter", "jobBeforeAfter"]) {
+  segmented(id, (v) => {
+    state.showCleaned = v === "after";
+    renderGallery();
+  });
+}
 
 // ---------- 3D preview ----------
 const sceneEl = $("scene");
+// three.js lights a matte surface to colour × intensity / π, so these are
+// multiplied by π: together they light a facing wall to about its own colour,
+// which keeps the facade photos at their real brightness.
+const AMBIENT_LIGHT = 0.7 * Math.PI;
+const CORNER_LIGHT = 0.25 * Math.PI;
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
 sceneEl.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(40, 1, 0.5, 20000);
-scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 1.8));
-const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-sun.position.set(300, 600, 200);
-scene.add(sun);
+// Even light from all sides: a soft overall light plus four gentle lights from
+// the diagonal corners above the model, so every wall gets about the same
+// light and the facade photos show close to their real brightness, while
+// edges between faces still read.
+scene.add(new THREE.AmbientLight(0xffffff, AMBIENT_LIGHT));
+for (const angle of [45, 135, 225, 315]) {
+  const light = new THREE.DirectionalLight(0xffffff, CORNER_LIGHT);
+  const a = THREE.MathUtils.degToRad(angle);
+  light.position.set(Math.cos(a), 0.7, Math.sin(a));
+  scene.add(light);
+}
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.autoRotate = !reduceMotion;
@@ -446,6 +463,7 @@ async function loadModel(job) {
   const empty = $("stageEmpty");
   empty.textContent = "Loading model…";
   empty.hidden = false;
+  jobStageNote(job, "Loading model…");
   try {
     const gltf = await loader.loadAsync(`/api/jobs/${job.id}/model.glb`);
     if (model) {
@@ -453,23 +471,39 @@ async function loadModel(job) {
       disposeModel(model);
     }
     model = gltf.scene;
+    // The pipeline's materials don't set metalness, which glTF treats as fully
+    // metallic. Metal ignores ordinary lights (it only reflects), so lighting
+    // from all sides only works on a matte surface. Facades are matte anyway.
+    model.traverse((o) => {
+      const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+      for (const m of mats) {
+        if ("metalness" in m && !m.metalnessMap) m.metalness = 0;
+      }
+    });
     scene.add(model);
     frameModel();
+    state.modelJobId = job.id;
     empty.hidden = true;
+    jobStageNote(job, "");
   } catch (err) {
     empty.textContent = `Couldn't load the model: ${err.message || err}`;
+    jobStageNote(job, empty.textContent);
     return;
   }
   const dl = $("download");
   dl.href = `/api/jobs/${job.id}/model.glb?download=true`;
   dl.setAttribute("aria-disabled", "false");
-  const r = job.result || {};
-  const stats =
-    `<span><b>${r.buildings ?? "—"}</b> buildings</span>` +
-    (r.faces != null ? `<span>${r.faces.toLocaleString()} faces</span>` : "") +
-    (r.model_bytes != null ? `<span>${(r.model_bytes / 1e6).toFixed(1)} MB</span>` : "");
+  const stats = modelStatsHtml(job);
   $("meshStats").innerHTML = stats;
   $("sceneModalStats").innerHTML = stats;
+}
+function modelStatsHtml(job) {
+  const r = job.result || {};
+  return (
+    `<span><b>${r.buildings ?? "—"}</b> buildings</span>` +
+    (r.faces != null ? `<span>${r.faces.toLocaleString()} faces</span>` : "") +
+    (r.model_bytes != null ? `<span>${(r.model_bytes / 1e6).toFixed(1)} MB</span>` : "")
+  );
 }
 
 // ---------- Street imagery ----------
@@ -479,18 +513,21 @@ async function loadImages(job) {
   } catch {
     state.images = [];
   }
+  state.imagesJobId = job.id;
   renderGallery();
 }
 function renderGallery() {
   const hasCleaned = state.images.some((i) => i.cleaned);
-  const cleanedBtn = $("beforeAfter").querySelector('[data-v="after"]');
-  cleanedBtn.disabled = !hasCleaned;
   const useCleaned = state.showCleaned && hasCleaned;
-  $("beforeAfter")
-    .querySelectorAll("button")
-    .forEach((b) => b.setAttribute("aria-pressed", String((b.dataset.v === "after") === useCleaned)));
+  for (const id of ["beforeAfter", "jobBeforeAfter"]) {
+    const root = $(id);
+    root.querySelector('[data-v="after"]').disabled = !hasCleaned;
+    root
+      .querySelectorAll("button")
+      .forEach((b) => b.setAttribute("aria-pressed", String((b.dataset.v === "after") === useCleaned)));
+  }
   $("galleryEmpty").hidden = state.images.length > 0;
-  $("gallery").innerHTML = state.images
+  const html = state.images
     .map((img) => {
       const src = useCleaned && img.cleaned ? img.cleaned : img.original;
       const chip = useCleaned && img.cleaned ? `<span class="chip ok">Cleaned</span>` : `<span class="chip">Original</span>`;
@@ -499,6 +536,22 @@ function renderGallery() {
         <figcaption><span>${esc(img.id)}${heading}</span>${chip}</figcaption></figure>`;
     })
     .join("");
+  $("gallery").innerHTML = html;
+
+  // The job details dialog shows these photos only if they belong to its job.
+  const modalJob = state.jobs.find((j) => j.id === state.modalJobId);
+  if (!modalJob) return;
+  const own = state.imagesJobId === modalJob.id;
+  $("jobGallery").innerHTML = own ? html : "";
+  const empty = $("jobGalleryEmpty");
+  empty.hidden = own && state.images.length > 0;
+  $("jobBeforeAfter").hidden = !empty.hidden;
+  empty.textContent =
+    modalJob.status === "failed"
+      ? "No photos: this job failed."
+      : modalJob.status !== "done"
+        ? "Photos appear here when the job finishes."
+        : "Loading photos…";
 }
 
 // ---------- Progress timeline (built from the pipeline's own stages) ----------
@@ -628,21 +681,23 @@ function upsertJob(job) {
   if (i >= 0) state.jobs[i] = job;
   else state.jobs.unshift(job);
 }
+const statusChip = (status) =>
+  ({
+    done: `<span class="chip ok">Done</span>`,
+    failed: `<span class="chip bad">Failed</span>`,
+    running: `<span class="chip run">Running</span>`,
+    queued: `<span class="chip">Queued</span>`,
+  })[status] || "";
 function renderJobs() {
   $("jobsEmpty").hidden = state.jobs.length > 0;
   $("jobRows").innerHTML = state.jobs
     .map((j) => {
-      const chip = {
-        done: `<span class="chip ok">Done</span>`,
-        failed: `<span class="chip bad">Failed</span>`,
-        running: `<span class="chip run">Running</span>`,
-        queued: `<span class="chip">Queued</span>`,
-      }[j.status];
+      const chip = statusChip(j.status);
       const thumb = j.result?.thumbnail
         ? `<img class="thumb" src="/api/jobs/${esc(j.id)}/images/${esc(j.result.thumbnail)}" alt="">`
         : `<span class="thumb"></span>`;
       const current = state.shown?.id === j.id || state.current?.id === j.id;
-      return `<tr aria-current="${current}">
+      return `<tr data-id="${esc(j.id)}" aria-current="${current}">
         <td><div class="name-cell">${thumb}<div><button class="job-link" type="button" data-id="${esc(j.id)}">${esc(j.name)}</button>
           ${j.error ? `<span class="sub">${esc(j.error)}</span>` : ""}</div></div></td>
         <td class="mono">${fmtBox(j.bbox)}</td><td>${chip}</td>
@@ -650,11 +705,14 @@ function renderJobs() {
     })
     .join("");
 }
+// The whole row is clickable; the name button keeps it reachable by keyboard.
 $("jobRows").addEventListener("click", (e) => {
-  const btn = e.target.closest(".job-link");
-  if (!btn) return;
-  const job = state.jobs.find((j) => j.id === btn.dataset.id);
-  if (job) showJob(job);
+  const row = e.target.closest("tr[data-id]");
+  if (!row || window.getSelection().toString()) return; // let people copy a bbox
+  const job = state.jobs.find((j) => j.id === row.dataset.id);
+  if (!job) return;
+  showJob(job);
+  openJobModal(job);
 });
 
 function showJob(job) {
@@ -668,6 +726,104 @@ function showJob(job) {
   }
   renderJobs();
 }
+
+// ---------- Job details dialog ----------
+// Like the larger views, the live 3D preview and pipeline log move into the
+// dialog (so they keep updating) and go back where they were on close.
+const jobDlg = $("jobModal");
+const homes = new Map(); // element -> the spot it left, while it's in the dialog
+// holdSpace keeps the element's height in the page, so nothing behind the
+// dialog shifts while it's away.
+function moveInto(el, parent, { holdSpace = false } = {}) {
+  if (!homes.has(el)) {
+    const spot = document.createElement("div");
+    if (holdSpace) spot.style.height = `${el.offsetHeight}px`;
+    el.replaceWith(spot);
+    homes.set(el, spot);
+  }
+  parent.appendChild(el);
+}
+function moveHome(el) {
+  const spot = homes.get(el);
+  if (!spot) return;
+  spot.replaceWith(el);
+  homes.delete(el);
+}
+
+// The page behind can still change height (e.g. the gallery fills with the
+// job's photos), so on close the jobs list is put back where it was.
+let jobsTopBefore = null;
+const jobsTop = () => $("jobs").getBoundingClientRect().top;
+
+function openJobModal(job) {
+  state.modalJobId = job.id;
+  if (!jobDlg.open) jobsTopBefore = jobsTop();
+  moveInto($("logSection"), $("jobSide"), { holdSpace: true });
+  renderJobModal(job);
+  if (!jobDlg.open) jobDlg.showModal();
+}
+
+function renderJobModal(job) {
+  if (state.modalJobId !== job.id) return;
+  $("jobModalTitle").textContent = job.name;
+  $("jobModalChip").innerHTML = statusChip(job.status);
+  const done = job.status === "done";
+  $("jobModalStats").innerHTML = done ? modelStatsHtml(job) : "";
+  const dl = $("jobModalDownload");
+  if (done) dl.href = `/api/jobs/${job.id}/model.glb?download=true`;
+  else dl.removeAttribute("href");
+  dl.setAttribute("aria-disabled", String(!done));
+  $("jobFacts").innerHTML = jobFactsHtml(job);
+
+  // Only a finished job has a model to show; otherwise say why there isn't one.
+  if (done) {
+    moveInto(sceneEl, $("jobStage"));
+    jobStageNote(job, state.modelJobId === job.id ? "" : "Loading model…");
+  } else {
+    moveHome(sceneEl);
+    jobStageNote(
+      job,
+      job.status === "failed" ? "No model: this job failed." : "The model appears here when the job finishes.",
+    );
+  }
+  $("stagePlaceholder").hidden = !homes.has(sceneEl);
+  renderGallery();
+}
+
+function jobStageNote(job, text) {
+  if (state.modalJobId !== job.id) return;
+  $("jobStageEmpty").textContent = text;
+  $("jobStageEmpty").hidden = !text;
+}
+
+function jobFactsHtml(job) {
+  const { w, h } = boxSize(job.bbox);
+  const o = job.options || {};
+  const when = (t) => (t ? new Date(t).toLocaleString() : "—");
+  const rows = [
+    ["Bounding box", `<span class="mono">${fmtBox(job.bbox)}</span>`],
+    ["Area", `<span class="mono">${Math.round(w)} × ${Math.round(h)} m · ${((w * h) / 1e6).toFixed(2)} km²</span>`],
+    ["Created", esc(when(job.created_at))],
+    ["Duration", esc(duration(job))],
+    ["Obstructions", o.remove_obstructions ? `Removed · ${esc(o.seg_model)} model` : "Kept"],
+    ["Device", esc(o.device || "auto")],
+  ];
+  if (job.result?.photos != null) rows.push(["Photos", `<span class="mono">${job.result.photos}</span>`]);
+  if (job.error) rows.push(["Error", `<span class="bad">${esc(job.error)}</span>`]);
+  return rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+}
+
+jobDlg.addEventListener("click", (e) => {
+  if (e.target === jobDlg || e.target.closest("[data-close]")) jobDlg.close();
+});
+jobDlg.addEventListener("close", () => {
+  state.modalJobId = null;
+  moveHome(sceneEl);
+  moveHome($("logSection"));
+  $("stagePlaceholder").hidden = true;
+  if (jobsTopBefore != null) scrollBy({ top: jobsTop() - jobsTopBefore, behavior: "instant" });
+  jobsTopBefore = null;
+});
 
 // ---------- Live updates over WebSocket ----------
 // The server pushes {"type":"snapshot","jobs":[...]} on connect and
@@ -710,8 +866,10 @@ function finishJob(job) {
 function onJobUpdate(job) {
   const prev = state.jobs.find((j) => j.id === job.id);
   upsertJob(job);
-  // Follow a job that starts while nothing else is being watched (e.g. from another tab).
-  if (isActive(job) && !(state.current && isActive(state.current) && state.current.id !== job.id)) {
+  // Follow a job that starts while nothing else is being watched (e.g. from
+  // another tab), but not while the details of another job are open.
+  const watching = state.current && (isActive(state.current) || state.modalJobId === state.current.id);
+  if (isActive(job) && !(watching && state.current.id !== job.id)) {
     state.current = job;
   }
   if (state.current?.id === job.id) {
@@ -719,6 +877,7 @@ function onJobUpdate(job) {
     renderProgress(job);
   }
   if (prev && isActive(prev) && !isActive(job)) finishJob(job);
+  renderJobModal(job);
   renderJobs();
   renderBusy();
 }
@@ -746,6 +905,8 @@ function onSnapshot(jobs) {
     if (active) state.current = active;
     if (state.current) state.current = jobs.find((j) => j.id === state.current.id) || state.current;
     renderProgress(state.current);
+    const modalJob = jobs.find((j) => j.id === state.modalJobId);
+    if (modalJob) renderJobModal(modalJob);
   }
   renderJobs();
   renderBusy();
