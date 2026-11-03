@@ -273,9 +273,9 @@ def quat_to_rot(qw, qx, qy, qz):
 def load_cameras(model_txt):
     """(names, centres Nx3, world-from-camera rotations Nx3x3) from images.txt, sorted by name."""
     lines = [
-        l
-        for l in (Path(model_txt) / "images.txt").read_text().splitlines()
-        if l and not l.startswith("#")
+        line
+        for line in (Path(model_txt) / "images.txt").read_text().splitlines()
+        if line and not line.startswith("#")
     ]
     cams = []
     for line in lines[0::2]:
@@ -291,9 +291,9 @@ def load_cameras(model_txt):
 def load_points(model_txt):
     """(xyz Nx3, rgb Nx3 in 0..1, track length N) from points3D.txt."""
     rows = [
-        l.split()
-        for l in (Path(model_txt) / "points3D.txt").read_text().splitlines()
-        if l and not l.startswith("#")
+        line.split()
+        for line in (Path(model_txt) / "points3D.txt").read_text().splitlines()
+        if line and not line.startswith("#")
     ]
     if not rows:
         return np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0, int)
@@ -305,9 +305,9 @@ def load_points(model_txt):
 def read_camera(model_txt):
     """(model name, width, height, K, OpenCV distortion [k1, k2, p1, p2]) of the model's single camera."""
     line = next(
-        l
-        for l in (Path(model_txt) / "cameras.txt").read_text().splitlines()
-        if l and not l.startswith("#")
+        row
+        for row in (Path(model_txt) / "cameras.txt").read_text().splitlines()
+        if row and not row.startswith("#")
     )
     p = line.split()
     model, w, h, params = p[1], int(p[2]), int(p[3]), [float(v) for v in p[4:]]
@@ -341,7 +341,11 @@ def model_size(model_dir):
     if not images.exists():
         return 0
     return (
-        sum(1 for l in images.read_text().splitlines() if l and not l.startswith("#"))
+        sum(
+            1
+            for line in images.read_text().splitlines()
+            if line and not line.startswith("#")
+        )
         // 2
     )
 
@@ -370,17 +374,17 @@ def label_points(model_txt, mask_dir, values, min_fraction=0.5):
 
     model_txt, mask_dir = Path(model_txt), Path(mask_dir)
     order = [
-        int(l.split()[0])
-        for l in (model_txt / "points3D.txt").read_text().splitlines()
-        if l and not l.startswith("#")
+        int(line.split()[0])
+        for line in (model_txt / "points3D.txt").read_text().splitlines()
+        if line and not line.startswith("#")
     ]
     index = {pid: i for i, pid in enumerate(order)}
     hits, total = np.zeros(len(order)), np.zeros(len(order))
     values = np.atleast_1d(values)
     lines = [
-        l
-        for l in (model_txt / "images.txt").read_text().splitlines()
-        if not l.startswith("#")
+        line
+        for line in (model_txt / "images.txt").read_text().splitlines()
+        if not line.startswith("#")
     ]
     for header, obs in zip(lines[0::2], lines[1::2]):
         mask = cv2.imread(

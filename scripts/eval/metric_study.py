@@ -106,7 +106,7 @@ def build_variants(
     for i, sigma in enumerate(BLUR_SIGMAS, 1):
         variants[f"blur_{i}"] = crop(cv2.GaussianBlur(photo, (0, 0), sigma / scale))
     for i, frac in enumerate(SHIFTS, 1):
-        shift = np.float32([[1, 0, int(frac * crop_w)], [0, 1, 0]])
+        shift = np.array([[1, 0, int(frac * crop_w)], [0, 1, 0]], dtype=np.float32)
         shifted = cv2.warpAffine(photo, shift, (w, h), borderMode=cv2.BORDER_REPLICATE)
         variants[f"shift_{i}"] = crop(shifted)
 

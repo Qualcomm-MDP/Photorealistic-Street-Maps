@@ -9,8 +9,10 @@ First run downloads the models (a few GB total), later runs are fast.
 
 import sys
 
+import numpy as np
+import pyiqa
 import torch
-from PIL import Image
+from PIL import Image, ImageOps
 from torchvision.transforms.functional import to_tensor
 
 if len(sys.argv) != 3:
@@ -23,9 +25,6 @@ device = (
     else ("mps" if torch.backends.mps.is_available() else "cpu")
 )
 print(f"Running on: {device}\n")
-
-import numpy as np
-from PIL import ImageOps
 
 # exif_transpose = apply the rotation flag phones store, so photos aren't sideways
 photo = ImageOps.exif_transpose(Image.open(photo_path)).convert("RGB")
@@ -61,7 +60,7 @@ render = render.resize((w, h), Image.BICUBIC)
 photo_t = to_tensor(photo).unsqueeze(0).to(device)
 render_t = to_tensor(render).unsqueeze(0).to(device)
 
-results = []
+results: list[tuple[str, float | None, str]] = []
 
 # ---- DreamSim: how different do the two images look to a person? ----------
 try:
@@ -75,8 +74,6 @@ except Exception as e:
     results.append(("DreamSim", None, f"failed: {e}"))
 
 # ---- pyiqa metrics that compare the two images ------------------------------
-import pyiqa
-
 available = pyiqa.list_models()
 afine_name = next((m for m in available if "afine" in m.lower().replace("-", "")), None)
 
@@ -112,6 +109,6 @@ except Exception as e:
 # ---- print --------------------------------------------------------------------
 print(f"{'metric':<20}{'score':>10}   meaning")
 print("-" * 60)
-for name, score, note in results:
-    s = f"{score:.4f}" if score is not None else "-"
-    print(f"{name:<20}{s:>10}   {note}")
+for name, value, note in results:
+    shown = f"{value:.4f}" if value is not None else "-"
+    print(f"{name:<20}{shown:>10}   {note}")

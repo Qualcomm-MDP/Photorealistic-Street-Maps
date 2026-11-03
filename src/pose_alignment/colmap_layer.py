@@ -184,9 +184,11 @@ def colmap(log, *args, check=True):
 def num_images(model, log):
     return int(
         next(
-            l
-            for l in colmap(log, "model_analyzer", "--path", model).stderr.splitlines()
-            if "Registered images:" in l
+            line
+            for line in colmap(
+                log, "model_analyzer", "--path", model
+            ).stderr.splitlines()
+            if "Registered images:" in line
         ).split(":")[-1]
     )
 
