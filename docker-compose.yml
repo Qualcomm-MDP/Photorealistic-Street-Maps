@@ -14,6 +14,9 @@ x-common: &common
   env_file:
     - path: .env${APP_ENV:+.$APP_ENV}
       required: false
+  # Passed in too, so the app can tell people which file its settings came from.
+  environment:
+    APP_ENV: ${APP_ENV:-}
   volumes:
     - ./output:/app/output
     - model-cache:/cache
@@ -61,11 +64,23 @@ services:
   pipeline-gpu:
     <<: *gpu
 
+  # The web app also gets the project folder, so Settings can create the env
+  # file (e.g. .env) there when it doesn't exist yet, the same file this
+  # compose file reads the next time it starts.
   api:
     <<: [*cpu, *api]
+    environment: &api-environment
+      APP_ENV: ${APP_ENV:-}
+      POSM_ENV_DIR: /app/project
+    volumes: &api-volumes
+      - ./output:/app/output
+      - model-cache:/cache
+      - ./:/app/project
 
   api-gpu:
     <<: [*gpu, *api]
+    environment: *api-environment
+    volumes: *api-volumes
 
 volumes:
   model-cache:
