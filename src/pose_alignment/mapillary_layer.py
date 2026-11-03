@@ -49,19 +49,45 @@ from pathlib import Path
 
 import numpy as np
 
-from .geo_common import (ROIS_DIR, USER_AGENT, LocalFrame, RoiPaths, get_json, line_length_m, next_roi_dir,
-                    straight_stretches, wrap_deg)
+from .geo_common import (
+    ROIS_DIR,
+    USER_AGENT,
+    LocalFrame,
+    RoiPaths,
+    get_json,
+    line_length_m,
+    next_roi_dir,
+    straight_stretches,
+    wrap_deg,
+)
 
 MAPILLARY_URL = "https://graph.mapillary.com/images"
 FIELDS = [
-    "id", "sequence", "captured_at", "is_pano", "camera_type", "camera_parameters", "make", "model",
-    "width", "height", "geometry", "computed_geometry", "compass_angle", "computed_compass_angle",
-    "computed_rotation", "altitude", "computed_altitude", "thumb_2048_url", "thumb_original_url",
+    "id",
+    "sequence",
+    "captured_at",
+    "is_pano",
+    "camera_type",
+    "camera_parameters",
+    "make",
+    "model",
+    "width",
+    "height",
+    "geometry",
+    "computed_geometry",
+    "compass_angle",
+    "computed_compass_angle",
+    "computed_rotation",
+    "altitude",
+    "computed_altitude",
+    "thumb_2048_url",
+    "thumb_original_url",
 ]
 VIEWS = {"forward": 0.0, "right": 90.0, "back": 180.0, "left": -90.0}
 
 
 # ----------------------------------------------------------------------------- search
+
 
 def image_lonlat(img):
     """Mapillary's computed position (OpenSfM), or the raw GPS if there is none."""
@@ -70,9 +96,16 @@ def image_lonlat(img):
 
 
 def mapillary_images(token, bbox):
-    params = urllib.parse.urlencode({"bbox": ",".join(f"{v:.6f}" for v in bbox),
-                                     "fields": ",".join(FIELDS), "limit": 2000})
-    data = get_json(f"{MAPILLARY_URL}?{params}", headers={"Authorization": f"OAuth {token}"})
+    params = urllib.parse.urlencode(
+        {
+            "bbox": ",".join(f"{v:.6f}" for v in bbox),
+            "fields": ",".join(FIELDS),
+            "limit": 2000,
+        }
+    )
+    data = get_json(
+        f"{MAPILLARY_URL}?{params}", headers={"Authorization": f"OAuth {token}"}
+    )
     if len(data.get("data", [])) >= 2000:
         print(f"  warning: tile {bbox} hit the 2000-image limit; lower --tile")
     return data.get("data", [])
@@ -89,7 +122,12 @@ def tiles_along(segs, frame, tile, pad):
             boxes.add((math.floor(x / tile), math.floor(y / tile)))
     out = []
     for i, j in sorted(boxes):
-        x0, y0, x1, y1 = i * tile - pad, j * tile - pad, (i + 1) * tile + pad, (j + 1) * tile + pad
+        x0, y0, x1, y1 = (
+            i * tile - pad,
+            j * tile - pad,
+            (i + 1) * tile + pad,
+            (j + 1) * tile + pad,
+        )
         out.append([*frame.lonlat(x0, y0), *frame.lonlat(x1, y1)])
     return out
 
@@ -97,7 +135,10 @@ def tiles_along(segs, frame, tile, pad):
 def dist_to_segment(p, a, b):
     ax, ay = a
     dx, dy = b[0] - ax, b[1] - ay
-    t = max(0.0, min(1.0, ((p[0] - ax) * dx + (p[1] - ay) * dy) / max(dx * dx + dy * dy, 1e-12)))
+    t = max(
+        0.0,
+        min(1.0, ((p[0] - ax) * dx + (p[1] - ay) * dy) / max(dx * dx + dy * dy, 1e-12)),
+    )
     return math.hypot(p[0] - ax - t * dx, p[1] - ay - t * dy)
 
 
@@ -110,7 +151,9 @@ def continuous_runs(imgs, frame, min_spacing, max_gap_s, max_jump_m):
             step = math.dist(p, last[1])
             if step < min_spacing:
                 continue
-            if (img["captured_at"] - last[0]["captured_at"]) / 1000 > max_gap_s or step > max_jump_m:
+            if (
+                img["captured_at"] - last[0]["captured_at"]
+            ) / 1000 > max_gap_s or step > max_jump_m:
                 last = None
         if last is None:
             runs.append([])
@@ -128,13 +171,19 @@ def view_angle(run, pts):
         a, b = pts[max(k - 1, 0)], pts[min(k + 1, len(pts) - 1)]
         if compass is None or math.dist(a, b) < 0.5:
             continue
-        travel = math.degrees(math.atan2(b[0] - a[0], b[1] - a[1]))  # clockwise from north
+        travel = math.degrees(
+            math.atan2(b[0] - a[0], b[1] - a[1])
+        )  # clockwise from north
         rel.append(wrap_deg(compass - travel))
     if not rel:
         return None
     # Median of angles around the circular mean, fine for one camera's tight spread.
-    ref = math.degrees(math.atan2(sum(math.sin(math.radians(r)) for r in rel),
-                                  sum(math.cos(math.radians(r)) for r in rel)))
+    ref = math.degrees(
+        math.atan2(
+            sum(math.sin(math.radians(r)) for r in rel),
+            sum(math.cos(math.radians(r)) for r in rel),
+        )
+    )
     return wrap_deg(ref + sorted(wrap_deg(r - ref) for r in rel)[len(rel) // 2])
 
 
@@ -142,23 +191,39 @@ def summarise(seq_id, run, frame, line_samples, reach):
     pts = [frame.xy(*image_lonlat(i)) for i in run]
     steps = sorted(math.dist(a, b) for a, b in zip(pts, pts[1:])) or [float("inf")]
     P = np.array(pts)
-    covered = np.min(np.linalg.norm(line_samples[:, None] - P[None], axis=2), axis=1) <= reach
+    covered = (
+        np.min(np.linalg.norm(line_samples[:, None] - P[None], axis=2), axis=1) <= reach
+    )
     first = run[0]
     return {
         "sequence": seq_id,
         "run": run,
         "images": len(run),
         # Frames COLMAP will get: the longest straight stretch (see common.straight_stretches).
-        "straight": max((len(s) for s in straight_stretches(pts, [i["captured_at"] for i in run])), default=0),
+        "straight": max(
+            (len(s) for s in straight_stretches(pts, [i["captured_at"] for i in run])),
+            default=0,
+        ),
         "spacing_m": steps[len(steps) // 2],
         "coverage": float(covered.mean()),
-        "date": datetime.fromtimestamp(first["captured_at"] / 1000, timezone.utc).strftime("%Y-%m-%d"),
-        "camera": f'{first.get("make", "?")} {first.get("model", "?")}',
+        "date": datetime.fromtimestamp(
+            first["captured_at"] / 1000, timezone.utc
+        ).strftime("%Y-%m-%d"),
+        "camera": f"{first.get('make', '?')} {first.get('model', '?')}",
         "view_deg": view_angle(run, pts),
     }
 
 
-def find_runs(token, line, corridor, tile=80.0, min_spacing=1.0, max_gap_s=300.0, max_jump=40.0, slack=25.0):
+def find_runs(
+    token,
+    line,
+    corridor,
+    tile=80.0,
+    min_spacing=1.0,
+    max_gap_s=300.0,
+    max_jump=40.0,
+    slack=25.0,
+):
     """Continuous runs of perspective images along one drawn line: (run summaries, frame).
 
     Runs are formed from images within corridor + slack of the line and then trimmed to
@@ -175,16 +240,27 @@ def find_runs(token, line, corridor, tile=80.0, min_spacing=1.0, max_gap_s=300.0
             images[img["id"]] = img
     dist = {}
     for i in images.values():
-        if not i.get("is_pano") and i.get("camera_type", "perspective") == "perspective":
+        if (
+            not i.get("is_pano")
+            and i.get("camera_type", "perspective") == "perspective"
+        ):
             d = min(dist_to_segment(frame.xy(*image_lonlat(i)), a, b) for a, b in segs)
             if d <= corridor + slack:
                 dist[i["id"]] = d
-    print(f"  Mapillary: {len(images)} images from {len(tiles)} tiles, "
-          f"{sum(d <= corridor for d in dist.values())} perspective images within {corridor:.0f} m of the line")
+    print(
+        f"  Mapillary: {len(images)} images from {len(tiles)} tiles, "
+        f"{sum(d <= corridor for d in dist.values())} perspective images within {corridor:.0f} m of the line"
+    )
 
     # Points every 2 m along the line, to measure how much of it a run covers.
-    samples = np.vstack([np.array(a) + np.linspace(0, 1, max(2, int(math.dist(a, b) / 2)))[:, None] * np.subtract(b, a)
-                         for a, b in segs])
+    samples = np.vstack(
+        [
+            np.array(a)
+            + np.linspace(0, 1, max(2, int(math.dist(a, b) / 2)))[:, None]
+            * np.subtract(b, a)
+            for a, b in segs
+        ]
+    )
     by_seq = {}
     for img_id in dist:
         by_seq.setdefault(images[img_id]["sequence"], []).append(images[img_id])
@@ -194,7 +270,15 @@ def find_runs(token, line, corridor, tile=80.0, min_spacing=1.0, max_gap_s=300.0
         for run in continuous_runs(imgs, frame, min_spacing, max_gap_s, max_jump):
             inside = [k for k, i in enumerate(run) if dist[i["id"]] <= corridor]
             if inside:
-                runs.append(summarise(seq_id, run[inside[0]:inside[-1] + 1], frame, samples, corridor + 5))
+                runs.append(
+                    summarise(
+                        seq_id,
+                        run[inside[0] : inside[-1] + 1],
+                        frame,
+                        samples,
+                        corridor + 5,
+                    )
+                )
     return runs, frame
 
 
@@ -209,20 +293,36 @@ def rank_runs(runs, min_images=20, max_spacing=6.0, view=None, view_tol=35.0):
     run of the same street 0.3 m), then coverage of the line in 25% steps, then spacing in
     1 m steps (2.1 vs 2.2 m is no real difference), then the most frames."""
     if view:
-        runs = [r for r in runs if r["view_deg"] is not None
-                and abs(wrap_deg(r["view_deg"] - VIEWS[view])) <= view_tol]
-    return sorted(runs, key=lambda r: (r["straight"] < min_images, r["spacing_m"] > max_spacing,
-                                       -min(int(r["coverage"] * 4), 3), spacing_bucket(r), -r["images"],
-                                       r["spacing_m"]))
+        runs = [
+            r
+            for r in runs
+            if r["view_deg"] is not None
+            and abs(wrap_deg(r["view_deg"] - VIEWS[view])) <= view_tol
+        ]
+    return sorted(
+        runs,
+        key=lambda r: (
+            r["straight"] < min_images,
+            r["spacing_m"] > max_spacing,
+            -min(int(r["coverage"] * 4), 3),
+            spacing_bucket(r),
+            -r["images"],
+            r["spacing_m"],
+        ),
+    )
 
 
 def print_runs(ranked, min_images, limit=10):
-    print(f"\n  {'sequence':<24} {'images':>6} {'straight':>8} {'covers':>6} {'spacing m':>9} {'view':>6}  {'date':<10}  camera")
+    print(
+        f"\n  {'sequence':<24} {'images':>6} {'straight':>8} {'covers':>6} {'spacing m':>9} {'view':>6}  {'date':<10}  camera"
+    )
     for r in ranked[:limit]:
         flag = "" if r["straight"] >= min_images else "  (too few straight frames)"
         view = "?" if r["view_deg"] is None else f"{r['view_deg']:+.0f}"
-        print(f"  {r['sequence']:<24} {r['images']:>6} {r['straight']:>8} {100 * r['coverage']:>5.0f}% {r['spacing_m']:>9.1f} {view:>6}  "
-              f"{r['date']:<10}  {r['camera']}{flag}")
+        print(
+            f"  {r['sequence']:<24} {r['images']:>6} {r['straight']:>8} {100 * r['coverage']:>5.0f}% {r['spacing_m']:>9.1f} {view:>6}  "
+            f"{r['date']:<10}  {r['camera']}{flag}"
+        )
 
 
 def rig_siblings(pick, runs, frame, max_dist=20.0, min_overlap=0.5, margin_s=1.0):
@@ -235,11 +335,25 @@ def rig_siblings(pick, runs, frame, max_dist=20.0, min_overlap=0.5, margin_s=1.0
     for r in runs:
         if r["sequence"] == pick["sequence"] or r["camera"] != pick["camera"]:
             continue
-        inside = [i for i in r["run"] if t0 - margin_s * 1000 <= i["captured_at"] <= t1 + margin_s * 1000]
-        if len(inside) < 5 or (inside[-1]["captured_at"] - inside[0]["captured_at"]) < min_overlap * (t1 - t0):
+        inside = [
+            i
+            for i in r["run"]
+            if t0 - margin_s * 1000 <= i["captured_at"] <= t1 + margin_s * 1000
+        ]
+        if len(inside) < 5 or (
+            inside[-1]["captured_at"] - inside[0]["captured_at"]
+        ) < min_overlap * (t1 - t0):
             continue
-        dists = [math.dist((np.interp(i["captured_at"], pt, pxy[:, 0]), np.interp(i["captured_at"], pt, pxy[:, 1])),
-                           frame.xy(*image_lonlat(i))) for i in inside]
+        dists = [
+            math.dist(
+                (
+                    np.interp(i["captured_at"], pt, pxy[:, 0]),
+                    np.interp(i["captured_at"], pt, pxy[:, 1]),
+                ),
+                frame.xy(*image_lonlat(i)),
+            )
+            for i in inside
+        ]
         if np.median(dists) <= max_dist:
             best = siblings.get(r["sequence"])
             if best is None or len(inside) > len(best[1]):
@@ -249,23 +363,39 @@ def rig_siblings(pick, runs, frame, max_dist=20.0, min_overlap=0.5, margin_s=1.0
 
 # ----------------------------------------------------------------------------- download
 
+
 def frame_record(img, name):
     """The camera data kept for one frame (cameras.json)."""
     lon, lat = image_lonlat(img)
     return {
         "file": name,
         "id": img["id"],
-        "captured_at": datetime.fromtimestamp(img["captured_at"] / 1000, timezone.utc).isoformat(),
+        "captured_at": datetime.fromtimestamp(
+            img["captured_at"] / 1000, timezone.utc
+        ).isoformat(),
         "captured_at_ms": img["captured_at"],
-        "lon": lon, "lat": lat,                             # Mapillary computed (OpenSfM), else GPS
-        "gps": img["geometry"]["coordinates"],              # raw GPS [lon, lat]
+        "lon": lon,
+        "lat": lat,  # Mapillary computed (OpenSfM), else GPS
+        "gps": img["geometry"]["coordinates"],  # raw GPS [lon, lat]
         "computed": bool(img.get("computed_geometry")),
-        "compass_angle": img.get("compass_angle"),          # raw compass (deg from north)
+        "compass_angle": img.get("compass_angle"),  # raw compass (deg from north)
         "computed_compass_angle": img.get("computed_compass_angle"),
-        "computed_rotation": img.get("computed_rotation"),  # OpenSfM world-to-camera, Rodrigues
+        "computed_rotation": img.get(
+            "computed_rotation"
+        ),  # OpenSfM world-to-camera, Rodrigues
         "altitude": img.get("altitude"),
         "computed_altitude": img.get("computed_altitude"),
-        **{k: img.get(k) for k in ("camera_type", "camera_parameters", "make", "model", "width", "height")},
+        **{
+            k: img.get(k)
+            for k in (
+                "camera_type",
+                "camera_parameters",
+                "make",
+                "model",
+                "width",
+                "height",
+            )
+        },
     }
 
 
@@ -282,44 +412,76 @@ def download_sequence(imgs, folder, header, resolution="2048", workers=8):
         req = urllib.request.Request(img[url_field], headers={"User-Agent": USER_AGENT})
         for attempt in range(4):
             try:
-                with urllib.request.urlopen(req, timeout=120) as r, open(folder / name, "wb") as f:
+                with (
+                    urllib.request.urlopen(req, timeout=120) as r,
+                    open(folder / name, "wb") as f,
+                ):
                     shutil.copyfileobj(r, f)
                 return True
             except OSError:
-                time.sleep(2 ** attempt)
+                time.sleep(2**attempt)
         (folder / name).unlink(missing_ok=True)
         return False
 
     with ThreadPoolExecutor(workers) as pool:
-        ok = list(pool.map(fetch, ((img, f"download_{n:04d}.jpg") for n, img in enumerate(imgs))))
+        ok = list(
+            pool.map(
+                fetch, ((img, f"download_{n:04d}.jpg") for n, img in enumerate(imgs))
+            )
+        )
     saved = [img for img, good in zip(imgs, ok) if good]
     names = [f"frame_{n:04d}.jpg" for n in range(1, len(saved) + 1)]
     for name, n in zip(names, [n for n, good in enumerate(ok) if good]):
         (folder / f"download_{n:04d}.jpg").rename(folder / name)
     frames = [frame_record(img, name) for img, name in zip(saved, names)]
-    (folder / "cameras.json").write_text(json.dumps({**header, "frames": frames}, indent=1))
-    skipped = f" ({len(imgs) - len(saved)} that Mapillary could not serve skipped)" if len(saved) < len(imgs) else ""
+    (folder / "cameras.json").write_text(
+        json.dumps({**header, "frames": frames}, indent=1)
+    )
+    skipped = (
+        f" ({len(imgs) - len(saved)} that Mapillary could not serve skipped)"
+        if len(saved) < len(imgs)
+        else ""
+    )
     print(f"  saved {len(saved)} frames and cameras.json to {folder}{skipped}")
     return saved
 
 
-def fetch_roi(roi, token, out=None, view=None, view_tol=35.0, sequence=None, min_images=20, max_spacing=6.0,
-              max_images=None, no_rig=False, resolution="2048", list_only=False, rois_dir=ROIS_DIR):
+def fetch_roi(
+    roi,
+    token,
+    out=None,
+    view=None,
+    view_tol=35.0,
+    sequence=None,
+    min_images=20,
+    max_spacing=6.0,
+    max_images=None,
+    no_rig=False,
+    resolution="2048",
+    list_only=False,
+    rois_dir=ROIS_DIR,
+):
     """Find and download the best run plus rig siblings for every line of the ROI.
     Returns the ROI folder (None with list_only)."""
     picks = []
     for k, line in enumerate(roi["lines"], start=1):
-        print(f"Line {k}: {len(line)} points, {line_length_m(line):.0f} m, corridor {roi['corridor_m']:.0f} m")
+        print(
+            f"Line {k}: {len(line)} points, {line_length_m(line):.0f} m, corridor {roi['corridor_m']:.0f} m"
+        )
         runs, frame = find_runs(token, line, roi["corridor_m"])
         ranked = rank_runs(runs, min_images, max_spacing, view, view_tol)
         if view:
-            print(f"  {len(ranked)} runs with cameras looking {view} (within {view_tol:.0f} deg)")
+            print(
+                f"  {len(ranked)} runs with cameras looking {view} (within {view_tol:.0f} deg)"
+            )
         print_runs(ranked, min_images)
         if sequence:
             ranked = [r for r in ranked if r["sequence"] == sequence] or ranked
         if not ranked or ranked[0]["straight"] < min_images:
-            print(f"  no run with {min_images}+ frames along a straight stretch on line {k}; skipping it "
-                  "(lower --min-images, widen the corridor or draw another street)")
+            print(
+                f"  no run with {min_images}+ frames along a straight stretch on line {k}; skipping it "
+                "(lower --min-images, widen the corridor or draw another street)"
+            )
             continue
         picks.append((k, ranked[0], runs, frame))
     if list_only:
@@ -340,42 +502,115 @@ def fetch_roi(roi, token, out=None, view=None, view_tol=35.0, sequence=None, min
             folder = f"line{k}_cam{j}_{r['sequence'][:8]}"
             role = "rig sibling" if j else "primary"
             view_deg = view_angle(imgs, [frame.xy(*image_lonlat(i)) for i in imgs])
-            print(f"\n{folder}: sequence {r['sequence']} ({role}), "
-                  f"view {'?' if view_deg is None else f'{view_deg:+.0f}'} deg, {len(imgs)} frames, {r['camera']}")
-            header = {"roi": out.name, "line": k, "sequence": r["sequence"], "role": role, "camera": r["camera"],
-                      "view_deg": view_deg, "date": r["date"], "resolution": resolution}
+            print(
+                f"\n{folder}: sequence {r['sequence']} ({role}), "
+                f"view {'?' if view_deg is None else f'{view_deg:+.0f}'} deg, {len(imgs)} frames, {r['camera']}"
+            )
+            header = {
+                "roi": out.name,
+                "line": k,
+                "sequence": r["sequence"],
+                "role": role,
+                "camera": r["camera"],
+                "view_deg": view_deg,
+                "date": r["date"],
+                "resolution": resolution,
+            }
             imgs = download_sequence(imgs, paths.images / folder, header, resolution)
-            sequences.append({"folder": folder, **{key: header[key] for key in ("sequence", "line", "role", "camera",
-                                                                                 "view_deg", "date")},
-                              "frames": len(imgs), "spacing_m": round(r["spacing_m"], 2),
-                              "line_coverage": round(r["coverage"], 3) if j == 0 else None})
+            sequences.append(
+                {
+                    "folder": folder,
+                    **{
+                        key: header[key]
+                        for key in (
+                            "sequence",
+                            "line",
+                            "role",
+                            "camera",
+                            "view_deg",
+                            "date",
+                        )
+                    },
+                    "frames": len(imgs),
+                    "spacing_m": round(r["spacing_m"], 2),
+                    "line_coverage": round(r["coverage"], 3) if j == 0 else None,
+                }
+            )
     paths.sequences_json.write_text(json.dumps(sequences, indent=1))
     print(f"\nROI folder {out}: {len(sequences)} sequence(s) on {len(picks)} line(s)")
     return out
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--roi", type=Path, required=True, help="ROI file from route_gui.py (or a ROI folder)")
-    parser.add_argument("--out", type=Path, help="ROI folder (default: next free outputs/alignment/mapillary_roi_N)")
-    parser.add_argument("--view", choices=list(VIEWS), help="Only start from cameras looking this way")
-    parser.add_argument("--view-tol", type=float, default=35.0, help="Allowed deviation (deg) for --view")
-    parser.add_argument("--sequence", help="Start from this Mapillary sequence instead of the best one")
-    parser.add_argument("--min-images", type=int, default=20, help="Ignore runs with fewer frames")
-    parser.add_argument("--max-spacing", type=float, default=6.0,
-                        help="Prefer runs whose median frame spacing (m) is at most this")
-    parser.add_argument("--max-images", type=int, help="Download at most this many frames per sequence")
-    parser.add_argument("--no-rig", action="store_true", help="Do not add the rig's other cameras")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--roi",
+        type=Path,
+        required=True,
+        help="ROI file from route_gui.py (or a ROI folder)",
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        help="ROI folder (default: next free outputs/alignment/mapillary_roi_N)",
+    )
+    parser.add_argument(
+        "--view", choices=list(VIEWS), help="Only start from cameras looking this way"
+    )
+    parser.add_argument(
+        "--view-tol",
+        type=float,
+        default=35.0,
+        help="Allowed deviation (deg) for --view",
+    )
+    parser.add_argument(
+        "--sequence", help="Start from this Mapillary sequence instead of the best one"
+    )
+    parser.add_argument(
+        "--min-images", type=int, default=20, help="Ignore runs with fewer frames"
+    )
+    parser.add_argument(
+        "--max-spacing",
+        type=float,
+        default=6.0,
+        help="Prefer runs whose median frame spacing (m) is at most this",
+    )
+    parser.add_argument(
+        "--max-images", type=int, help="Download at most this many frames per sequence"
+    )
+    parser.add_argument(
+        "--no-rig", action="store_true", help="Do not add the rig's other cameras"
+    )
     parser.add_argument("--resolution", choices=["2048", "original"], default="2048")
     parser.add_argument("--list", action="store_true", help="Only list candidate runs")
-    parser.add_argument("--token", default=os.environ.get("MAPILLARY_TOKEN") or os.environ.get("MAPILLARY_ACCESS_TOKEN"))
+    parser.add_argument(
+        "--token",
+        default=os.environ.get("MAPILLARY_TOKEN")
+        or os.environ.get("MAPILLARY_ACCESS_TOKEN"),
+    )
     args = parser.parse_args()
     if not args.token:
-        raise SystemExit("Set MAPILLARY_TOKEN (client access token from https://www.mapillary.com/dashboard/developers) "
-                         "or pass --token")
+        raise SystemExit(
+            "Set MAPILLARY_TOKEN (client access token from https://www.mapillary.com/dashboard/developers) "
+            "or pass --token"
+        )
     roi_file = args.roi / "roi.json" if args.roi.is_dir() else args.roi
-    fetch_roi(json.loads(roi_file.read_text()), args.token, args.out, args.view, args.view_tol, args.sequence,
-              args.min_images, args.max_spacing, args.max_images, args.no_rig, args.resolution, args.list)
+    fetch_roi(
+        json.loads(roi_file.read_text()),
+        args.token,
+        args.out,
+        args.view,
+        args.view_tol,
+        args.sequence,
+        args.min_images,
+        args.max_spacing,
+        args.max_images,
+        args.no_rig,
+        args.resolution,
+        args.list,
+    )
 
 
 if __name__ == "__main__":

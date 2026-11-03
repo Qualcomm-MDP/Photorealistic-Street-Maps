@@ -46,9 +46,14 @@ def _use_computed(mapillary):
     n = 0
     for meta in mapillary.values():
         if meta.get("computed_latitude") is not None:
-            meta["latitude"], meta["longitude"] = meta["computed_latitude"], meta["computed_longitude"]
+            meta["latitude"], meta["longitude"] = (
+                meta["computed_latitude"],
+                meta["computed_longitude"],
+            )
             n += 1
-    print(f"  align_poses: Mapillary computed positions for {n} of {len(mapillary)} images")
+    print(
+        f"  align_poses: Mapillary computed positions for {n} of {len(mapillary)} images"
+    )
 
 
 def _run_alignment(bbox, roi_dir=None):
@@ -72,9 +77,13 @@ def _run_alignment(bbox, roi_dir=None):
     if not done["colmap"]:
         colmap_bin = os.environ.get("COLMAP_BIN")
         if colmap_bin:
-            os.environ["PATH"] = f"{Path(colmap_bin).parent}{os.pathsep}{os.environ['PATH']}"
+            os.environ["PATH"] = (
+                f"{Path(colmap_bin).parent}{os.pathsep}{os.environ['PATH']}"
+            )
         if shutil.which("colmap") is None:
-            raise RuntimeError("COLMAP not found: install it, or set COLMAP_BIN in .env to its executable")
+            raise RuntimeError(
+                "COLMAP not found: install it, or set COLMAP_BIN in .env to its executable"
+            )
         reconstruct_roi(paths.root)
     if not done["osm"]:
         align_roi(paths.root)
@@ -120,30 +129,48 @@ def _off_street_legs(paths, cameras, max_off_street_m, extend_m=50.0):
     for _, cam in cameras.values():
         pipe = cam.get("pipeline")
         if pipe and cam["reliable"]:
-            d = min(distance_to_polyline(frame.xy(pipe["lon"], pipe["lat"]), line) for line in lines_xy)
+            d = min(
+                distance_to_polyline(frame.xy(pipe["lon"], pipe["lat"]), line)
+                for line in lines_xy
+            )
             worst[cam["leg"]] = max(worst.get(cam["leg"], 0.0), d)
     return {leg: d for leg, d in worst.items() if d > max_off_street_m}
 
 
 def _apply_alignment(paths, mapillary, aligned_only=False, max_off_street_m=15.0):
     """Put the reliable aligned poses into the Mapillary metadata; returns the summary."""
-    images, counts = {}, {"overridden": 0, "added": 0, "kept_mapillary": 0, "aspect_mismatch": 0}
+    images, counts = (
+        {},
+        {"overridden": 0, "added": 0, "kept_mapillary": 0, "aspect_mismatch": 0},
+    )
     cameras = _aligned_cameras(paths)
     off_street = _off_street_legs(paths, cameras, max_off_street_m)
     for leg, d in off_street.items():
-        print(f"  align_poses: {leg} rejected: its aligned cameras end up {d:.0f} m from the street")
+        print(
+            f"  align_poses: {leg} rejected: its aligned cameras end up {d:.0f} m from the street"
+        )
     for img_id, (folder, cam) in cameras.items():
         pipe = cam.get("pipeline")
-        info = {"sequence_folder": folder, "file": cam["file"], "leg": cam.get("leg"), "reliable": cam["reliable"],
-                "leg_fit_to_walls_m": cam.get("leg_facade_to_wall_median_m")}
+        info = {
+            "sequence_folder": folder,
+            "file": cam["file"],
+            "leg": cam.get("leg"),
+            "reliable": cam["reliable"],
+            "leg_fit_to_walls_m": cam.get("leg_facade_to_wall_median_m"),
+        }
         if cam.get("leg") in off_street:
-            info["reason"] = (f"{cam['leg']} rejected: its aligned cameras end up {off_street[cam['leg']]:.0f} m "
-                              f"from the street (more than {max_off_street_m:.0f} m)")
+            info["reason"] = (
+                f"{cam['leg']} rejected: its aligned cameras end up {off_street[cam['leg']]:.0f} m "
+                f"from the street (more than {max_off_street_m:.0f} m)"
+            )
             if img_id in mapillary:
                 images[img_id] = {"source": "mapillary", **info}
             continue
         if not (pipe and cam["reliable"]):
-            info["reason"] = cam.get("not_aligned_reason") or "leg not reliable (fits the OSM walls worse than 2 m)"
+            info["reason"] = (
+                cam.get("not_aligned_reason")
+                or "leg not reliable (fits the OSM walls worse than 2 m)"
+            )
             if img_id in mapillary:
                 images[img_id] = {"source": "mapillary", **info}
             continue
@@ -152,26 +179,43 @@ def _apply_alignment(paths, mapillary, aligned_only=False, max_off_street_m=15.0
         rotvec = Rotation.from_matrix(R_wc).as_rotvec()
         yaw, pitch, roll = Rotation.from_rotvec(rotvec).as_euler("ZYX", degrees=True)
         intr = pipe["intrinsics"]
-        pose = {"latitude": pipe["lat"], "longitude": pipe["lon"], "rotvec": rotvec.tolist(),
-                "yaw": round(float(yaw), 2), "pitch": round(float(pitch), 2), "roll": round(float(roll), 2),
-                "camera_height_m": pipe["height_m"], "pose_source": "colmap"}
+        pose = {
+            "latitude": pipe["lat"],
+            "longitude": pipe["lon"],
+            "rotvec": rotvec.tolist(),
+            "yaw": round(float(yaw), 2),
+            "pitch": round(float(pitch), 2),
+            "roll": round(float(roll), 2),
+            "camera_height_m": pipe["height_m"],
+            "pose_source": "colmap",
+        }
         info["camera_height_m"] = round(pipe["height_m"], 3)
 
         meta = mapillary.get(img_id)
         if meta is None:
-            mapillary[img_id] = {**pose, "focal_length_pixels": intr["fx"], "original_width": intr["width"],
-                                 "original_height": intr["height"],
-                                 "image_url": str(paths.images / folder / cam["file"])}
+            mapillary[img_id] = {
+                **pose,
+                "focal_length_pixels": intr["fx"],
+                "original_width": intr["width"],
+                "original_height": intr["height"],
+                "image_url": str(paths.images / folder / cam["file"]),
+            }
             images[img_id] = {"source": "colmap (added)", **info}
             counts["added"] += 1
             continue
         w, h = meta.get("original_width"), meta.get("original_height")
         if not (w and h) or abs(w / h - intr["width"] / intr["height"]) > 0.02:
-            images[img_id] = {"source": "mapillary", **info, "reason": "image size differs from the aligned download"}
+            images[img_id] = {
+                "source": "mapillary",
+                **info,
+                "reason": "image size differs from the aligned download",
+            }
             counts["aspect_mismatch"] += 1
             continue
         frame = LocalFrame(meta["longitude"], meta["latitude"])
-        info["moved_m"] = round(math.dist((0.0, 0.0), frame.xy(pipe["lon"], pipe["lat"])), 3)
+        info["moved_m"] = round(
+            math.dist((0.0, 0.0), frame.xy(pipe["lon"], pipe["lat"])), 3
+        )
         if meta.get("rotvec") is not None:
             old = _heading(Rotation.from_rotvec(meta["rotvec"]).as_matrix())
             info["heading_change_deg"] = round(wrap_deg(_heading(R_wc) - old), 2)
@@ -181,30 +225,58 @@ def _apply_alignment(paths, mapillary, aligned_only=False, max_off_street_m=15.0
 
     for img_id in mapillary:
         if img_id not in images:
-            images[img_id] = {"source": "mapillary", "reason": "not in an aligned capture"}
+            images[img_id] = {
+                "source": "mapillary",
+                "reason": "not in an aligned capture",
+            }
     counts["kept_mapillary"] = sum(v["source"] == "mapillary" for v in images.values())
 
     used = counts["overridden"] + counts["added"]
     if aligned_only and used:
-        for img_id in [k for k, v in mapillary.items() if v.get("pose_source") != "colmap"]:
+        for img_id in [
+            k for k, v in mapillary.items() if v.get("pose_source") != "colmap"
+        ]:
             del mapillary[img_id]
             images[img_id]["source"] = "dropped (--aligned-only)"
         counts["kept_mapillary"] = 0
     elif aligned_only:
         print("  align_poses: no reliable aligned image, so --aligned-only is ignored")
 
-    summary = {"pose_source": "colmap", "roi_folder": str(paths.root), "aligned_only": aligned_only,
-               "rejected_legs_off_street_m": {leg: round(d, 1) for leg, d in off_street.items()}, **counts}
-    (paths.root / "pose_overrides.json").write_text(json.dumps({**summary, "images": images}, indent=1))
-    print(f"  align_poses: {counts['overridden']} images got aligned poses, {counts['added']} aligned images "
-          f"added, {counts['kept_mapillary']} kept Mapillary poses"
-          + (f", {len(images) - used - counts['kept_mapillary']} dropped" if aligned_only and used else "")
-          + f" (details: {paths.root / 'pose_overrides.json'})")
+    summary = {
+        "pose_source": "colmap",
+        "roi_folder": str(paths.root),
+        "aligned_only": aligned_only,
+        "rejected_legs_off_street_m": {
+            leg: round(d, 1) for leg, d in off_street.items()
+        },
+        **counts,
+    }
+    (paths.root / "pose_overrides.json").write_text(
+        json.dumps({**summary, "images": images}, indent=1)
+    )
+    print(
+        f"  align_poses: {counts['overridden']} images got aligned poses, {counts['added']} aligned images "
+        f"added, {counts['kept_mapillary']} kept Mapillary poses"
+        + (
+            f", {len(images) - used - counts['kept_mapillary']} dropped"
+            if aligned_only and used
+            else ""
+        )
+        + f" (details: {paths.root / 'pose_overrides.json'})"
+    )
     return summary
 
 
-POSE_KEYS = ("latitude", "longitude", "rotvec", "camera_height_m", "focal_length_pixels",
-             "original_width", "original_height", "pose_source")
+POSE_KEYS = (
+    "latitude",
+    "longitude",
+    "rotvec",
+    "camera_height_m",
+    "focal_length_pixels",
+    "original_width",
+    "original_height",
+    "pose_source",
+)
 
 
 def align_poses(value, state):
@@ -214,19 +286,40 @@ def align_poses(value, state):
         _use_computed(mapillary)
     if source == "colmap":
         try:
-            paths = _run_alignment(state.require_metadata("bbox"), state.get_metadata("alignment_dir", None))
-            state.set_metadata("pose_alignment", _apply_alignment(paths, mapillary,
-                                                                  state.get_metadata("aligned_only", False)))
+            paths = _run_alignment(
+                state.require_metadata("bbox"),
+                state.get_metadata("alignment_dir", None),
+            )
+            state.set_metadata(
+                "pose_alignment",
+                _apply_alignment(
+                    paths, mapillary, state.get_metadata("aligned_only", False)
+                ),
+            )
         except (Exception, SystemExit) as e:
-            print(f"  align_poses: alignment failed ({e}); every image keeps Mapillary's computed pose")
+            print(
+                f"  align_poses: alignment failed ({e}); every image keeps Mapillary's computed pose"
+            )
 
     for meta in mapillary.values():
         if "pose_source" not in meta:
-            meta["pose_source"] = "raw" if source == "raw" or meta.get("computed_latitude") is None else "computed"
-    state.set_metadata("camera_poses", {
-        img_id: {k: meta[k] for k in POSE_KEYS if meta.get(k) is not None} for img_id, meta in mapillary.items()
-    })
-    excluded = [i for i in state.get_metadata("exclude_images", None) or () if mapillary.pop(i, None)]
+            meta["pose_source"] = (
+                "raw"
+                if source == "raw" or meta.get("computed_latitude") is None
+                else "computed"
+            )
+    state.set_metadata(
+        "camera_poses",
+        {
+            img_id: {k: meta[k] for k in POSE_KEYS if meta.get(k) is not None}
+            for img_id, meta in mapillary.items()
+        },
+    )
+    excluded = [
+        i
+        for i in state.get_metadata("exclude_images", None) or ()
+        if mapillary.pop(i, None)
+    ]
     if excluded:
         print(f"  align_poses: {len(excluded)} held-out images removed from texturing")
     return value

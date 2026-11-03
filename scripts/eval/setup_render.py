@@ -16,15 +16,18 @@ Blender opens with:
 
 Then follow the steps printed in the terminal (also listed at the bottom of this file).
 """
+
 import sys
 
 import bpy
 import mathutils
 
 # ---- read the two file paths given after "--" -------------------------------
-argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
 if len(argv) < 2:
-    raise SystemExit("usage: blender --python setup_render.py -- model.glb photo.jpg [X Y [HEADING_DEG]]")
+    raise SystemExit(
+        "usage: blender --python setup_render.py -- model.glb photo.jpg [X Y [HEADING_DEG]]"
+    )
 glb_path, photo_path = argv[0], argv[1]
 # NOTE: Blender ignores the rotation flag phones store in photos. If the photo
 # appears sideways in the camera view, save an upright copy first (e.g. open and
@@ -40,7 +43,9 @@ bpy.ops.import_scene.gltf(filepath=glb_path)
 # The export centres each model vertically, so the ground sits at minus half the
 # building's height (z = -3 for a 6 m building). Measure it rather than assume it.
 meshes = [o for o in scene.objects if o.type == "MESH"]
-ground_z = min((o.matrix_world @ mathutils.Vector(c)).z for o in meshes for c in o.bound_box)
+ground_z = min(
+    (o.matrix_world @ mathutils.Vector(c)).z for o in meshes for c in o.bound_box
+)
 eye_z = ground_z + 1.6
 
 # ---- load the photo and match the render size to it --------------------------
@@ -53,12 +58,14 @@ scene.render.resolution_percentage = 100
 # ---- camera, with the photo overlaid in its view -----------------------------
 cam_data = bpy.data.cameras.new("EvalCamera")
 cam_data.sensor_fit = "AUTO"
-cam_data.lens = 26  # typical phone main camera (35mm-equivalent); adjust if the photo looks zoomed
+cam_data.lens = (
+    26  # typical phone main camera (35mm-equivalent); adjust if the photo looks zoomed
+)
 cam_data.show_background_images = True
 bg = cam_data.background_images.new()
 bg.image = photo
 bg.alpha = 0.5
-bg.display_depth = "FRONT"   # draw the photo over the model so you can see both
+bg.display_depth = "FRONT"  # draw the photo over the model so you can see both
 bg.frame_method = "FIT"
 cam = bpy.data.objects.new("EvalCamera", cam_data)
 scene.collection.objects.link(cam)
@@ -76,6 +83,7 @@ if len(argv) >= 4:
     cam.location = (float(argv[2]), float(argv[3]), eye_z)
 if len(argv) >= 5:
     import math
+
     cam.rotation_euler = (math.radians(90), 0.0, -math.radians(float(argv[4])))
 
 # ---- evaluation render settings ---------------------------------------------
@@ -84,7 +92,7 @@ if len(argv) >= 5:
 scene.render.engine = "BLENDER_WORKBENCH"
 scene.display.shading.light = "FLAT"
 scene.display.shading.color_type = "TEXTURE"
-scene.render.film_transparent = True          # background becomes transparent
+scene.render.film_transparent = True  # background becomes transparent
 # Blender 4+/5 default "AgX" color management shifts colors (~9/255 on our test);
 # "Standard" saves the texture colors exactly as the pipeline made them.
 scene.view_settings.view_transform = "Standard"
@@ -99,7 +107,7 @@ for window in bpy.context.window_manager.windows:
             for space in area.spaces:
                 if space.type == "VIEW_3D":
                     space.region_3d.view_perspective = "CAMERA"
-                    space.lock_camera = True        # moving the view moves the camera
+                    space.lock_camera = True  # moving the view moves the camera
                     # Workbench has no Material Preview; Rendered shows exactly what F12 renders
                     space.shading.type = "RENDERED"
 

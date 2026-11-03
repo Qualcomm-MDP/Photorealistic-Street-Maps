@@ -6,6 +6,7 @@ Run:
 
 First run downloads the models (a few GB total), later runs are fast.
 """
+
 import sys
 
 import torch
@@ -16,7 +17,11 @@ if len(sys.argv) != 3:
     sys.exit("usage: python simple_compare.py <real_photo> <render_or_second_image>")
 
 photo_path, render_path = sys.argv[1], sys.argv[2]
-device = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
+device = (
+    "cuda"
+    if torch.cuda.is_available()
+    else ("mps" if torch.backends.mps.is_available() else "cpu")
+)
 print(f"Running on: {device}\n")
 
 import numpy as np
@@ -36,7 +41,9 @@ if mask.all():
 else:
     if not mask.any():
         sys.exit("render has no visible model pixels")
-    print(f"Building covers {100 * mask.mean():.0f}% of the frame -> scoring only those pixels.")
+    print(
+        f"Building covers {100 * mask.mean():.0f}% of the frame -> scoring only those pixels."
+    )
     ys, xs = np.nonzero(mask)
     box = (xs.min(), ys.min(), xs.max() + 1, ys.max() + 1)
     photo_np = np.array(photo)
@@ -59,6 +66,7 @@ results = []
 # ---- DreamSim: how different do the two images look to a person? ----------
 try:
     from dreamsim import dreamsim
+
     model, preprocess = dreamsim(pretrained=True, device=device)
     with torch.no_grad():
         d = model(preprocess(photo).to(device), preprocess(render).to(device))
@@ -82,7 +90,9 @@ for name in [afine_name or "afine", "dists", "lpips", "ssim"]:
         metric = pyiqa.create_metric(name, device=dev)
         with torch.no_grad():
             # .clone() = give each metric its own copy; some metrics modify the image in place
-            score = float(metric(render_t.clone().to(dev), photo_t.clone().to(dev)))   # (judged, reference)
+            score = float(
+                metric(render_t.clone().to(dev), photo_t.clone().to(dev))
+            )  # (judged, reference)
         direction = "lower is better" if metric.lower_better else "higher is better"
         results.append((name.upper(), score, direction))
     except Exception as e:

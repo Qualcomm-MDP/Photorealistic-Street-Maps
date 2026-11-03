@@ -8,13 +8,14 @@ jobs.json is a list of {"out", "width", "height", "matrix" (4x4 camera-to-world)
 "lens_mm", "grey"}. Render settings match setup_render.py: Workbench, flat
 lighting, texture colours, "Standard" view transform, transparent background.
 """
+
 import json
 import sys
 
 import bpy
 import mathutils
 
-argv = sys.argv[sys.argv.index("--") + 1:]
+argv = sys.argv[sys.argv.index("--") + 1 :]
 glb_path, jobs_path = argv[0], argv[1]
 jobs = json.load(open(jobs_path))
 

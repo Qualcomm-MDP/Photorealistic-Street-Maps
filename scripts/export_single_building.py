@@ -131,11 +131,34 @@ def main():
     )
     parser.add_argument("--limit", type=int, default=200, help="Max Mapillary photos")
     parser.add_argument("--no-seg", action="store_true", default=False)
-    parser.add_argument("--poses", choices=POSE_SOURCES, default="raw", help="Camera poses for texturing")
-    parser.add_argument("--aligned-only", action="store_true", help="With --poses colmap, only aligned images")
-    parser.add_argument("--alignment-dir", metavar="DIR", default=None, help="With --poses colmap, reuse this ROI")
-    parser.add_argument("--exclude-images", default="", help="Comma-separated image ids kept out of texturing")
-    parser.add_argument("--height", type=float, default=None, help="Building height in metres (overrides OSM)")
+    parser.add_argument(
+        "--poses",
+        choices=POSE_SOURCES,
+        default="raw",
+        help="Camera poses for texturing",
+    )
+    parser.add_argument(
+        "--aligned-only",
+        action="store_true",
+        help="With --poses colmap, only aligned images",
+    )
+    parser.add_argument(
+        "--alignment-dir",
+        metavar="DIR",
+        default=None,
+        help="With --poses colmap, reuse this ROI",
+    )
+    parser.add_argument(
+        "--exclude-images",
+        default="",
+        help="Comma-separated image ids kept out of texturing",
+    )
+    parser.add_argument(
+        "--height",
+        type=float,
+        default=None,
+        help="Building height in metres (overrides OSM)",
+    )
     args = parser.parse_args()
     exclude = [i for i in args.exclude_images.split(",") if i]
 

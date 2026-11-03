@@ -57,18 +57,34 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .geo_common import (MASK_BUILDING, MASK_ROAD, MASK_SKY_OR_MOVING, LocalFrame, RoiPaths, gravity_frame, label_points,
-                    load_cameras, load_points, model_size, overpass, similarity_2d, straight_stretches)
+from .geo_common import (
+    MASK_BUILDING,
+    MASK_ROAD,
+    MASK_SKY_OR_MOVING,
+    LocalFrame,
+    RoiPaths,
+    gravity_frame,
+    label_points,
+    load_cameras,
+    load_points,
+    model_size,
+    overpass,
+    similarity_2d,
+    straight_stretches,
+)
 
 LEG_SETTINGS = ("max_turn", "trim_deg", "min_frames", "max_frames")
 
 
 # ----------------------------------------------------------------------------- legs
 
+
 def street_name(lon, lat):
     """Name of the named street nearest to a point (OSM), for labelling legs."""
     try:
-        data = overpass(f'[out:json][timeout:30];way(around:25,{lat},{lon})["highway"]["name"];out geom;')
+        data = overpass(
+            f'[out:json][timeout:30];way(around:25,{lat},{lon})["highway"]["name"];out geom;'
+        )
     except SystemExit:
         return "unknown street"
     frame = LocalFrame(lon, lat)
@@ -78,7 +94,9 @@ def street_name(lon, lat):
         for a, b in zip(pts, pts[1:]):
             d = np.subtract(b, a)
             t = np.clip(-np.dot(a, d) / max(np.dot(d, d), 1e-12), 0, 1)
-            best = min(best, (float(np.hypot(*(np.add(a, t * d)))), way["tags"]["name"]))
+            best = min(
+                best, (float(np.hypot(*(np.add(a, t * d)))), way["tags"]["name"])
+            )
     return best[1]
 
 
@@ -89,11 +107,18 @@ def plan_legs(paths, sequences, frames, settings):
     for line in sorted({s["line"] for s in sequences}):
         seqs = [s for s in sequences if s["line"] == line]
         primary = next(s for s in seqs if s["role"] == "primary")
-        pf = sorted(frames[primary["folder"]].values(), key=lambda f: f["captured_at_ms"])
+        pf = sorted(
+            frames[primary["folder"]].values(), key=lambda f: f["captured_at_ms"]
+        )
         frame = LocalFrame(pf[0]["lon"], pf[0]["lat"])
         chunks = []
         xy = [frame.xy(f["lon"], f["lat"]) for f in pf]
-        for idx in straight_stretches(xy, [f["captured_at_ms"] for f in pf], settings["max_turn"], settings["trim_deg"]):
+        for idx in straight_stretches(
+            xy,
+            [f["captured_at_ms"] for f in pf],
+            settings["max_turn"],
+            settings["trim_deg"],
+        ):
             core = [pf[i] for i in idx]
             if len(core) < settings["min_frames"]:
                 continue
@@ -106,22 +131,44 @@ def plan_legs(paths, sequences, frames, settings):
             pts = [frame.xy(f["lon"], f["lat"]) for f in core]
             cams = []
             for s in seqs:
-                window = sorted(f["file"] for f in frames[s["folder"]].values() if t0 <= f["captured_at_ms"] <= t1)
+                window = sorted(
+                    f["file"]
+                    for f in frames[s["folder"]].values()
+                    if t0 <= f["captured_at_ms"] <= t1
+                )
                 if len(window) >= 10:
-                    cams.append({"folder": s["folder"], "sequence": s["sequence"], "role": s["role"],
-                                 "view_deg": s["view_deg"], "frames": len(window), "frame_files": window})
-            leg = {"id": leg_id, "line": line, "street": street_name(mid["lon"], mid["lat"]),
-                   "primary_frames": len(core), "length_m": round(sum(math.dist(a, b) for a, b in zip(pts, pts[1:]))),
-                   "cameras": cams}
-            print(f"  {leg_id}: line {line}, {leg['street']}, {leg['length_m']} m, "
-                  + ", ".join(f"{c['folder']} {c['frames']} frames" for c in cams))
+                    cams.append(
+                        {
+                            "folder": s["folder"],
+                            "sequence": s["sequence"],
+                            "role": s["role"],
+                            "view_deg": s["view_deg"],
+                            "frames": len(window),
+                            "frame_files": window,
+                        }
+                    )
+            leg = {
+                "id": leg_id,
+                "line": line,
+                "street": street_name(mid["lon"], mid["lat"]),
+                "primary_frames": len(core),
+                "length_m": round(sum(math.dist(a, b) for a, b in zip(pts, pts[1:]))),
+                "cameras": cams,
+            }
+            print(
+                f"  {leg_id}: line {line}, {leg['street']}, {leg['length_m']} m, "
+                + ", ".join(f"{c['folder']} {c['frames']} frames" for c in cams)
+            )
             legs.append(leg)
     if not legs:
-        raise SystemExit("No straight stretch with enough frames; lower --min-frames or draw a longer route")
+        raise SystemExit(
+            "No straight stretch with enough frames; lower --min-frames or draw a longer route"
+        )
     return legs
 
 
 # ----------------------------------------------------------------------------- COLMAP
+
 
 def colmap(log, *args, check=True):
     """Run a COLMAP command, appending its output to the log file."""
@@ -135,8 +182,13 @@ def colmap(log, *args, check=True):
 
 
 def num_images(model, log):
-    return int(next(l for l in colmap(log, "model_analyzer", "--path", model).stderr.splitlines()
-                    if "Registered images:" in l).split(":")[-1])
+    return int(
+        next(
+            l
+            for l in colmap(log, "model_analyzer", "--path", model).stderr.splitlines()
+            if "Registered images:" in l
+        ).split(":")[-1]
+    )
 
 
 def merge_models(models, work, database, images, fixed_intrinsics, log):
@@ -150,25 +202,63 @@ def merge_models(models, work, database, images, fixed_intrinsics, log):
     for i, other in enumerate(models[1:]):
         out = work / f"merge_{i}"
         out.mkdir(parents=True)
-        result = colmap(log, "model_merger", "--input_path1", current, "--input_path2", other,
-                        "--output_path", out, check=False)
-        if result.returncode == 0 and "Merge succeeded" in result.stdout + result.stderr:
+        result = colmap(
+            log,
+            "model_merger",
+            "--input_path1",
+            current,
+            "--input_path2",
+            other,
+            "--output_path",
+            out,
+            check=False,
+        )
+        if (
+            result.returncode == 0
+            and "Merge succeeded" in result.stdout + result.stderr
+        ):
             current = out
     if current == models[0]:
         return None
     fixed = 0 if fixed_intrinsics else 1
     adjusted = work / "adjusted"
     adjusted.mkdir()
-    colmap(log, "bundle_adjuster", "--input_path", current, "--output_path", adjusted,
-           "--BundleAdjustment.refine_focal_length", fixed, "--BundleAdjustment.refine_extra_params", fixed)
+    colmap(
+        log,
+        "bundle_adjuster",
+        "--input_path",
+        current,
+        "--output_path",
+        adjusted,
+        "--BundleAdjustment.refine_focal_length",
+        fixed,
+        "--BundleAdjustment.refine_extra_params",
+        fixed,
+    )
     merged = work.parent / "merged"
     merged.mkdir()
-    colmap(log, "point_triangulator", "--database_path", database, "--image_path", images,
-           "--input_path", adjusted, "--output_path", merged, "--clear_points", 1, "--refine_intrinsics", 0)
+    colmap(
+        log,
+        "point_triangulator",
+        "--database_path",
+        database,
+        "--image_path",
+        images,
+        "--input_path",
+        adjusted,
+        "--output_path",
+        merged,
+        "--clear_points",
+        1,
+        "--refine_intrinsics",
+        0,
+    )
     return merged
 
 
-def run_colmap(images, out, camera_params, fix_intrinsics, mask_dir=None, overlap=10, use_gpu=0):
+def run_colmap(
+    images, out, camera_params, fix_intrinsics, mask_dir=None, overlap=10, use_gpu=0
+):
     """Features, sequential matching and the relaxed incremental mapper; every model is
     exported to txt/ and points.ply. Returns the sparse folder."""
     database, sparse, log = out / "database.db", out / "sparse", out / "colmap.log"
@@ -177,31 +267,97 @@ def run_colmap(images, out, camera_params, fix_intrinsics, mask_dir=None, overla
     if sparse.exists():
         shutil.rmtree(sparse)
     sparse.mkdir(parents=True)
-    colmap(log, "feature_extractor", "--database_path", database, "--image_path", images,
-           "--ImageReader.single_camera", 1, "--ImageReader.camera_model", "OPENCV",
-           "--ImageReader.camera_params", camera_params, "--FeatureExtraction.use_gpu", use_gpu,
-           *(["--ImageReader.mask_path", mask_dir] if mask_dir else []))
-    colmap(log, "sequential_matcher", "--database_path", database, "--SequentialMatching.overlap", overlap,
-           "--SequentialMatching.loop_detection", 0, "--FeatureMatching.use_gpu", use_gpu)
+    colmap(
+        log,
+        "feature_extractor",
+        "--database_path",
+        database,
+        "--image_path",
+        images,
+        "--ImageReader.single_camera",
+        1,
+        "--ImageReader.camera_model",
+        "OPENCV",
+        "--ImageReader.camera_params",
+        camera_params,
+        "--FeatureExtraction.use_gpu",
+        use_gpu,
+        *(["--ImageReader.mask_path", mask_dir] if mask_dir else []),
+    )
+    colmap(
+        log,
+        "sequential_matcher",
+        "--database_path",
+        database,
+        "--SequentialMatching.overlap",
+        overlap,
+        "--SequentialMatching.loop_detection",
+        0,
+        "--FeatureMatching.use_gpu",
+        use_gpu,
+    )
     # Forward motion: points near the direction of travel triangulate at small angles and
     # most tracks are short, so COLMAP's defaults (ignore two-view tracks, 1.5 deg minimum
     # angle) leave too few 3D points to register the next frame and the model splits.
-    colmap(log, "mapper", "--database_path", database, "--image_path", images, "--output_path", sparse,
-           *(["--Mapper.ba_refine_focal_length", 0, "--Mapper.ba_refine_extra_params", 0] if fix_intrinsics else []),
-           "--Mapper.tri_ignore_two_view_tracks", 0, "--Mapper.tri_min_angle", 1.0,
-           "--Mapper.filter_min_tri_angle", 1.0, "--Mapper.abs_pose_min_num_inliers", 15,
-           "--Mapper.abs_pose_min_inlier_ratio", 0.1, "--Mapper.init_min_tri_angle", 4,
-           "--Mapper.init_max_forward_motion", 0.99)
+    colmap(
+        log,
+        "mapper",
+        "--database_path",
+        database,
+        "--image_path",
+        images,
+        "--output_path",
+        sparse,
+        *(
+            ["--Mapper.ba_refine_focal_length", 0, "--Mapper.ba_refine_extra_params", 0]
+            if fix_intrinsics
+            else []
+        ),
+        "--Mapper.tri_ignore_two_view_tracks",
+        0,
+        "--Mapper.tri_min_angle",
+        1.0,
+        "--Mapper.filter_min_tri_angle",
+        1.0,
+        "--Mapper.abs_pose_min_num_inliers",
+        15,
+        "--Mapper.abs_pose_min_inlier_ratio",
+        0.1,
+        "--Mapper.init_min_tri_angle",
+        4,
+        "--Mapper.init_max_forward_motion",
+        0.99,
+    )
     models = sorted(p for p in sparse.iterdir() if p.is_dir())
     if len(models) > 1:
-        merged = merge_models(models, sparse / "_merge_work", database, images, fix_intrinsics, log)
+        merged = merge_models(
+            models, sparse / "_merge_work", database, images, fix_intrinsics, log
+        )
         shutil.rmtree(sparse / "_merge_work", ignore_errors=True)
         if merged:
             models.append(merged)
     for model in models:
         (model / "txt").mkdir(exist_ok=True)
-        colmap(log, "model_converter", "--input_path", model, "--output_path", model / "txt", "--output_type", "TXT")
-        colmap(log, "model_converter", "--input_path", model, "--output_path", model / "points.ply", "--output_type", "PLY")
+        colmap(
+            log,
+            "model_converter",
+            "--input_path",
+            model,
+            "--output_path",
+            model / "txt",
+            "--output_type",
+            "TXT",
+        )
+        colmap(
+            log,
+            "model_converter",
+            "--input_path",
+            model,
+            "--output_path",
+            model / "points.ply",
+            "--output_type",
+            "PLY",
+        )
     return sparse
 
 
@@ -223,20 +379,27 @@ def detect_overlay_rows(folder, sample=15, band=0.15):
     behind them changes. A row is overlay if enough of its pixels are both static across
     frames and on an edge; the mask covers the bottom band from the highest such row."""
     paths = sorted(folder.glob("frame_*.jpg"))
-    paths = [paths[i] for i in np.linspace(0, len(paths) - 1, min(sample, len(paths))).astype(int)]
+    paths = [
+        paths[i]
+        for i in np.linspace(0, len(paths) - 1, min(sample, len(paths))).astype(int)
+    ]
     frames = [cv2.imread(str(p), cv2.IMREAD_GRAYSCALE) for p in paths]
     h, w = frames[0].shape
     scale = 480 / w
-    small = np.stack([cv2.resize(f, (480, round(h * scale))).astype(np.float32) for f in frames])
+    small = np.stack(
+        [cv2.resize(f, (480, round(h * scale))).astype(np.float32) for f in frames]
+    )
     static = small.std(axis=0) < 6
     grad = np.hypot(*np.gradient(np.median(small, axis=0)))
     hits = (static & (grad > 25)).mean(axis=1)
     sh = small.shape[1]
-    rows = np.flatnonzero(hits[int(sh * (1 - band)):] > 0.02)
+    rows = np.flatnonzero(hits[int(sh * (1 - band)) :] > 0.02)
     if not len(rows):
         return 0
     top = int(sh * (1 - band)) + rows.min()
-    return int(np.ceil((sh - top) / scale)) + 10  # back to full resolution, plus a margin
+    return (
+        int(np.ceil((sh - top) / scale)) + 10
+    )  # back to full resolution, plus a margin
 
 
 def write_feature_masks(names, images, mask_dir, bottom_rows, seg_dir=None):
@@ -251,9 +414,11 @@ def write_feature_masks(names, images, mask_dir, bottom_rows, seg_dir=None):
         h, w = cv2.imread(str(images / name)).shape[:2]
         mask = np.full((h, w), 255, np.uint8)
         if bottom_rows:
-            mask[h - bottom_rows:] = 0
+            mask[h - bottom_rows :] = 0
         if seg_dir is not None:
-            seg = cv2.imread(str(seg_dir / f"{Path(name).stem}.png"), cv2.IMREAD_GRAYSCALE)
+            seg = cv2.imread(
+                str(seg_dir / f"{Path(name).stem}.png"), cv2.IMREAD_GRAYSCALE
+            )
             if seg is not None:
                 mask[seg == MASK_SKY_OR_MOVING] = 0
         cv2.imwrite(str(mask_dir / f"{name}.png"), mask)
@@ -272,6 +437,7 @@ def mapillary_camera_params(first, width, height):
 
 
 # ----------------------------------------------------------------------------- checks and views
+
 
 def model_scale(model_txt, frames):
     """(names, centres, rots, origin, basis, metres per model unit) from Mapillary's track."""
@@ -293,7 +459,10 @@ def camera_height(model_txt, frames, mask_dir, near_m=25.0, min_points=30):
     P = xyz[road]
     if len(P) < min_points:
         return None
-    P = P[np.min(np.linalg.norm(P[:, None] - centres[None, ::2], axis=2), axis=1) * scale < near_m]
+    P = P[
+        np.min(np.linalg.norm(P[:, None] - centres[None, ::2], axis=2), axis=1) * scale
+        < near_m
+    ]
     if len(P) < min_points:
         return None
     rng = np.random.default_rng(0)
@@ -323,7 +492,10 @@ def plot_sparse(path, model_txt, frames, mask_dir, title):
     xyz, rgb, track = load_points(model_txt)
     cam = (centres - origin) @ basis.T * scale
     pts = (xyz - origin) @ basis.T * scale
-    near = np.min(np.linalg.norm(pts[:, None, :2] - cam[None, ::3, :2], axis=2), axis=1) < 50
+    near = (
+        np.min(np.linalg.norm(pts[:, None, :2] - cam[None, ::3, :2], axis=2), axis=1)
+        < 50
+    )
     building = label_points(model_txt, mask_dir, MASK_BUILDING)[0]
     road = label_points(model_txt, mask_dir, MASK_ROAD)[0]
     # Ground to rooftops only: a few far, badly triangulated points would stretch the 3D box.
@@ -333,8 +505,18 @@ def plot_sparse(path, model_txt, frames, mask_dir, title):
 
     fig = plt.figure(figsize=(18, 8.5))
     ax = fig.add_subplot(1, 2, 1, projection="3d")
-    ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], c=rgb, s=1.2, linewidths=0, depthshade=False)
-    ax.plot(cam[:, 0], cam[:, 1], cam[:, 2], "-", color="crimson", lw=2.5, label="camera path")
+    ax.scatter(
+        pts[:, 0], pts[:, 1], pts[:, 2], c=rgb, s=1.2, linewidths=0, depthshade=False
+    )
+    ax.plot(
+        cam[:, 0],
+        cam[:, 1],
+        cam[:, 2],
+        "-",
+        color="crimson",
+        lw=2.5,
+        label="camera path",
+    )
     ax.scatter(cam[::5, 0], cam[::5, 1], cam[::5, 2], color="crimson", s=10)
     ax.set_xlabel("right [m]")
     ax.set_ylabel("forward [m]")
@@ -348,19 +530,39 @@ def plot_sparse(path, model_txt, frames, mask_dir, title):
     ax = fig.add_subplot(1, 2, 2)
     other = ~(building | road)
     ax.scatter(pts[other, 0], pts[other, 1], s=1, c="0.7", linewidths=0, label="other")
-    ax.scatter(pts[road, 0], pts[road, 1], s=1.5, c="mediumpurple", linewidths=0, label="road")
-    ax.scatter(pts[building, 0], pts[building, 1], s=1.5, c="darkorange", linewidths=0, label="building")
+    ax.scatter(
+        pts[road, 0], pts[road, 1], s=1.5, c="mediumpurple", linewidths=0, label="road"
+    )
+    ax.scatter(
+        pts[building, 0],
+        pts[building, 1],
+        s=1.5,
+        c="darkorange",
+        linewidths=0,
+        label="building",
+    )
     ax.plot(cam[:, 0], cam[:, 1], "-", color="crimson", lw=1.5, label="camera path")
     step = 0.04 * max(np.ptp(cam[:, 1]), 20.0)  # arrow length
-    ax.quiver(cam[::5, 0], cam[::5, 1], look[::5, 0], look[::5, 1], color="crimson",
-              angles="xy", scale_units="xy", scale=1 / step, width=0.003)
+    ax.quiver(
+        cam[::5, 0],
+        cam[::5, 1],
+        look[::5, 0],
+        look[::5, 1],
+        color="crimson",
+        angles="xy",
+        scale_units="xy",
+        scale=1 / step,
+        width=0.003,
+    )
     ax.set_aspect("equal")
     ax.grid(alpha=0.3)
     ax.set_xlabel("right [m]")
     ax.set_ylabel("forward [m]")
     ax.set_title("Plan view by segmentation label (arrows: viewing direction)")
     ax.legend(loc="upper right", markerscale=6)
-    fig.suptitle(f"{title}: {len(xyz)} points, {len(cam)} cameras (approximate metres from Mapillary's track)")
+    fig.suptitle(
+        f"{title}: {len(xyz)} points, {len(cam)} cameras (approximate metres from Mapillary's track)"
+    )
     fig.tight_layout()
     fig.savefig(path, dpi=100, bbox_inches="tight")
     plt.close(fig)
@@ -368,16 +570,33 @@ def plot_sparse(path, model_txt, frames, mask_dir, title):
 
 # ----------------------------------------------------------------------------- whole ROI
 
-def reconstruct_roi(roi_dir, max_turn=35.0, trim_deg=20.0, min_frames=15, max_frames=60, mask_moving=False,
-                    largest_piece=False, height_range=(0.9, 3.0), force=False):
+
+def reconstruct_roi(
+    roi_dir,
+    max_turn=35.0,
+    trim_deg=20.0,
+    min_frames=15,
+    max_frames=60,
+    mask_moving=False,
+    largest_piece=False,
+    height_range=(0.9, 3.0),
+    force=False,
+):
     """Plan the legs and run COLMAP on every leg and camera; writes legs.json."""
     paths = RoiPaths(roi_dir)
     sequences = paths.sequences()
     frames = {s["folder"]: paths.frames(s["folder"]) for s in sequences}
     for s in sequences:
         if not (paths.masks / s["folder"]).exists():
-            raise SystemExit(f"No masks for {s['folder']} in {paths.masks}: run the segmentation stage first")
-    settings = {"max_turn": max_turn, "trim_deg": trim_deg, "min_frames": min_frames, "max_frames": max_frames}
+            raise SystemExit(
+                f"No masks for {s['folder']} in {paths.masks}: run the segmentation stage first"
+            )
+    settings = {
+        "max_turn": max_turn,
+        "trim_deg": trim_deg,
+        "min_frames": min_frames,
+        "max_frames": max_frames,
+    }
     paths.colmap.mkdir(parents=True, exist_ok=True)
     old = json.loads(paths.legs_json.read_text()) if paths.legs_json.exists() else None
     if old and not force and old.get("settings") == settings:
@@ -398,12 +617,18 @@ def reconstruct_roi(roi_dir, max_turn=35.0, trim_deg=20.0, min_frames=15, max_fr
             seg = paths.masks / folder
             label = f"{leg['id']}/{folder}"
             sparse = work / "sparse"
-            w, h = cv2.imread(str(paths.images / folder / cam["frame_files"][0])).shape[1::-1]
+            w, h = cv2.imread(str(paths.images / folder / cam["frame_files"][0])).shape[
+                1::-1
+            ]
             params = mapillary_camera_params(meta[cam["frame_files"][0]], w, h)
             # Without Mapillary's calibration, self-calibrate from a generic focal.
             cam["calibration"] = "mapillary" if params else "self-calibrated"
-            params = params or f"{0.8 * max(w, h)},{0.8 * max(w, h)},{w / 2},{h / 2},0,0,0,0"
-            if force or not any(model_size(d) for d in (sparse.iterdir() if sparse.exists() else [])):
+            params = (
+                params or f"{0.8 * max(w, h)},{0.8 * max(w, h)},{w / 2},{h / 2},0,0,0,0"
+            )
+            if force or not any(
+                model_size(d) for d in (sparse.iterdir() if sparse.exists() else [])
+            ):
                 if images.exists():
                     shutil.rmtree(images)
                 images.mkdir(parents=True)
@@ -417,13 +642,22 @@ def reconstruct_roi(roi_dir, max_turn=35.0, trim_deg=20.0, min_frames=15, max_fr
                 if folder not in overlays:
                     overlays[folder] = detect_overlay_rows(paths.images / folder)
                 cam["mask_bottom"] = overlays[folder]
-                masks = write_feature_masks(cam["frame_files"], images, work / "feature_masks", cam["mask_bottom"],
-                                            seg if mask_moving else None)
-                print(f"{label}: COLMAP on {cam['frames']} frames ({cam['calibration']} calibration"
-                      f"{', overlay mask %d px' % cam['mask_bottom'] if cam['mask_bottom'] else ''}"
-                      f"{', sky/moving masked' if mask_moving else ''})")
+                masks = write_feature_masks(
+                    cam["frame_files"],
+                    images,
+                    work / "feature_masks",
+                    cam["mask_bottom"],
+                    seg if mask_moving else None,
+                )
+                print(
+                    f"{label}: COLMAP on {cam['frames']} frames ({cam['calibration']} calibration"
+                    f"{', overlay mask %d px' % cam['mask_bottom'] if cam['mask_bottom'] else ''}"
+                    f"{', sky/moving masked' if mask_moving else ''})"
+                )
                 try:
-                    run_colmap(images, work, params, cam["calibration"] == "mapillary", masks)
+                    run_colmap(
+                        images, work, params, cam["calibration"] == "mapillary", masks
+                    )
                 except RuntimeError as e:
                     print(f"  {e}")
             model, pieces = best_model(sparse, not largest_piece)
@@ -433,25 +667,50 @@ def reconstruct_roi(roi_dir, max_turn=35.0, trim_deg=20.0, min_frames=15, max_fr
                 print(f"{label}: COLMAP registered no model")
                 continue
             height = camera_height(model / "txt", meta, seg)
-            print(f"{label}: {model_size(model)}/{cam['frames']} registered{f' (pieces {pieces})' if len(pieces) > 1 else ''}, "
-                  f"camera height {'?' if height is None else f'{height:.2f} m'}")
+            print(
+                f"{label}: {model_size(model)}/{cam['frames']} registered{f' (pieces {pieces})' if len(pieces) > 1 else ''}, "
+                f"camera height {'?' if height is None else f'{height:.2f} m'}"
+            )
 
             # Calibration check, forward cameras only: a side camera sees one wall line, which a
             # wrong scale plus a shift fits just as well, so OSM cannot judge its calibration.
             forward = cam["view_deg"] is not None and abs(cam["view_deg"]) <= 35
-            suspect = (height is not None and not lo <= height <= hi) or model_size(model) < 0.8 * cam["frames"]
+            suspect = (height is not None and not lo <= height <= hi) or model_size(
+                model
+            ) < 0.8 * cam["frames"]
             if suspect and forward and cam["calibration"] == "mapillary":
-                model, height = calibration_trial(cam, model, height, work, images, meta, seg, largest_piece,
-                                                  height_range, force)
+                model, height = calibration_trial(
+                    cam,
+                    model,
+                    height,
+                    work,
+                    images,
+                    meta,
+                    seg,
+                    largest_piece,
+                    height_range,
+                    force,
+                )
             elif suspect and not forward:
-                print(f"{label}: height or registration off, but a side-facing camera cannot be checked against "
-                      "OSM; keeping Mapillary's calibration")
+                print(
+                    f"{label}: height or registration off, but a side-facing camera cannot be checked against "
+                    "OSM; keeping Mapillary's calibration"
+                )
             # Relative to the colmap folder, so the ROI folder can be moved.
-            cam.update(model=str((model / "txt").relative_to(paths.colmap)), registered=model_size(model), camera_height_m=height,
-                       merged_model=model.name == "merged")
+            cam.update(
+                model=str((model / "txt").relative_to(paths.colmap)),
+                registered=model_size(model),
+                camera_height_m=height,
+                merged_model=model.name == "merged",
+            )
             view = paths.results / "sparse_views" / f"{leg['id']}_{folder}.png"
             view.parent.mkdir(parents=True, exist_ok=True)
-            if force or not view.exists() or view.stat().st_mtime < (model / "txt" / "points3D.txt").stat().st_mtime:
+            if (
+                force
+                or not view.exists()
+                or view.stat().st_mtime
+                < (model / "txt" / "points3D.txt").stat().st_mtime
+            ):
                 plot_sparse(view, model / "txt", meta, seg, label)
         paths.legs_json.write_text(json.dumps(doc, indent=1))
     paths.legs_json.write_text(json.dumps(doc, indent=1))
@@ -459,7 +718,9 @@ def reconstruct_roi(roi_dir, max_turn=35.0, trim_deg=20.0, min_frames=15, max_fr
     return doc
 
 
-def calibration_trial(cam, model, height, work, images, meta, seg, largest_piece, height_range, force):
+def calibration_trial(
+    cam, model, height, work, images, meta, seg, largest_piece, height_range, force
+):
     """Rerun COLMAP self-calibrating, align both versions to OSM on their own and keep the one
     whose facades fit the walls better. Returns (model, height)."""
     from .osm_alignment_layer import AlignmentError, OSMAlignmentLayer
@@ -469,29 +730,52 @@ def calibration_trial(cam, model, height, work, images, meta, seg, largest_piece
     w, h = cv2.imread(str(images / cam["frame_files"][0])).shape[1::-1]
     f0 = 0.8 * max(w, h)
     if force or not best_model(work2 / "sparse")[0]:
-        print(f"  calibration check: rerunning COLMAP self-calibrating from a {f0:.0f} px focal")
+        print(
+            f"  calibration check: rerunning COLMAP self-calibrating from a {f0:.0f} px focal"
+        )
         work2.mkdir(parents=True, exist_ok=True)
         try:
-            run_colmap(images, work2, f"{f0},{f0},{w / 2},{h / 2},0,0,0,0", False,
-                       (work / "feature_masks") if (work / "feature_masks").exists() else None)
+            run_colmap(
+                images,
+                work2,
+                f"{f0},{f0},{w / 2},{h / 2},0,0,0,0",
+                False,
+                (work / "feature_masks") if (work / "feature_masks").exists() else None,
+            )
         except RuntimeError as e:
             print(f"  {e}")
     model2, _ = best_model(work2 / "sparse", not largest_piece)
     if model2 is None or model_size(model2) < 0.8 * cam["frames"]:
-        print("  self-calibrated model registered too few frames; keeping Mapillary's calibration")
+        print(
+            "  self-calibrated model registered too few frames; keeping Mapillary's calibration"
+        )
         return model, height
     height2 = camera_height(model2 / "txt", meta, seg)
     fits = {}
-    for label, mdl, hgt in (("mapillary", model, height), ("self-calibrated", model2, height2)):
+    for label, mdl, hgt in (
+        ("mapillary", model, height),
+        ("self-calibrated", model2, height2),
+    ):
         h_use = hgt if hgt is not None and lo <= hgt <= hi else 1.4
         try:
-            res = OSMAlignmentLayer(h_use).align([{"label": cam["folder"], "model": mdl / "txt", "frames": meta,
-                                                   "masks": seg}])
+            res = OSMAlignmentLayer(h_use).align(
+                [
+                    {
+                        "label": cam["folder"],
+                        "model": mdl / "txt",
+                        "frames": meta,
+                        "masks": seg,
+                    }
+                ]
+            )
             fits[label] = res["stats"]["facade_to_wall_aligned"]["all"]["median_m"]
         except AlignmentError as e:
             fits[label] = float("inf")
             print(f"  {label} trial not aligned: {e}")
-    print("  OSM facade fit, median facade-to-wall: " + ", ".join(f"{k} {v:.2f} m" for k, v in fits.items()))
+    print(
+        "  OSM facade fit, median facade-to-wall: "
+        + ", ".join(f"{k} {v:.2f} m" for k, v in fits.items())
+    )
     cam["calibration_trial"] = fits
     if fits["self-calibrated"] < 0.8 * fits["mapillary"]:
         cam["calibration"] = "self-calibrated"
@@ -500,22 +784,69 @@ def calibration_trial(cam, model, height, work, images, meta, seg, largest_piece
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("roi_dir", type=Path, help="ROI folder (outputs/alignment/mapillary_roi_N) after the segmentation stage")
-    parser.add_argument("--max-turn", type=float, default=35.0, help="Split legs at turns sharper than this (deg)")
-    parser.add_argument("--trim-deg", type=float, default=20.0, help="Keep leg frames heading within this of the leg")
-    parser.add_argument("--min-frames", type=int, default=15, help="Skip legs with fewer primary frames")
-    parser.add_argument("--max-frames", type=int, default=60, help="Cut longer legs into chunks of at most this many frames")
-    parser.add_argument("--mask-moving", action="store_true",
-                        help="Also ignore features on sky, vehicles and people (segmentation masks)")
-    parser.add_argument("--largest-piece", action="store_true",
-                        help="When COLMAP splits a leg, use its largest piece instead of the merged model")
-    parser.add_argument("--height-range", type=float, nargs=2, default=[0.9, 3.0],
-                        help="Plausible camera heights (m); outside it the calibration is checked")
-    parser.add_argument("--force", action="store_true", help="Re-plan the legs and rerun COLMAP everywhere")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "roi_dir",
+        type=Path,
+        help="ROI folder (outputs/alignment/mapillary_roi_N) after the segmentation stage",
+    )
+    parser.add_argument(
+        "--max-turn",
+        type=float,
+        default=35.0,
+        help="Split legs at turns sharper than this (deg)",
+    )
+    parser.add_argument(
+        "--trim-deg",
+        type=float,
+        default=20.0,
+        help="Keep leg frames heading within this of the leg",
+    )
+    parser.add_argument(
+        "--min-frames", type=int, default=15, help="Skip legs with fewer primary frames"
+    )
+    parser.add_argument(
+        "--max-frames",
+        type=int,
+        default=60,
+        help="Cut longer legs into chunks of at most this many frames",
+    )
+    parser.add_argument(
+        "--mask-moving",
+        action="store_true",
+        help="Also ignore features on sky, vehicles and people (segmentation masks)",
+    )
+    parser.add_argument(
+        "--largest-piece",
+        action="store_true",
+        help="When COLMAP splits a leg, use its largest piece instead of the merged model",
+    )
+    parser.add_argument(
+        "--height-range",
+        type=float,
+        nargs=2,
+        default=[0.9, 3.0],
+        help="Plausible camera heights (m); outside it the calibration is checked",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-plan the legs and rerun COLMAP everywhere",
+    )
     args = parser.parse_args()
-    reconstruct_roi(args.roi_dir, args.max_turn, args.trim_deg, args.min_frames, args.max_frames, args.mask_moving,
-                    args.largest_piece, args.height_range, args.force)
+    reconstruct_roi(
+        args.roi_dir,
+        args.max_turn,
+        args.trim_deg,
+        args.min_frames,
+        args.max_frames,
+        args.mask_moving,
+        args.largest_piece,
+        args.height_range,
+        args.force,
+    )
 
 
 if __name__ == "__main__":

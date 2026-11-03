@@ -13,31 +13,45 @@ from pathlib import Path
 import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
-ROIS_DIR = REPO / "outputs" / "alignment"  # one parent folder per ROI: mapillary_roi_N/{data,results}
-ROUTES_DIR = ROIS_DIR / "routes"           # routes drawn in route_gui.py
+ROIS_DIR = (
+    REPO / "outputs" / "alignment"
+)  # one parent folder per ROI: mapillary_roi_N/{data,results}
+ROUTES_DIR = ROIS_DIR / "routes"  # routes drawn in route_gui.py
 USER_AGENT = "umich-mdp-alignment-pipeline/1.0"
-OVERPASS_URLS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter"]
+OVERPASS_URLS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+]
 
 # Values in the segmentation masks (segmentation_layer.py). Spread over 0-255 so a mask PNG
 # is readable in any image viewer: black other, dark grey road, light grey building, white
 # sky and things that move.
 MASK_OTHER, MASK_ROAD, MASK_BUILDING, MASK_SKY_OR_MOVING = 0, 100, 200, 255
-MASK_NAMES = {MASK_OTHER: "other", MASK_ROAD: "road", MASK_BUILDING: "building",
-              MASK_SKY_OR_MOVING: "sky_or_moving"}
+MASK_NAMES = {
+    MASK_OTHER: "other",
+    MASK_ROAD: "road",
+    MASK_BUILDING: "building",
+    MASK_SKY_OR_MOVING: "sky_or_moving",
+}
 
 
 # ----------------------------------------------------------------------------- web
 
+
 def get_json(url, data=None, headers=None, retries=3):
     """GET/POST and parse JSON, retrying transient failures (429, 5xx, timeouts)."""
-    req = urllib.request.Request(url, data=data, headers={"User-Agent": USER_AGENT, **(headers or {})})
+    req = urllib.request.Request(
+        url, data=data, headers={"User-Agent": USER_AGENT, **(headers or {})}
+    )
     for attempt in range(retries):
         try:
             with urllib.request.urlopen(req, timeout=120) as r:
                 return json.load(r)
         except urllib.error.HTTPError as e:
             if e.code != 429 and e.code < 500 or attempt == retries - 1:
-                raise RuntimeError(f"HTTP {e.code} from {url.split('?')[0]}: {e.read()[:300].decode(errors='replace')}")
+                raise RuntimeError(
+                    f"HTTP {e.code} from {url.split('?')[0]}: {e.read()[:300].decode(errors='replace')}"
+                )
         except (urllib.error.URLError, TimeoutError) as e:
             if attempt == retries - 1:
                 raise RuntimeError(f"{url.split('?')[0]}: {e}")
@@ -55,6 +69,7 @@ def overpass(query):
 
 
 # ----------------------------------------------------------------------------- geography
+
 
 class LocalFrame:
     """Equirectangular metres (x east, y north) around a reference point; fine over a few km."""
@@ -87,8 +102,15 @@ def heading_deg(a, b):
     return math.degrees(math.atan2(b[0] - a[0], b[1] - a[1]))
 
 
-def straight_stretches(xy, times_ms, max_turn_deg=35.0, trim_deg=20.0, min_spacing=1.0, max_gap_s=300.0,
-                       max_jump_m=40.0):
+def straight_stretches(
+    xy,
+    times_ms,
+    max_turn_deg=35.0,
+    trim_deg=20.0,
+    min_spacing=1.0,
+    max_gap_s=300.0,
+    max_jump_m=40.0,
+):
     """Straight stretches of a camera path in capture order: lists of indices into xy.
 
     The path is split at time gaps, position jumps and sharp turns, and each piece is
@@ -109,14 +131,23 @@ def straight_stretches(xy, times_ms, max_turn_deg=35.0, trim_deg=20.0, min_spaci
             if (t - times_ms[last]) / 1000 > max_gap_s or step > max_jump_m:
                 new = True
             elif len(pts) >= 4 and math.dist(pts[0], pts[-3]) >= 10:
-                new = abs(wrap_deg(heading_deg(pts[-3], p) - heading_deg(pts[0], pts[-3]))) > max_turn_deg
+                new = (
+                    abs(
+                        wrap_deg(heading_deg(pts[-3], p) - heading_deg(pts[0], pts[-3]))
+                    )
+                    > max_turn_deg
+                )
         if new:
             pieces.append([])
             pts = []
         pieces[-1].append(i)
         pts.append(p)
         last = i
-    return [trimmed for piece in pieces if (trimmed := _trim_straight([xy[i] for i in piece], piece, trim_deg))]
+    return [
+        trimmed
+        for piece in pieces
+        if (trimmed := _trim_straight([xy[i] for i in piece], piece, trim_deg))
+    ]
 
 
 def _trim_straight(pts, idx, trim_deg, k=2):
@@ -125,12 +156,18 @@ def _trim_straight(pts, idx, trim_deg, k=2):
     h = []
     for i in range(len(pts)):
         a, b = pts[max(i - k, 0)], pts[min(i + k, len(pts) - 1)]
-        h.append(math.degrees(math.atan2(b[0] - a[0], b[1] - a[1])) if np.linalg.norm(b - a) > 0.5 else np.nan)
+        h.append(
+            math.degrees(math.atan2(b[0] - a[0], b[1] - a[1]))
+            if np.linalg.norm(b - a) > 0.5
+            else np.nan
+        )
     h = np.array(h)
     ok = ~np.isnan(h)
     if not ok.any():
         return []
-    ref = math.degrees(math.atan2(np.nanmean(np.sin(np.radians(h))), np.nanmean(np.cos(np.radians(h)))))
+    ref = math.degrees(
+        math.atan2(np.nanmean(np.sin(np.radians(h))), np.nanmean(np.cos(np.radians(h))))
+    )
     good = ok & (np.abs((h - ref + 180) % 360 - 180) <= trim_deg)
     best, cur = (0, 0), None
     for i, g in enumerate(list(good) + [False]):
@@ -140,10 +177,11 @@ def _trim_straight(pts, idx, trim_deg, k=2):
             if i - cur > best[1] - best[0]:
                 best = (cur, i)
             cur = None
-    return idx[best[0]:best[1]]
+    return idx[best[0] : best[1]]
 
 
 # ----------------------------------------------------------------------------- ROI layout
+
 
 class RoiPaths:
     """Folders of one ROI. Everything for an ROI lives in its own parent folder,
@@ -164,7 +202,10 @@ class RoiPaths:
         root = Path(roi_dir).resolve()
         # Accept a subfolder too (e.g. .../mapillary_roi_1/data or its data/mapillary).
         for _ in range(2):
-            if root.name in ("data", "mapillary", "results") and not (root / "data").exists():
+            if (
+                root.name in ("data", "mapillary", "results")
+                and not (root / "data").exists()
+            ):
                 root = root.parent
         self.root = root
         self.name = root.name
@@ -181,12 +222,19 @@ class RoiPaths:
 
     def sequences(self):
         if not self.sequences_json.exists():
-            raise SystemExit(f"{self.sequences_json} not found: run the mapillary stage first")
+            raise SystemExit(
+                f"{self.sequences_json} not found: run the mapillary stage first"
+            )
         return json.loads(self.sequences_json.read_text())
 
     def frames(self, folder):
         """Per-frame Mapillary data of one sequence folder, by file name."""
-        return {f["file"]: f for f in json.loads((self.images / folder / "cameras.json").read_text())["frames"]}
+        return {
+            f["file"]: f
+            for f in json.loads((self.images / folder / "cameras.json").read_text())[
+                "frames"
+            ]
+        }
 
 
 def next_roi_dir(rois_dir=ROIS_DIR):
@@ -199,17 +247,36 @@ def next_roi_dir(rois_dir=ROIS_DIR):
 
 # ----------------------------------------------------------------------------- COLMAP models
 
+
 def quat_to_rot(qw, qx, qy, qz):
-    return np.array([
-        [1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy - qz * qw), 2 * (qx * qz + qy * qw)],
-        [2 * (qx * qy + qz * qw), 1 - 2 * (qx * qx + qz * qz), 2 * (qy * qz - qx * qw)],
-        [2 * (qx * qz - qy * qw), 2 * (qy * qz + qx * qw), 1 - 2 * (qx * qx + qy * qy)],
-    ])
+    return np.array(
+        [
+            [
+                1 - 2 * (qy * qy + qz * qz),
+                2 * (qx * qy - qz * qw),
+                2 * (qx * qz + qy * qw),
+            ],
+            [
+                2 * (qx * qy + qz * qw),
+                1 - 2 * (qx * qx + qz * qz),
+                2 * (qy * qz - qx * qw),
+            ],
+            [
+                2 * (qx * qz - qy * qw),
+                2 * (qy * qz + qx * qw),
+                1 - 2 * (qx * qx + qy * qy),
+            ],
+        ]
+    )
 
 
 def load_cameras(model_txt):
     """(names, centres Nx3, world-from-camera rotations Nx3x3) from images.txt, sorted by name."""
-    lines = [l for l in (Path(model_txt) / "images.txt").read_text().splitlines() if l and not l.startswith("#")]
+    lines = [
+        l
+        for l in (Path(model_txt) / "images.txt").read_text().splitlines()
+        if l and not l.startswith("#")
+    ]
     cams = []
     for line in lines[0::2]:
         p = line.split()
@@ -223,7 +290,11 @@ def load_cameras(model_txt):
 
 def load_points(model_txt):
     """(xyz Nx3, rgb Nx3 in 0..1, track length N) from points3D.txt."""
-    rows = [l.split() for l in (Path(model_txt) / "points3D.txt").read_text().splitlines() if l and not l.startswith("#")]
+    rows = [
+        l.split()
+        for l in (Path(model_txt) / "points3D.txt").read_text().splitlines()
+        if l and not l.startswith("#")
+    ]
     if not rows:
         return np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0, int)
     data = np.array([r[:8] for r in rows], dtype=float)
@@ -233,15 +304,31 @@ def load_points(model_txt):
 
 def read_camera(model_txt):
     """(model name, width, height, K, OpenCV distortion [k1, k2, p1, p2]) of the model's single camera."""
-    line = next(l for l in (Path(model_txt) / "cameras.txt").read_text().splitlines() if l and not l.startswith("#"))
+    line = next(
+        l
+        for l in (Path(model_txt) / "cameras.txt").read_text().splitlines()
+        if l and not l.startswith("#")
+    )
     p = line.split()
     model, w, h, params = p[1], int(p[2]), int(p[3]), [float(v) for v in p[4:]]
     if model == "SIMPLE_RADIAL":
         f, cx, cy, k = params
-        return model, w, h, np.array([[f, 0, cx], [0, f, cy], [0, 0, 1]]), np.array([k, 0, 0, 0])
+        return (
+            model,
+            w,
+            h,
+            np.array([[f, 0, cx], [0, f, cy], [0, 0, 1]]),
+            np.array([k, 0, 0, 0]),
+        )
     if model == "OPENCV":
         fx, fy, cx, cy, k1, k2, p1, p2 = params
-        return model, w, h, np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]]), np.array([k1, k2, p1, p2])
+        return (
+            model,
+            w,
+            h,
+            np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]]),
+            np.array([k1, k2, p1, p2]),
+        )
     if model == "PINHOLE":
         fx, fy, cx, cy = params
         return model, w, h, np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]]), np.zeros(4)
@@ -253,7 +340,10 @@ def model_size(model_dir):
     images = Path(model_dir) / "txt" / "images.txt"
     if not images.exists():
         return 0
-    return sum(1 for l in images.read_text().splitlines() if l and not l.startswith("#")) // 2
+    return (
+        sum(1 for l in images.read_text().splitlines() if l and not l.startswith("#"))
+        // 2
+    )
 
 
 def gravity_frame(centres, rots):
@@ -279,14 +369,23 @@ def label_points(model_txt, mask_dir, values, min_fraction=0.5):
     import cv2
 
     model_txt, mask_dir = Path(model_txt), Path(mask_dir)
-    order = [int(l.split()[0]) for l in (model_txt / "points3D.txt").read_text().splitlines()
-             if l and not l.startswith("#")]
+    order = [
+        int(l.split()[0])
+        for l in (model_txt / "points3D.txt").read_text().splitlines()
+        if l and not l.startswith("#")
+    ]
     index = {pid: i for i, pid in enumerate(order)}
     hits, total = np.zeros(len(order)), np.zeros(len(order))
     values = np.atleast_1d(values)
-    lines = [l for l in (model_txt / "images.txt").read_text().splitlines() if not l.startswith("#")]
+    lines = [
+        l
+        for l in (model_txt / "images.txt").read_text().splitlines()
+        if not l.startswith("#")
+    ]
     for header, obs in zip(lines[0::2], lines[1::2]):
-        mask = cv2.imread(str(mask_dir / f"{Path(header.split()[9]).stem}.png"), cv2.IMREAD_GRAYSCALE)
+        mask = cv2.imread(
+            str(mask_dir / f"{Path(header.split()[9]).stem}.png"), cv2.IMREAD_GRAYSCALE
+        )
         if mask is None:
             continue
         v = np.array(obs.split(), float).reshape(-1, 3)
@@ -301,6 +400,7 @@ def label_points(model_txt, mask_dir, values, min_fraction=0.5):
 
 
 # ----------------------------------------------------------------------------- 2D similarity
+
 
 def similarity_2d(src, dst):
     """Umeyama in 2D: (scale, angle, translation) minimising |dst - (s R src + t)|."""
@@ -322,10 +422,16 @@ def apply_2d(params, xy):
 
 # ----------------------------------------------------------------------------- geometry
 
+
 def segment_distances(P, A, B):
     """Distance from each point (N, 2) to each segment A->B (M, 2): (N, M)."""
     d = B - A
-    t = np.clip(np.einsum("nmk,mk->nm", P[:, None] - A, d) / np.maximum((d * d).sum(axis=1), 1e-12), 0, 1)
+    t = np.clip(
+        np.einsum("nmk,mk->nm", P[:, None] - A, d)
+        / np.maximum((d * d).sum(axis=1), 1e-12),
+        0,
+        1,
+    )
     return np.linalg.norm(P[:, None] - (A + t[..., None] * d), axis=2)
 
 
@@ -359,7 +465,10 @@ def ransac_lines(xy, thresh, min_inliers, iters=2000, rng=None):
             d = b - a
             if np.linalg.norm(d) < 1e-6:
                 continue
-            inl = np.flatnonzero(np.abs((pts - a) @ (np.array([-d[1], d[0]]) / np.linalg.norm(d))) < thresh)
+            inl = np.flatnonzero(
+                np.abs((pts - a) @ (np.array([-d[1], d[0]]) / np.linalg.norm(d)))
+                < thresh
+            )
             if best is None or len(inl) > len(best):
                 best = inl
         if best is None or len(best) < min_inliers:
@@ -378,7 +487,9 @@ def split_segments(s, max_gap, min_inliers, min_length):
     """Split positions along a line into contiguous runs; return index arrays into s."""
     order = np.argsort(s)
     runs = np.split(order, np.flatnonzero(np.diff(s[order]) > max_gap) + 1)
-    return [run for run in runs if len(run) >= min_inliers and np.ptp(s[run]) >= min_length]
+    return [
+        run for run in runs if len(run) >= min_inliers and np.ptp(s[run]) >= min_length
+    ]
 
 
 def planarity(xy, c, d, s0, s1, thresh):

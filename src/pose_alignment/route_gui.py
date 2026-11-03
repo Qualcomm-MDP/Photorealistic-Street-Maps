@@ -31,7 +31,11 @@ PAGE = Path(__file__).resolve().parent / "route_gui.html"
 
 def make_roi(name, lines, corridor_m):
     """Validate drawn lines and add the search box around them."""
-    lines = [[(float(lon), float(lat)) for lon, lat in line] for line in lines if len(line) >= 2]
+    lines = [
+        [(float(lon), float(lat)) for lon, lat in line]
+        for line in lines
+        if len(line) >= 2
+    ]
     if not lines:
         raise ValueError("draw at least one line with two points")
     if not 1 <= corridor_m <= 200:
@@ -41,9 +45,16 @@ def make_roi(name, lines, corridor_m):
     pad_lon, pad_lat = corridor_m / frame.kx, corridor_m / frame.ky
     lons, lats = [p[0] for p in pts], [p[1] for p in pts]
     return {
-        "name": name, "created": datetime.now().isoformat(timespec="seconds"),
-        "corridor_m": float(corridor_m), "lines": lines,
-        "bbox": [min(lons) - pad_lon, min(lats) - pad_lat, max(lons) + pad_lon, max(lats) + pad_lat],
+        "name": name,
+        "created": datetime.now().isoformat(timespec="seconds"),
+        "corridor_m": float(corridor_m),
+        "lines": lines,
+        "bbox": [
+            min(lons) - pad_lon,
+            min(lats) - pad_lat,
+            max(lons) + pad_lon,
+            max(lats) + pad_lat,
+        ],
     }
 
 
@@ -73,12 +84,22 @@ def select_roi(out=None, port=0, open_browser=True):
             if self.path != "/roi":
                 return self.reply(404, {"error": "not found"})
             try:
-                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
-                roi = make_roi(str(body.get("name") or "route"), body.get("lines", []), float(body.get("corridor_m", 15)))
+                body = json.loads(
+                    self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                )
+                roi = make_roi(
+                    str(body.get("name") or "route"),
+                    body.get("lines", []),
+                    float(body.get("corridor_m", 15)),
+                )
             except (ValueError, TypeError, KeyError) as e:
                 return self.reply(400, {"error": str(e)})
             safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in roi["name"])
-            path = Path(out) if out else ROUTES_DIR / f"{safe}_{datetime.now():%Y%m%d_%H%M%S}.json"
+            path = (
+                Path(out)
+                if out
+                else ROUTES_DIR / f"{safe}_{datetime.now():%Y%m%d_%H%M%S}.json"
+            )
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(roi, indent=1))
             result.update(roi=roi, path=path)
@@ -88,7 +109,9 @@ def select_roi(out=None, port=0, open_browser=True):
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     url = f"http://127.0.0.1:{server.server_address[1]}/"
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    print(f"Route picker at {url}  (draw the route, then press 'Use this route'; Ctrl+C to cancel)")
+    print(
+        f"Route picker at {url}  (draw the route, then press 'Use this route'; Ctrl+C to cancel)"
+    )
     if open_browser:
         webbrowser.open(url)
     try:
@@ -100,15 +123,25 @@ def select_roi(out=None, port=0, open_browser=True):
         server.shutdown()
     roi = result["roi"]
     length = sum(line_length_m(line) for line in roi["lines"])
-    print(f"Route '{roi['name']}': {len(roi['lines'])} line(s), {length:.0f} m, corridor {roi['corridor_m']:.0f} m "
-          f"-> {result['path']}")
+    print(
+        f"Route '{roi['name']}': {len(roi['lines'])} line(s), {length:.0f} m, corridor {roi['corridor_m']:.0f} m "
+        f"-> {result['path']}"
+    )
     return roi, result["path"]
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--out", type=Path, help="Where to save the ROI (default outputs/alignment/routes/<name>_<time>.json)")
-    parser.add_argument("--port", type=int, default=0, help="Local port (default: any free port)")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        help="Where to save the ROI (default outputs/alignment/routes/<name>_<time>.json)",
+    )
+    parser.add_argument(
+        "--port", type=int, default=0, help="Local port (default: any free port)"
+    )
     parser.add_argument("--no-browser", action="store_true", help="Only print the URL")
     args = parser.parse_args()
     select_roi(args.out, args.port, not args.no_browser)

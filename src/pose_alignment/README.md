@@ -12,13 +12,13 @@ reconstructed facades typically sit within 0.2–0.7 m of the OSM walls (median)
 
 ## Stages
 
-| # | Stage | Script | Input | Output |
-|---|-------|--------|-------|--------|
-| 1 | gui | `route_gui.py` | — | ROI file: the drawn lines, corridor width and bounding box (`outputs/alignment/routes/*.json`) |
-| 2 | mapillary | `mapillary_layer.py` | ROI file | `data/mapillary/`: one folder per sequence (`frame_0001.jpg` …, `cameras.json`), `roi.json`, `sequences.json` |
-| 3 | segmentation | `segmentation_layer.py` | ROI folder | `data/masks/`: a building/road mask per frame (optional colour previews) |
-| 4 | colmap | `colmap_layer.py` | ROI folder + masks | `data/colmap/`: sparse models per leg and camera, `legs.json` |
-| 5 | osm | `osm_alignment_layer.py` | COLMAP models | `data/alignment/`: corrected cameras per sequence (`<sequence folder>.json`), `summary.json` |
+| #   | Stage        | Script                   | Input              | Output                                                                                                        |
+| --- | ------------ | ------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------- |
+| 1   | gui          | `route_gui.py`           | —                  | ROI file: the drawn lines, corridor width and bounding box (`outputs/alignment/routes/*.json`)                |
+| 2   | mapillary    | `mapillary_layer.py`     | ROI file           | `data/mapillary/`: one folder per sequence (`frame_0001.jpg` …, `cameras.json`), `roi.json`, `sequences.json` |
+| 3   | segmentation | `segmentation_layer.py`  | ROI folder         | `data/masks/`: a building/road mask per frame (optional colour previews)                                      |
+| 4   | colmap       | `colmap_layer.py`        | ROI folder + masks | `data/colmap/`: sparse models per leg and camera, `legs.json`                                                 |
+| 5   | osm          | `osm_alignment_layer.py` | COLMAP models      | `data/alignment/`: corrected cameras per sequence (`<sequence folder>.json`), `summary.json`                  |
 
 `run_pipeline.py` runs them in order, starting from any stage. `common.py` holds the shared
 helpers (geography, ROI folders, COLMAP readers, geometry), and `alignment_plots.py` draws the
@@ -28,12 +28,12 @@ Each ROI gets its own folder, `outputs/alignment/mapillary_roi_N/`. The output f
 above are inside its `data/` folder, and the result images are collected in its `results/`
 folder:
 
-| Image | Shows |
-|-------|-------|
-| `alignment_overview.png` | Before/after for the whole ROI |
-| `raw_gps_vs_pipeline.png` | Raw GPS against the corrected camera positions |
-| `legs/<leg>_alignment.png` | Before/after for one leg |
-| `sparse_views/<leg>_<sequence folder>.png` | 3D view of one COLMAP model |
+| Image                                      | Shows                                          |
+| ------------------------------------------ | ---------------------------------------------- |
+| `alignment_overview.png`                   | Before/after for the whole ROI                 |
+| `raw_gps_vs_pipeline.png`                  | Raw GPS against the corrected camera positions |
+| `legs/<leg>_alignment.png`                 | Before/after for one leg                       |
+| `sparse_views/<leg>_<sequence folder>.png` | 3D view of one COLMAP model                    |
 
 ### 1. Draw the route (`route_gui.py`)
 
@@ -53,7 +53,7 @@ order:
 
 1. It has enough frames.
 2. Its frames are dense enough for COLMAP: a median spacing of at most 6 m
-   (`--max-spacing`). In testing, a 7 m run split in COLMAP and ended 3.3 m off the walls.
+    (`--max-spacing`). In testing, a 7 m run split in COLMAP and ended 3.3 m off the walls.
 3. It covers the largest share of the drawn line.
 4. It has the densest spacing, then the most frames.
 
@@ -82,23 +82,23 @@ per frame on an Apple-silicon GPU (MPS) and is slower on a CPU.
 ### 4. Reconstruct (`colmap_layer.py`)
 
 - **Legs.** COLMAP cannot follow sparse street imagery around a corner, so each line's
-  capture is split into straight legs at turns over 35°. The curved frames at the corner
-  are trimmed, and long legs are cut into chunks of at most 60 frames at full density.
+    capture is split into straight legs at turns over 35°. The curved frames at the corner
+    are trimmed, and long legs are cut into chunks of at most 60 frames at full density.
 - **COLMAP per leg and camera.**
-  - SIFT features, with Mapillary's calibration held fixed.
-  - Sequential matching.
-  - The incremental mapper, with thresholds relaxed for forward motion.
-  - If the mapper splits a leg into pieces, they are merged.
+    - SIFT features, with Mapillary's calibration held fixed.
+    - Sequential matching.
+    - The incremental mapper, with thresholds relaxed for forward motion.
+    - If the mapper splits a leg into pieces, they are merged.
 - **Feature masks.**
-  - Burned-in overlays such as timestamps and bonnets are detected and ignored.
-  - `--mask-moving` also ignores sky, vehicles and people. This is off by default because
-    the pipeline was tuned without it.
+    - Burned-in overlays such as timestamps and bonnets are detected and ignored.
+    - `--mask-moving` also ignores sky, vehicles and people. This is off by default because
+        the pipeline was tuned without it.
 - **Point labels.** Each 3D point is labelled building or road from the masks.
 - **Calibration check.** The camera's height above the road plane flags a bad Mapillary
-  focal length. For forward-facing cameras, a self-calibrated rerun is then compared
-  against OSM, and the better fit is kept.
+    focal length. For forward-facing cameras, a self-calibrated rerun is then compared
+    against OSM, and the better fit is kept.
 - **Output.** `outputs/alignment/mapillary_roi_N/results/sparse_views/` has a 3D view of each model, plus
-  a plan view coloured by label.
+    a plan view coloured by label.
 
 ### 5. Align to OSM (`osm_alignment_layer.py`)
 
@@ -108,14 +108,14 @@ per frame on an Apple-silicon GPU (MPS) and is slower on a CPU.
 the outputs. For each leg, the steps are:
 
 1. **Level the model.** Building walls are vertical and the road is roughly flat, so the
-   reconstruction is turned upright using its own walls and road.
+    reconstruction is turned upright using its own walls and road.
 2. **Tie the rig's cameras together.** They are matched by capture time, and a camera
-   whose path disagrees by more than 5 m is dropped.
+    whose path disagrees by more than 5 m is dropped.
 3. **Extract facades.** Building points are projected to plan view and reduced to facade
-   line segments by RANSAC.
+    line segments by RANSAC.
 4. **Fit to OSM.** The facades are matched to the street-facing walls of the OSM
-   footprints by a global search over heading, scale and position. A robust refinement
-   then pulls each facade onto its wall's line.
+    footprints by a global search over heading, scale and position. A robust refinement
+    then pulls each facade onto its wall's line.
 
 The scale is left free when facades are seen on both sides of the street. When they are
 seen on one side only, the scale is held to Mapillary's track.
@@ -123,25 +123,25 @@ seen on one side only, the scale is held to Mapillary's track.
 Outputs:
 
 - **`<sequence folder>.json`** (in `outputs/alignment/mapillary_roi_N/data/alignment/`) has one entry per
-  frame:
-  - `pipeline`: lat/lon, height above the road, `enu_m` (metres east/north/up from
-    `enu_origin_lon_lat`), `rotation_cam_to_enu` (OpenCV camera axes in ENU),
-    `blender_matrix` (the same rotation for a Blender camera), heading/pitch/roll, and
-    `intrinsics` (COLMAP calibration of the downloaded image);
-  - `raw_gps` and `mapillary_computed`: each with its offset to the pipeline position;
-  - `not_aligned_reason`, for frames that could not be aligned (corner frames, frames
-    COLMAP did not register, dropped cameras);
-  - `reliable`: true when the frame's leg ends up within 2 m of the OSM walls (median
-    facade-to-wall, `--max-leg-error`) and closer than with Mapillary's positions alone.
-    Streets with few street-facing OSM walls, such as parking lots or set-back buildings,
-    can fail to align; their cameras are kept but marked `reliable: false`.
+    frame:
+    - `pipeline`: lat/lon, height above the road, `enu_m` (metres east/north/up from
+        `enu_origin_lon_lat`), `rotation_cam_to_enu` (OpenCV camera axes in ENU),
+        `blender_matrix` (the same rotation for a Blender camera), heading/pitch/roll, and
+        `intrinsics` (COLMAP calibration of the downloaded image);
+    - `raw_gps` and `mapillary_computed`: each with its offset to the pipeline position;
+    - `not_aligned_reason`, for frames that could not be aligned (corner frames, frames
+        COLMAP did not register, dropped cameras);
+    - `reliable`: true when the frame's leg ends up within 2 m of the OSM walls (median
+        facade-to-wall, `--max-leg-error`) and closer than with Mapillary's positions alone.
+        Streets with few street-facing OSM walls, such as parking lots or set-back buildings,
+        can fail to align; their cameras are kept but marked `reliable: false`.
 - **`results/alignment_overview.png`**: before/after for the whole ROI. The left panel shows the
-  reconstruction placed with Mapillary's positions only; the right panel shows it after
-  matching facades to OSM walls.
+    reconstruction placed with Mapillary's positions only; the right panel shows it after
+    matching facades to OSM walls.
 - **`results/raw_gps_vs_pipeline.png`**: raw GPS against corrected
-  camera positions and headings.
+    camera positions and headings.
 - **`results/legs/<leg>_alignment.png`**: the same before/after for each
-  leg.
+    leg.
 - **`summary.json`**: the numbers and any flags.
 
 ## Running
@@ -159,11 +159,11 @@ python -m pose_alignment.run_pipeline --view right --to segmentation    # stop a
 ```
 
 - **`--from`**: `gui`, `mapillary`, `segmentation`, `colmap` or `osm`. The default
-  (`auto`) starts at the GUI for a new ROI, or at the first unfinished stage of
-  `--roi-dir`. An explicit `--from` checks that the earlier stages' outputs exist, and
-  tells you which stage to start from if they don't.
+    (`auto`) starts at the GUI for a new ROI, or at the first unfinished stage of
+    `--roi-dir`. An explicit `--from` checks that the earlier stages' outputs exist, and
+    tells you which stage to start from if they don't.
 - **Reuse.** Finished work, such as segmented frames and the COLMAP models of finished
-  legs, is reused. `--force` redoes the stages that run.
+    legs, is reused. `--force` redoes the stages that run.
 - **The mapillary stage** always writes a new `mapillary_roi_N` folder.
 
 Every stage script also runs on its own:
@@ -182,24 +182,24 @@ python -m pose_alignment.osm_alignment_layer outputs/alignment/mapillary_roi_1
 
 COLMAP runs on the CPU (Homebrew COLMAP has no CUDA) and dominates the run time.
 
-| Run (measured on an Apple-silicon laptop) | Time |
-|-----|------|
-| East Huron: one camera, 36 frames, 1 leg | 2.3 min |
+| Run (measured on an Apple-silicon laptop)                                  | Time                  |
+| -------------------------------------------------------------------------- | --------------------- |
+| East Huron: one camera, 36 frames, 1 leg                                   | 2.3 min               |
 | East Madison and Thompson with a turn: two rig cameras, 323 frames, 4 legs | 10.3 min (COLMAP 7.4) |
 
 ## Setup
 
 1. The project's Poetry environment (`poetry install`) already has every package these
-   layers need (numpy, scipy, matplotlib, opencv, torch, transformers, pillow).
-   The first segmentation run downloads the Mask2Former weights (about 900 MB) from Hugging
-   Face.
+    layers need (numpy, scipy, matplotlib, opencv, torch, transformers, pillow).
+    The first segmentation run downloads the Mask2Former weights (about 900 MB) from Hugging
+    Face.
 2. COLMAP 3.9+ on the PATH (`brew install colmap` on macOS; see
-   https://colmap.github.io/install.html).
+    https://colmap.github.io/install.html).
 3. A Mapillary client access token from https://www.mapillary.com/dashboard/developers:
-   ```bash
-   export MAPILLARY_TOKEN='MLY|...'
-   ```
-   Do not commit the token.
+    ```bash
+    export MAPILLARY_TOKEN='MLY|...'
+    ```
+    Do not commit the token.
 
 OSM data comes from the public Overpass API (no key needed). The GUI's basemap is
 OpenStreetMap's own tile server by default, with OSM Humanitarian, OpenTopoMap and Esri

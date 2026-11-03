@@ -50,7 +50,11 @@ def fetch_metadata(image_ids: list[str]) -> dict[str, dict]:
     for i in range(0, len(image_ids), 50):
         resp = requests.get(
             "https://graph.mapillary.com/images",
-            params={"access_token": token, "image_ids": ",".join(image_ids[i : i + 50]), "fields": FIELDS},
+            params={
+                "access_token": token,
+                "image_ids": ",".join(image_ids[i : i + 50]),
+                "fields": FIELDS,
+            },
             timeout=60,
         )
         resp.raise_for_status()
@@ -59,16 +63,26 @@ def fetch_metadata(image_ids: list[str]) -> dict[str, dict]:
 
 
 def camera_job(
-    img: dict, sidecar: dict, transformer: Transformer, scale: float = 1.0, pose: dict | None = None
+    img: dict,
+    sidecar: dict,
+    transformer: Transformer,
+    scale: float = 1.0,
+    pose: dict | None = None,
 ) -> dict | None:
     """Blender camera for a photo: Mapillary's computed pose, or `pose` (an entry of the
     sidecar's camera_poses) when given."""
-    if img.get("camera_type") not in (None, "perspective") or not img.get("camera_parameters"):
+    if img.get("camera_type") not in (None, "perspective") or not img.get(
+        "camera_parameters"
+    ):
         return None
     if pose is not None:
         rotvec, lon, lat = pose["rotvec"], pose["longitude"], pose["latitude"]
         height = pose.get("camera_height_m") or EYE_HEIGHT_M
-        lens_mm = pose["focal_length_pixels"] / max(pose["original_width"], pose["original_height"]) * 36.0
+        lens_mm = (
+            pose["focal_length_pixels"]
+            / max(pose["original_width"], pose["original_height"])
+            * 36.0
+        )
     else:
         rotvec = img.get("computed_rotation")
         geom = img.get("computed_geometry") or img.get("geometry")
@@ -117,7 +131,14 @@ def make_overlay(photo: Image.Image, render_path: Path, out_path: Path) -> float
     mask = rgba[..., 3] > 127
     out = np.array(photo.convert("RGB"))
     thickness = max(3, photo.width // 400)
-    edge = cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_GRADIENT, np.ones((thickness, thickness), np.uint8)) > 0
+    edge = (
+        cv2.morphologyEx(
+            mask.astype(np.uint8),
+            cv2.MORPH_GRADIENT,
+            np.ones((thickness, thickness), np.uint8),
+        )
+        > 0
+    )
     out[edge] = [255, 0, 0]
     preview = Image.fromarray(out)
     preview.thumbnail((1200, 1200))
@@ -127,9 +148,16 @@ def make_overlay(photo: Image.Image, render_path: Path, out_path: Path) -> float
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("sidecar", type=Path, help="JSON written by export_single_building.py")
+    parser.add_argument(
+        "sidecar", type=Path, help="JSON written by export_single_building.py"
+    )
     parser.add_argument("image_ids", nargs="*", help="Mapillary image ids")
-    parser.add_argument("--rank", type=int, default=0, help="Rank downloaded photos by coverage, show top N")
+    parser.add_argument(
+        "--rank",
+        type=int,
+        default=0,
+        help="Rank downloaded photos by coverage, show top N",
+    )
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument(
         "--own-poses",
@@ -143,7 +171,9 @@ def main():
     glb = args.sidecar.with_suffix(".glb")
     out_dir = args.out or args.sidecar.parent / f"{args.sidecar.stem}_views"
     out_dir.mkdir(parents=True, exist_ok=True)
-    transformer = Transformer.from_crs("EPSG:4326", f"EPSG:{sidecar['utm_epsg']}", always_xy=True)
+    transformer = Transformer.from_crs(
+        "EPSG:4326", f"EPSG:{sidecar['utm_epsg']}", always_xy=True
+    )
     used = sidecar.get("texture_source_ids", {})
 
     if args.rank:
@@ -156,7 +186,10 @@ def main():
                     jobs.append({**job, "out": f"{tmp}/{img_id}.png"})
             run_blender(glb, jobs)
             coverage = {
-                Path(j["out"]).stem: float((np.array(Image.open(j["out"]))[..., 3] > 127).mean()) for j in jobs
+                Path(j["out"]).stem: float(
+                    (np.array(Image.open(j["out"]))[..., 3] > 127).mean()
+                )
+                for j in jobs
             }
         print(f"{'coverage':>8}  {'image id':<20} texture faces")
         for img_id, cov in sorted(coverage.items(), key=lambda kv: -kv[1])[: args.rank]:
@@ -174,7 +207,9 @@ def main():
         if job is None:
             print(f"Skipping {img_id}: not a regular photo or missing camera data")
             continue
-        photo_bytes = requests.get(meta[img_id]["thumb_original_url"], timeout=60).content
+        photo_bytes = requests.get(
+            meta[img_id]["thumb_original_url"], timeout=60
+        ).content
         (out_dir / f"{img_id}.jpg").write_bytes(photo_bytes)
         photos[img_id] = Image.open(BytesIO(photo_bytes))
         jobs.append({**job, "out": str(out_dir / f"{img_id}_render.png")})
@@ -182,8 +217,12 @@ def main():
     run_blender(glb, jobs)
 
     for img_id, photo in photos.items():
-        cov = make_overlay(photo, out_dir / f"{img_id}_render.png", out_dir / f"{img_id}_overlay.jpg")
-        print(f"{img_id}: building covers {cov * 100:.1f}% of the frame, texture faces from it: {used.get(img_id, 0)}")
+        cov = make_overlay(
+            photo, out_dir / f"{img_id}_render.png", out_dir / f"{img_id}_overlay.jpg"
+        )
+        print(
+            f"{img_id}: building covers {cov * 100:.1f}% of the frame, texture faces from it: {used.get(img_id, 0)}"
+        )
     print(f"Wrote {out_dir}")
 
 
