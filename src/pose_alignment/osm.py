@@ -9,7 +9,9 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from .geo_common import OSM_API_MAP, http_get, overpass
+from common.providers.overpass import OverpassClient, OverpassUnavailable
+
+from .geo_common import OSM_API_MAP, http_get
 
 
 def parse_metres(value):
@@ -31,7 +33,7 @@ def fetch_buildings(bbox, cache=None):
         ]
     w, s, e, n = bbox
     try:
-        data = overpass(
+        data = OverpassClient().fetch(
             f'[out:json][timeout:90];(way["building"]({s},{w},{n},{e});'
             f'relation["building"]({s},{w},{n},{e}););out geom;'
         )
@@ -50,7 +52,7 @@ def fetch_buildings(bbox, cache=None):
                 (el.get("tags", {}), [(p["lon"], p["lat"]) for p in ring])
                 for ring in rings
             ]
-    except SystemExit:
+    except OverpassUnavailable:
         print(
             "  Overpass is unavailable; fetching the buildings from the OpenStreetMap API instead"
         )

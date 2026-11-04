@@ -30,7 +30,8 @@ from common.redact import redact
 OPTIONAL_STAGES = {"terrain": "terrain", "naip": "naip"}
 
 SEG_MODELS = {
-    "large": "facebook/mask2former-swin-large-cityscapes-semantic",
+    # Mapillary Vistas: trained on Mapillary's own crowdsourced photos (no Tiny exists)
+    "large": "facebook/mask2former-swin-large-mapillary-vistas-semantic",
     "tiny": "facebook/mask2former-swin-tiny-cityscapes-semantic",
 }
 

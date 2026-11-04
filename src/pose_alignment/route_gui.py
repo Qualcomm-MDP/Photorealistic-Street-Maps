@@ -8,7 +8,7 @@ width and press "Use this route". The route is saved as a ROI file:
    "lines": [[[lon, lat], ...], ...],          the drawn lines
    "bbox": [min_lon, min_lat, max_lon, max_lat]}  box around the lines plus the corridor
 
-The Mapillary layer (mapillary_layer.py) takes this file and fetches the cameras inside the
+The Mapillary stage (data_ingest/mapillary_sequences.py) takes this file and fetches the cameras inside the
 corridor.
 
 Usage:

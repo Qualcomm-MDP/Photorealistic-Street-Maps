@@ -61,24 +61,19 @@ All patches (street and roof) are packed into one atlas **4096 px** wide, row by
 
 `src/segmentation/obstruction.py`:
 
-1. **Mask2Former** (Cityscapes semantic) labels every pixel. The default checkpoint is `facebook/mask2former-swin-large-cityscapes-semantic`; the web app can use Swin-Tiny instead, and the CLI reads `SEG_MODEL`. The model loads once and stays loaded, on the GPU when there is one (or `SEG_DEVICE`).
-2. The **obstruction classes** below are combined into one mask, which is dilated by 15 px to cover their edges.
+1. **Mask2Former** labels every pixel (`src/segmentation/model.py`). The default checkpoint is `facebook/mask2former-swin-large-mapillary-vistas-semantic`: trained on Mapillary Vistas, 25,000 crowdsourced Mapillary photos from many cameras and countries with 65 classes. The web app's Swin-Tiny option is a Cityscapes checkpoint (19 classes; Vistas has no Tiny), and the CLI reads `SEG_MODEL`. The model loads once and stays loaded, on the GPU when there is one (or `SEG_DEVICE`).
+2. The **obstruction classes** below, matched by name so either kind of checkpoint works, are combined into one mask, which is dilated by 15 px to cover their edges.
 3. **LaMa** fills the masked areas with plausible facade. It works on a copy scaled down to at most 1024 px on the long side, and only the masked pixels are replaced in the full-size photo.
 
-| Cityscapes class id | Class         |
-| ------------------- | ------------- |
-| 5                   | pole          |
-| 6                   | traffic light |
-| 7                   | traffic sign  |
-| 8                   | vegetation    |
-| 11                  | person        |
-| 12                  | rider         |
-| 13                  | car           |
-| 14                  | truck         |
-| 15                  | bus           |
-| 16                  | train         |
-| 17                  | motorcycle    |
-| 18                  | bicycle       |
+| Kind                | Mapillary Vistas classes                                                                                                   | Cityscapes classes                       |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Poles and signs     | Pole, Utility Pole, Street Light, Traffic Light, Traffic Sign (Front), Traffic Sign (Back), Traffic Sign Frame             | pole, traffic light, traffic sign        |
+| Vegetation          | Vegetation                                                                                                                 | vegetation                               |
+| People and animals  | Person, Bicyclist, Motorcyclist, Other Rider, Bird, Ground Animal                                                          | person, rider                            |
+| Vehicles            | Car, Truck, Bus, On Rails, Motorcycle, Bicycle, Boat, Caravan, Other Vehicle, Trailer, Wheeled Slow                        | car, truck, bus, train, motorcycle, bicycle |
+| The capture vehicle | Ego Vehicle, Car Mount                                                                                                     | (no such classes)                        |
+
+With `--poses colmap`, the photos the pose alignment downloaded and segmented (with the same Vistas checkpoint) are reused: texturing neither downloads nor segments them again.
 
 :::tip[Faster runs]
 

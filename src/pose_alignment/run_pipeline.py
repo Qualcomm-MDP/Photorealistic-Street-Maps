@@ -2,9 +2,9 @@
 
 Stages, in order (each is also its own script):
   gui           route_gui.py            draw the streets on a map -> ROI file
-  mapillary     mapillary_layer.py      best Mapillary run + rig siblings -> data/mapillary/
+  mapillary     data_ingest/mapillary_sequences.py   best Mapillary run + rig siblings -> data/mapillary/
                                         (a 360 run: right and left pinhole crops, as a two-camera rig)
-  segmentation  segmentation_layer.py   Mask2Former building/road masks -> data/masks/
+  segmentation  segmentation/street_masks.py   Mask2Former building/road masks -> data/masks/
   calibrate     calibrate.py            GeoCalib focal, distortion and per-frame gravity -> data/calibration/
                                         (--calibration mapillary: Mapillary's -> data/calibration_mapillary/)
   reconstruct   reconstruct.py          ALIKED + nearest-neighbour or LightGlue matching, COLMAP global
@@ -46,7 +46,7 @@ STAGES = ["gui", "mapillary", "segmentation", "calibrate", "reconstruct", "align
 
 def stage_done(paths):
     """Which stages have complete outputs for this ROI folder."""
-    from .segmentation_layer import missing_masks
+    from segmentation.street_masks import missing_masks
 
     done = {"gui": paths.roi_json.exists()}
     done["mapillary"] = paths.sequences_json.exists() and all(
@@ -379,7 +379,7 @@ def main():
         roi, _ = select_roi()
         timings["gui"] = time.time() - t0
     if "mapillary" in run:
-        from .mapillary_layer import fetch_roi
+        from data_ingest.mapillary_sequences import fetch_roi
 
         if not args.token:
             raise SystemExit(
@@ -411,7 +411,7 @@ def main():
             args.calibration,
         )
         timings["mapillary"] = time.time() - t0
-        from .mapillary_layer import TIMINGS
+        from data_ingest.mapillary_sequences import TIMINGS
 
         parts["mapillary"] = {
             "search Mapillary": TIMINGS["search_s"],
@@ -424,7 +424,7 @@ def main():
         # In its own process like the later stages: PyTorch's threads left running in this one made a later
         # stage's launch (fork) abort now and then on macOS (malloc "Internal invariant broken", -6).
         run_script(
-            "segmentation_layer.py",
+            "segmentation.street_masks",
             paths.root,
             *(["--device", args.device] if args.device else []),
             *(["--previews"] if args.previews else []),

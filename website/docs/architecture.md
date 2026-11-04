@@ -42,7 +42,7 @@ flowchart TD
 | Layer            | Technology                                                                | Role                                                                                 |
 | ---------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | **Data**         | OpenStreetMap (Overpass), Mapillary Graph API, Terrarium tiles, USGS NAIP | Building footprints, street photos with camera poses, ground heights, aerial photos |
-| **Segmentation** | Mask2Former (Cityscapes semantic; Swin-Large or Swin-Tiny)                | Find obstructions (cars, people, poles, vegetation, ...) in street photos            |
+| **Segmentation** | Mask2Former (Mapillary Vistas Swin-Large, or Cityscapes Swin-Tiny)        | Find obstructions (cars, people, poles, vegetation, ...) in street photos, and buildings and roads for the pose alignment |
 | **Inpainting**   | LaMa (`simple-lama-inpainting`)                                           | Fill the obstruction masks with plausible facade                                     |
 | **Mesh**         | Trimesh, Shapely, `mapbox-earcut`                                         | Extrude footprints, triangulate roofs and floors, build the scene, export `.glb`    |
 | **Vision**       | OpenCV, Pillow, NumPy, SciPy                                              | Camera projection, homography warps, atlas packing, roof alignment                   |

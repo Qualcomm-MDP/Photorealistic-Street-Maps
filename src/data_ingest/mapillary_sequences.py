@@ -1,8 +1,13 @@
-"""Stage 2 (Mapillary): fetch the images for a drawn route (ROI) into a new ROI folder.
+"""Pose alignment, stage 2 (Mapillary): the captures along an ROI's streets, downloaded
+into a new ROI folder.
 
-For each line of the ROI (route_gui.py):
-  1. Query Mapillary in small tiles along the line (a large bbox query returns only a sample
-     of the images) and keep perspective and 360 images inside the corridor, plus those
+For each line of the ROI (route_gui.py, or pose_alignment.streets_from_bbox in the main
+pipeline):
+  1. Take Mapillary's images near the line: in the main pipeline the records the fetch stage
+     got (ingest.py, which asks for ALIGNMENT_FIELDS when the poses are aligned); run on its
+     own, a query through common.providers.MapillaryClient in small tiles along the line (a
+     large bbox query returns only a sample of the images). Keep perspective and 360 images
+     inside the corridor, plus those
      up to 25 m beyond it, so a vehicle cutting a corner does not split its capture.
   2. Group by sequence (one capture session of one camera), drop near-duplicate frames taken
      while stopped (no baseline for SfM), and split each sequence into continuous runs at
@@ -38,13 +43,17 @@ writes into it too (data/ and results/). This stage writes data/mapillary/:
   roi.json        the drawn route
   sequences.json  one entry per downloaded sequence (folder, id, line, role, view, camera)
 
+With keep_originals (the main pipeline), each photo is downloaded once at full resolution
+into data/mapillary/originals/ (data_ingest.image_store), the frames are scaled from it to
+2048 px, and texturing reuses the stored photos.
+
 Needs a Mapillary client access token (https://www.mapillary.com/dashboard/developers):
-  export MAPILLARY_TOKEN='MLY|...'
+  export MAPILLARY_ACCESS_TOKEN='MLY|...'     (or MAPILLARY_TOKEN)
 
 Usage:
-  python -m pose_alignment.mapillary_layer --roi outputs/alignment/routes/my_route.json
-  python -m pose_alignment.mapillary_layer --roi outputs/alignment/routes/my_route.json --view right --list
-  python -m pose_alignment.mapillary_layer --roi outputs/alignment/mapillary_roi_18 --out outputs/alignment/mapillary_roi_19   # reuse an ROI's route
+  python -m data_ingest.mapillary_sequences --roi outputs/alignment/routes/my_route.json
+  python -m data_ingest.mapillary_sequences --roi outputs/alignment/routes/my_route.json --view right --list
+  python -m data_ingest.mapillary_sequences --roi outputs/alignment/mapillary_roi_18 --out outputs/alignment/mapillary_roi_19   # reuse an ROI's route
 """
 
 import argparse
@@ -53,29 +62,35 @@ import math
 import os
 import shutil
 import time
-import urllib.parse
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
+import cv2
 import numpy as np
 
-from .geo_common import (
+from common.constants import BoundingBox
+from common.providers.mapillary import MapillaryClient
+from data_ingest.image_store import ImageStore, fetch_bytes
+from data_ingest.pano import (
+    PANO_SIDES,
+    crop_rotvec,
+    crop_size,
+    crop_view,
+    is_pano,
+)
+from pose_alignment.geo_common import (
     ROIS_DIR,
-    SSL_CONTEXT,
-    USER_AGENT,
     LocalFrame,
     RoiPaths,
-    get_json,
     line_length_m,
     next_roi_dir,
     straight_stretches,
     wrap_deg,
 )
 
-MAPILLARY_URL = "https://graph.mapillary.com/images"
-FIELDS = [
+# The Mapillary fields this stage needs (ingest.py adds them to its own when aligning).
+ALIGNMENT_FIELDS = FIELDS = [
     "id",
     "sequence",
     "captured_at",
@@ -97,12 +112,6 @@ FIELDS = [
     "thumb_original_url",
 ]
 VIEWS = {"forward": 0.0, "right": 90.0, "back": 180.0, "left": -90.0}
-PANO_TYPES = ("spherical", "equirectangular")
-PANO_SIDES = {
-    "right": 90.0,
-    "left": -90.0,
-}  # crop directions relative to travel; the first is the primary
-PANO_MAX_WIDTH = 2048  # crops no larger than a perspective frame at --resolution 2048
 
 
 # ----------------------------------------------------------------------------- search
@@ -112,26 +121,6 @@ def image_lonlat(img):
     """Mapillary's computed position (OpenSfM), or the raw GPS if there is none."""
     geom = img.get("computed_geometry") or img["geometry"]
     return geom["coordinates"]
-
-
-def is_pano(img):
-    return bool(img.get("is_pano")) or img.get("camera_type") in PANO_TYPES
-
-
-def mapillary_images(token, bbox):
-    params = urllib.parse.urlencode(
-        {
-            "bbox": ",".join(f"{v:.6f}" for v in bbox),
-            "fields": ",".join(FIELDS),
-            "limit": 2000,
-        }
-    )
-    data = get_json(
-        f"{MAPILLARY_URL}?{params}", headers={"Authorization": f"OAuth {token}"}
-    )
-    if len(data.get("data", [])) >= 2000:
-        print(f"  warning: tile {bbox} hit the 2000-image limit; lower --tile")
-    return data.get("data", [])
 
 
 def tiles_along(segs, frame, tile, pad):
@@ -238,8 +227,25 @@ def summarise(seq_id, run, frame, line_samples, reach):
     }
 
 
+def line_images(line, corridor, tile=80.0, slack=25.0, client=None):
+    """{id: Mapillary record} of the images in tiles of about tile x tile metres along the line
+    (plus corridor + slack), from Mapillary's API."""
+    client = client or MapillaryClient()
+    frame = LocalFrame(*line[0])
+    xy = [frame.xy(*p) for p in line]
+    images = {}
+    tiles = tiles_along(list(zip(xy, xy[1:])), frame, tile, corridor + slack)
+    for w, s, e, n in tiles:
+        # one request per tile (split only when Mapillary's 2000-image cap is near)
+        box = BoundingBox(min_lat=s, max_lat=n, min_lon=w, max_lon=e)
+        for img in client.fetch_images(box, FIELDS, tile_deg=1.0):
+            images[img["id"]] = img
+    print(f"  Mapillary: {len(images)} images from {len(tiles)} tiles")
+    return images
+
+
 def find_runs(
-    token,
+    images,
     line,
     corridor,
     tile=80.0,
@@ -249,6 +255,7 @@ def find_runs(
     slack=25.0,
 ):
     """Continuous runs of perspective or 360 images along one drawn line: (run summaries, frame).
+    images: {id: Mapillary record} near the line (line_images, or the fetch stage's records).
 
     Runs are formed from images within corridor + slack of the line and then trimmed to
     start and end inside the corridor: where a vehicle cuts a corner, the frames just
@@ -257,11 +264,6 @@ def find_runs(
     frame = LocalFrame(*line[0])
     xy = [frame.xy(*p) for p in line]
     segs = list(zip(xy, xy[1:]))
-    images = {}
-    tiles = tiles_along(segs, frame, tile, corridor + slack)
-    for box in tiles:
-        for img in mapillary_images(token, box):
-            images[img["id"]] = img
     dist = {}
     for i in images.values():
         if is_pano(i) or i.get("camera_type", "perspective") == "perspective":
@@ -269,7 +271,7 @@ def find_runs(
             if d <= corridor + slack:
                 dist[i["id"]] = d
     print(
-        f"  Mapillary: {len(images)} images from {len(tiles)} tiles, "
+        f"  Mapillary: "
         f"{sum(d <= corridor and not is_pano(images[k]) for k, d in dist.items())} perspective and "
         f"{sum(d <= corridor and is_pano(images[k]) for k, d in dist.items())} 360 images within {corridor:.0f} m of the line"
     )
@@ -443,15 +445,7 @@ def frame_record(img, name, crop=None):
         turn = lambda a: None if a is None else (a + yaw) % 360  # noqa: E731
         rot = img.get("computed_rotation")
         if rot:
-            import cv2
-
-            rot = (
-                cv2.Rodrigues(
-                    crop_axes(yaw).T @ cv2.Rodrigues(np.array(rot, float))[0]
-                )[0]
-                .ravel()
-                .tolist()
-            )
+            rot = crop_rotvec(rot, yaw)
         rec.update(
             camera_type="perspective",
             camera_parameters=[crop["focal_norm"], 0.0, 0.0],
@@ -465,48 +459,6 @@ def frame_record(img, name, crop=None):
     return rec
 
 
-def crop_axes(yaw_deg):
-    """Columns: a crop's right, down and forward axes in the 360 camera's frame (x right, y down,
-    z the image centre; OpenSfM's spherical camera), for a crop turned yaw_deg to the right."""
-    y = math.radians(yaw_deg)
-    return np.array(
-        [
-            [math.cos(y), 0.0, math.sin(y)],
-            [0.0, 1.0, 0.0],
-            [-math.sin(y), 0.0, math.cos(y)],
-        ]
-    )
-
-
-def pano_crop_maps(W, H, yaw_deg, fov_deg, size):
-    """cv2.remap maps from a size x size pinhole view (fov_deg across, looking yaw_deg right of the
-    image centre, level with the 360 image's horizon) into a W x H equirectangular image."""
-    f = size / 2 / math.tan(math.radians(fov_deg) / 2)
-    u, v = np.meshgrid(
-        np.arange(size) - (size - 1) / 2, np.arange(size) - (size - 1) / 2
-    )
-    d = np.stack([u / f, v / f, np.ones_like(u)], axis=-1) @ crop_axes(yaw_deg).T
-    lon = np.arctan2(d[..., 0], d[..., 2])
-    lat = np.arctan2(-d[..., 1], np.hypot(d[..., 0], d[..., 2]))
-    return (
-        ((lon / (2 * math.pi) + 0.5) * W - 0.5).astype(np.float32),
-        ((0.5 - lat / math.pi) * H - 0.5).astype(np.float32),
-    )
-
-
-def fetch_bytes(url, timeout, attempts=4):
-    """The URL's content, retrying with a growing pause; None when Mapillary cannot serve it."""
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    for attempt in range(attempts):
-        try:
-            with urllib.request.urlopen(req, timeout=timeout, context=SSL_CONTEXT) as r:
-                return r.read()
-        except OSError:
-            if attempt < attempts - 1:
-                time.sleep(2**attempt)
-    return None
-
-
 def skipped_note(n_all, n_saved):
     return (
         f" ({n_all - n_saved} that Mapillary could not serve skipped)"
@@ -515,16 +467,46 @@ def skipped_note(n_all, n_saved):
     )
 
 
-def download_sequence(imgs, folder, header, resolution="2048", workers=8):
+def frame_bytes(data, max_side):
+    """A downloaded photo as a frame: as is, or scaled down to max_side px (long side)."""
+    img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+    if img is None or max(img.shape[:2]) <= max_side:
+        return data
+    k = max_side / max(img.shape[:2])
+    small = cv2.resize(
+        img,
+        (round(img.shape[1] * k), round(img.shape[0] * k)),
+        interpolation=cv2.INTER_AREA,
+    )
+    return cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 95])[1].tobytes()
+
+
+def download_sequence(
+    imgs, folder, header, resolution="2048", workers=8, store: ImageStore | None = None
+):
     """Download images as frame_0001.jpg, ... (capture order) plus cameras.json. Images
-    Mapillary cannot serve are skipped; returns the images saved."""
+    Mapillary cannot serve are skipped; returns the images saved. With a store, each photo
+    is downloaded at full resolution into it (or taken from it) and the frame is scaled
+    from that to 2048 px (resolution "2048", the size of Mapillary's thumb_2048_url)."""
     if folder.exists():
         shutil.rmtree(folder)
     folder.mkdir(parents=True)
     url_field = "thumb_original_url" if resolution == "original" else "thumb_2048_url"
 
+    def fetch(img):
+        if store is None:
+            return fetch_bytes(img[url_field], 120)
+        data = store.get(
+            str(img["id"]), img.get("thumb_original_url") or img[url_field]
+        )
+        return (
+            data
+            if data is None or resolution == "original"
+            else frame_bytes(data, 2048)
+        )
+
     with ThreadPoolExecutor(workers) as pool:
-        data = list(pool.map(lambda img: fetch_bytes(img[url_field], 120), imgs))
+        data = list(pool.map(fetch, imgs))
     saved = [(img, d) for img, d in zip(imgs, data) if d is not None]
     names = [f"frame_{n:04d}.jpg" for n in range(1, len(saved) + 1)]
     for name, (_, d) in zip(names, saved):
@@ -539,55 +521,43 @@ def download_sequence(imgs, folder, header, resolution="2048", workers=8):
     return [img for img, _ in saved]
 
 
-def download_pano(imgs, folders, headers, view_deg, fov_deg=90.0, workers=6):
+def download_pano(
+    imgs,
+    folders,
+    headers,
+    view_deg,
+    fov_deg=90.0,
+    workers=6,
+    store: ImageStore | None = None,
+):
     """Download 360 frames at full resolution and save each as pinhole crops looking right and left
     of travel (PANO_SIDES), one folder per side (frame_0001.jpg, ... plus cameras.json). The
     crop directions are fixed in the 360 image: the side's angle minus the run's median view_deg
     (where the image centre looks relative to travel; 0 when there is no compass). Returns
     ({side: yaw in the 360 image}, the images saved: ones Mapillary cannot serve are skipped)."""
-    import threading
-
-    import cv2
-
     yaws = {side: wrap_deg(a - (view_deg or 0.0)) for side, a in PANO_SIDES.items()}
     for folder in folders.values():
         if folder.exists():
             shutil.rmtree(folder)
         folder.mkdir(parents=True)
-    maps, lock, sizes = {}, threading.Lock(), {}
+    sizes = {}
     # One crop size for the whole run (COLMAP takes each folder as one camera), from the 360 images' width
     widths = [i["width"] for i in imgs if i.get("width")]
-    size = min(
-        PANO_MAX_WIDTH,
-        int(round((np.median(widths) if widths else 2048) * fov_deg / 360 / 2)) * 2,
-    )
+    size = crop_size(np.median(widths) if widths else None, fov_deg)
 
     def fetch(img):
-        return fetch_bytes(img.get("thumb_original_url") or img["thumb_2048_url"], 180)
+        url = img.get("thumb_original_url") or img["thumb_2048_url"]
+        return store.get(str(img["id"]), url, 180) if store else fetch_bytes(url, 180)
 
     def crop(job):
         name, data = job
         pano = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
         sizes[name] = pano.shape[1::-1]
-        # The crop's centre has size/2 px per radian, the 360 image W/2pi: shrink a much sharper 360 image
-        # first (area averaging), so the remap does not alias
-        if pano.shape[1] > 1.5 * math.pi * size:
-            pano = cv2.resize(
-                pano,
-                (int(math.pi * size), int(math.pi * size) // 2),
-                interpolation=cv2.INTER_AREA,
-            )
-        H, W = pano.shape[:2]
         crops = {}
         for side, yaw in yaws.items():
-            key = (W, H, side)
-            with lock:
-                if key not in maps:
-                    maps[key] = pano_crop_maps(W, H, yaw, fov_deg, size)
-            mx, my = maps[key]
             cv2.imwrite(
                 str(folders[side] / name),
-                cv2.remap(pano, mx, my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_WRAP),
+                crop_view(pano, yaw, fov_deg, size),
                 [cv2.IMWRITE_JPEG_QUALITY, 92],
             )
             crops[side] = {
@@ -640,7 +610,7 @@ TIMINGS = {
 
 def fetch_roi(
     roi,
-    token,
+    token=None,
     out=None,
     view=None,
     view_tol=35.0,
@@ -654,16 +624,28 @@ def fetch_roi(
     rois_dir=ROIS_DIR,
     pano="auto",
     pano_fov=90.0,
+    images=None,
+    keep_originals=False,
 ):
     """Find and download the best run plus rig siblings for every line of the ROI. Returns the
-    ROI folder (None with list_only)."""
+    ROI folder (None with list_only).
+
+    images: Mapillary records (ALIGNMENT_FIELDS) to choose from, e.g. the fetch stage's;
+    without them each line's images are queried (with token, or MAPILLARY_ACCESS_TOKEN).
+    keep_originals: download full-resolution photos into data/mapillary/originals/ (see the
+    module docstring)."""
+    if token and not os.environ.get("MAPILLARY_ACCESS_TOKEN"):
+        os.environ["MAPILLARY_ACCESS_TOKEN"] = token  # MapillaryClient reads it there
+    if images is not None:
+        images = {img["id"]: img for img in images}
     picks = []
     for k, line in enumerate(roi["lines"], start=1):
         print(
             f"Line {k}: {len(line)} points, {line_length_m(line):.0f} m, corridor {roi['corridor_m']:.0f} m"
         )
         t0 = time.time()
-        runs, frame = find_runs(token, line, roi["corridor_m"])
+        near = images if images is not None else line_images(line, roi["corridor_m"])
+        runs, frame = find_runs(near, line, roi["corridor_m"])
         TIMINGS["search_s"] += time.time() - t0
         ranked = rank_runs(runs, min_images, max_spacing, view, view_tol, pano)
         if view:
@@ -689,12 +671,13 @@ def fetch_roi(
     paths = RoiPaths(out)
     paths.images.mkdir(parents=True, exist_ok=True)
     paths.roi_json.write_text(json.dumps(roi, indent=1))
+    store = ImageStore(paths.originals) if keep_originals else None
     sequences = []
     for k, pick, runs, frame in picks:
         chosen = pick["run"][:max_images] if max_images else pick["run"]
         pick = {**pick, "run": chosen}
         if pick["pano"]:
-            sequences += fetch_pano(paths, out, k, pick, frame, pano_fov)
+            sequences += fetch_pano(paths, out, k, pick, frame, pano_fov, store)
             continue
         cams = [(pick, chosen)] + ([] if no_rig else rig_siblings(pick, runs, frame))
         for j, (r, imgs) in enumerate(cams):
@@ -716,7 +699,9 @@ def fetch_roi(
                 "resolution": resolution,
             }
             t0 = time.time()
-            imgs = download_sequence(imgs, paths.images / folder, header, resolution)
+            imgs = download_sequence(
+                imgs, paths.images / folder, header, resolution, store=store
+            )
             TIMINGS["download_s"] += time.time() - t0
             TIMINGS["frames"] += len(imgs)
             sequences.append(
@@ -745,7 +730,7 @@ def fetch_roi(
     return out
 
 
-def fetch_pano(paths, out, k, pick, frame, fov_deg):
+def fetch_pano(paths, out, k, pick, frame, fov_deg, store=None):
     """Download a 360 run as two crop folders (right = primary, left = rig sibling); their
     sequences.json entries."""
     imgs = pick["run"]
@@ -771,7 +756,7 @@ def fetch_pano(paths, out, k, pick, frame, fov_deg):
             "resolution": "original",
         }
     t0 = time.time()
-    _, imgs = download_pano(imgs, folders, headers, view_deg, fov_deg)
+    _, imgs = download_pano(imgs, folders, headers, view_deg, fov_deg, store=store)
     TIMINGS["download_s"] += time.time() - t0
     TIMINGS["frames"] += len(imgs)
     return [
@@ -854,14 +839,14 @@ def main():
     parser.add_argument("--list", action="store_true", help="Only list candidate runs")
     parser.add_argument(
         "--token",
-        default=os.environ.get("MAPILLARY_TOKEN")
-        or os.environ.get("MAPILLARY_ACCESS_TOKEN"),
+        default=os.environ.get("MAPILLARY_ACCESS_TOKEN")
+        or os.environ.get("MAPILLARY_TOKEN"),
     )
     args = parser.parse_args()
     if not args.token:
         raise SystemExit(
-            "Set MAPILLARY_TOKEN (client access token from https://www.mapillary.com/dashboard/developers) "
-            "or pass --token"
+            "Set MAPILLARY_ACCESS_TOKEN (client access token from "
+            "https://www.mapillary.com/dashboard/developers) or pass --token"
         )
     roi_file = (
         RoiPaths(args.roi).roi_json if args.roi.is_dir() else args.roi

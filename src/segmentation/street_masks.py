@@ -1,7 +1,8 @@
-"""Stage 3 (segmentation): Mask2Former masks of buildings and roads for every ROI image.
+"""Pose alignment, stage 3 (segmentation): building and road masks for every ROI image.
 
-Runs Mask2Former (default: Swin-Large trained on Mapillary Vistas, 65 street-scene classes)
-on every frame of every sequence of an ROI and reduces its classes to one mask per frame,
+Runs Mask2Former (segmentation.model: Swin-Large trained on Mapillary Vistas, 65
+street-scene classes) on every frame of every sequence of an ROI and reduces its classes
+to one mask per frame,
 saved as a PNG in outputs/alignment/mapillary_roi_N/data/masks/<sequence folder>/<frame>.png:
 
     0  other (sidewalk, vegetation, poles, signs, ...)
@@ -14,7 +15,9 @@ the pixels it was seen at (building points become facades, road points give the 
 plane and camera height) and can mask features with them. --previews also saves colour
 overlays (data/masks/<sequence folder>/previews/) for checking by eye.
 
-Frames that already have a mask are skipped unless --force.
+Each frame's class map is also kept in data/labels/<image key>.png (segmentation.model.
+LabelCache): texturing builds its obstruction masks from these instead of segmenting the
+same photos again. Frames that already have a mask are skipped unless --force.
 
 The checkpoint's image processor resizes every frame to 384 x 384 before the model (aspect not
 kept); the mask is scaled back to the frame. --batch N segments N frames per model call (default 4:
@@ -22,8 +25,8 @@ kept); the mask is scaled back to the frame. --batch N segments N frames per mod
 the model in 16-bit floats (no faster on an M-series GPU, 0.05% of pixels different; off).
 
 Usage:
-  python -m pose_alignment.segmentation_layer outputs/alignment/mapillary_roi_1
-  python -m pose_alignment.segmentation_layer outputs/alignment/mapillary_roi_1 --previews
+  python -m segmentation.street_masks outputs/alignment/mapillary_roi_1
+  python -m segmentation.street_masks outputs/alignment/mapillary_roi_1 --previews
 """
 
 import argparse
@@ -34,7 +37,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from .geo_common import (
+from pose_alignment.geo_common import (
     MASK_BUILDING,
     MASK_NAMES,
     MASK_OTHER,
@@ -42,8 +45,17 @@ from .geo_common import (
     MASK_SKY_OR_MOVING,
     RoiPaths,
 )
+from segmentation.model import (
+    SEG_MODEL_ID,
+    LabelCache,
+    class_lut,
+    id2label,
+    load_model,
+    segment,
+    select_device,
+)
 
-DEFAULT_MODEL = "facebook/mask2former-swin-large-mapillary-vistas-semantic"
+DEFAULT_MODEL = SEG_MODEL_ID
 # Mapillary Vistas class names per mask value.
 CLASS_GROUPS = {
     MASK_BUILDING: ["Building"],
@@ -88,18 +100,6 @@ PREVIEW_COLOURS = {
 }  # BGR
 
 
-def best_device():
-    import torch
-
-    return (
-        "cuda"
-        if torch.cuda.is_available()
-        else "mps"
-        if torch.backends.mps.is_available()
-        else "cpu"
-    )
-
-
 def missing_masks(paths):
     """{sequence folder: [frame files without a mask]}."""
     out = {}
@@ -130,9 +130,6 @@ def segment_roi(
 ):
     """Write a mask for every frame of the ROI (into out_root instead of data/masks, and only the first
     `limit` frames per sequence, for tests); returns the masks folder."""
-    import torch
-    from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
-
     paths = RoiPaths(roi_dir)
     if out_root:
         paths.masks = Path(out_root)
@@ -149,22 +146,15 @@ def segment_roi(
     print(f"{len(sequences)} sequence(s), {total} frame(s) to segment")
     paths.masks.mkdir(parents=True, exist_ok=True)
     if total:
-        device = device or best_device()
+        device = select_device(device, allow_mps=True)
         print(f"Model {model_name} on {device}")
-        processor = AutoImageProcessor.from_pretrained(model_name)
-        model = (
-            Mask2FormerForUniversalSegmentation.from_pretrained(model_name)
-            .to(device)
-            .eval()
-        )
-        if half:
-            model = model.half()
-        names = {int(k): v for k, v in model.config.id2label.items()}
+        _, model = load_model(model_name, device, half=half)
+        names = id2label(model)
         lut = np.full(256, MASK_OTHER, np.uint8)
         for value, classes in CLASS_GROUPS.items():
-            for i, n in names.items():
-                if n in classes:
-                    lut[i] = value
+            lut = np.where(class_lut(names, classes) > 0, np.uint8(value), lut)
+        labels = LabelCache(paths.labels)
+        labels.start(model_name, names)
         (paths.masks / "classes.json").write_text(
             json.dumps(
                 {
@@ -180,6 +170,7 @@ def segment_roi(
 
         t0, done = time.time(), 0
         for folder, frames in todo.items():
+            meta = paths.frames(folder)
             out = paths.masks / folder
             out.mkdir(parents=True, exist_ok=True)
             if previews:
@@ -187,20 +178,12 @@ def segment_roi(
             for k0 in range(0, len(frames), batch):
                 chunk = frames[k0 : k0 + batch]
                 imgs = [cv2.imread(str(p)) for p in chunk]
-                # BGR -> RGB as a contiguous copy: with torchvision installed, transformers converts
-                # images with torch.from_numpy, which rejects the reversed (negative-stride) view
-                rgbs = [np.ascontiguousarray(img[:, :, ::-1]) for img in imgs]
-                inputs = processor(images=rgbs, return_tensors="pt").to(device)
-                if half:
-                    inputs["pixel_values"] = inputs["pixel_values"].half()
-                with torch.no_grad():
-                    outputs = model(**inputs)
-                segs = processor.post_process_semantic_segmentation(
-                    outputs, target_sizes=[img.shape[:2] for img in imgs]
-                )
+                segs = segment(imgs, model_name, device, half=half)
                 for p, img, seg in zip(chunk, imgs, segs):
-                    mask = lut[seg.cpu().numpy().astype(np.uint8)]
+                    mask = lut[seg]
                     cv2.imwrite(str(out / f"{p.stem}.png"), mask)
+                    if p.name in meta:
+                        labels.save(RoiPaths.image_key(folder, meta[p.name]), seg)
                     if previews:
                         colour = np.zeros_like(img)
                         for value, bgr in PREVIEW_COLOURS.items():
@@ -250,7 +233,7 @@ def main():
     parser.add_argument(
         "roi_dir",
         type=Path,
-        help="ROI folder from mapillary_layer.py (outputs/alignment/mapillary_roi_N)",
+        help="ROI folder from data_ingest/mapillary_sequences.py (outputs/alignment/mapillary_roi_N)",
     )
     parser.add_argument(
         "--model",

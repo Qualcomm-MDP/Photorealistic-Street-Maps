@@ -24,7 +24,9 @@ import math
 from datetime import datetime
 from pathlib import Path
 
-from .geo_common import ROUTES_DIR, LocalFrame, line_length_m, overpass
+from common.providers.overpass import OverpassClient
+
+from .geo_common import ROUTES_DIR, LocalFrame, line_length_m
 from .route_gui import make_roi
 
 # Service roads (parking aisles, driveways) and footpaths are left out: their captures are
@@ -44,7 +46,7 @@ STREET_TYPES = [
 def fetch_streets(bbox):
     """OSM street ways in bbox (min_lon, min_lat, max_lon, max_lat): [(name, [(lon, lat)])]."""
     w, s, e, n = bbox
-    data = overpass(
+    data = OverpassClient().fetch(
         f'[out:json][timeout:90];way["highway"~"^({"|".join(STREET_TYPES)})$"]({s},{w},{n},{e});'
         "out geom;"
     )

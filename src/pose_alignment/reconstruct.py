@@ -991,7 +991,7 @@ def cam_from_ref_rotation(p, ref, cam):
     for 360 crops exactly from their yaws; otherwise the robust mean of Mapillary's computed
     rotations (its own reconstruction) at the frames both took at the same time; else from the
     compass headings alone (yaw only). Bundle adjustment refines it (not for 360 crops)."""
-    from .mapillary_layer import crop_axes
+    from data_ingest.pano import crop_axes
 
     pr, pc = p.pano(ref["folder"]), p.pano(cam["folder"])
     if pr and pc:

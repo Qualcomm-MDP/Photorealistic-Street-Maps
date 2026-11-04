@@ -10,7 +10,8 @@ focal_length_pixels at original_width x original_height, image_url):
             mapillary -> segmentation -> calibrate -> reconstruct -> align; see README.md).
             Every image the align stage marks reliable gets its corrected pose and measured
             camera height; reliable images the main fetch did not return (and the right and
-            left crops of 360 frames) are added from the pipeline's downloads. Other
+            left crops of 360 frames, which replace the fetch stage's unaligned views of
+            those frames) are added from the pipeline's downloads. Other
             images keep the `computed` pose, or are dropped with --aligned-only. A leg
             whose aligned cameras end up more than one corridor width (15 m) from the street
             they were captured on is rejected too: the align stage can call a leg reliable when
@@ -38,6 +39,9 @@ from pathlib import Path
 import numpy as np
 from scipy.spatial.transform import Rotation
 
+from data_ingest.image_store import ImageStore
+from segmentation.model import LabelCache
+
 from .geo_common import LocalFrame, RoiPaths, wrap_deg
 from .streets_from_bbox import distance_to_polyline
 
@@ -58,18 +62,22 @@ def _use_computed(mapillary):
     )
 
 
-def _run_alignment(bbox, roi_dir=None):
+def _run_alignment(bbox, roi_dir=None, images=None):
     """Run the alignment pipeline (or finish an earlier run in roi_dir); returns its RoiPaths.
-    The stages after the download run in their own processes (run_pipeline.py): GeoCalib,
-    PyTorch and COLMAP each bring an OpenMP runtime, which clash in one process."""
+    images: the fetch stage's Mapillary records (ingest.py), which the captures are chosen
+    from (without them they are queried); the photos are downloaded at full resolution into
+    the ROI's image store, for texturing to reuse. The stages after the download run in
+    their own processes (run_pipeline.py): GeoCalib, PyTorch and COLMAP each bring an OpenMP
+    runtime, which clash in one process."""
+    from data_ingest.mapillary_sequences import fetch_roi
+
     from .geo_common import module_command
-    from .mapillary_layer import fetch_roi
     from .run_pipeline import stage_done
     from .streets_from_bbox import streets_roi
 
     if roi_dir is None:
         roi = streets_roi((bbox.min_lon, bbox.min_lat, bbox.max_lon, bbox.max_lat))
-        roi_dir = fetch_roi(roi, os.environ["MAPILLARY_ACCESS_TOKEN"])
+        roi_dir = fetch_roi(roi, images=images, keep_originals=True)
     paths = RoiPaths(roi_dir)
     done = stage_done(paths)
     if not done["mapillary"]:
@@ -107,10 +115,7 @@ def _aligned_cameras(paths):
             continue
         doc = json.loads(f.read_text())
         for cam in doc.get("cameras", []):
-            key = str(cam["id"])
-            if cam.get("pano_yaw_deg") is not None:
-                key = f"{key}_{doc['folder']}"
-            cameras[key] = (doc["folder"], cam)
+            cameras[RoiPaths.image_key(doc["folder"], cam)] = (doc["folder"], cam)
     return cameras
 
 
@@ -151,6 +156,7 @@ def _apply_alignment(paths, mapillary, aligned_only=False, max_off_street_m=15.0
         {"overridden": 0, "added": 0, "kept_mapillary": 0, "aspect_mismatch": 0},
     )
     cameras = _aligned_cameras(paths)
+    aligned_panos = set()  # 360 photos whose views the alignment placed
     off_street = _off_street_legs(paths, cameras, max_off_street_m)
     for leg, d in off_street.items():
         print(
@@ -208,6 +214,8 @@ def _apply_alignment(paths, mapillary, aligned_only=False, max_off_street_m=15.0
             }
             images[img_id] = {"source": "colmap (added)", **info}
             counts["added"] += 1
+            if cam.get("pano_yaw_deg") is not None:
+                aligned_panos.add(str(cam["id"]))
             continue
         w, h = meta.get("original_width"), meta.get("original_height")
         if not (w and h) or abs(w / h - intr["width"] / intr["height"]) > 0.02:
@@ -229,6 +237,18 @@ def _apply_alignment(paths, mapillary, aligned_only=False, max_off_street_m=15.0
         images[img_id] = {"source": "colmap", **info}
         counts["overridden"] += 1
 
+    # the fetch stage's own views of those 360 photos (data_ingest.pano) would texture the
+    # same facades again from Mapillary's pose
+    for img_id in [
+        k
+        for k, m in mapillary.items()
+        if (m.get("pano_crop") or {}).get("id") in aligned_panos
+    ]:
+        del mapillary[img_id]
+        images[img_id] = {
+            "source": "dropped",
+            "reason": "a view of a 360 photo whose aligned views were added",
+        }
     for img_id in mapillary:
         if img_id not in images:
             images[img_id] = {
@@ -295,7 +315,12 @@ def align_poses(value, state):
             paths = _run_alignment(
                 state.require_metadata("bbox"),
                 state.get_metadata("alignment_dir", None),
+                state.require_metadata("provider_data").get("mapillary_images"),
             )
+            # texturing reads the photos the alignment downloaded, and the class maps its
+            # segmentation made, instead of downloading and segmenting them again
+            state.set_metadata("image_store", ImageStore(paths.originals))
+            state.set_metadata("segmentation_labels", LabelCache(paths.labels))
             state.set_metadata(
                 "pose_alignment",
                 _apply_alignment(

@@ -5,10 +5,11 @@ import sqlite3
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from pose_alignment.align_poses import _apply_alignment
 from pose_alignment.geo_common import RoiPaths
-from pose_alignment.mapillary_layer import crop_axes
+from data_ingest.pano import crop_axes
 from pose_alignment.reconstruct import weak_ends
 
 # A camera looking north: columns are its right (east), down and forward (north) axes in ENU.
@@ -132,11 +133,16 @@ def test_apply_alignment_overrides_and_adds_360_crops(tmp_path):
             "original_width": 4000,
             "original_height": 3000,
         },
-        "222": {
-            "latitude": 42.2801,
-            "longitude": -83.7395,
-            "original_width": 5760,
-            "original_height": 2880,
+        # the fetch stage's own views of the 360 photo (data_ingest.pano), Mapillary's pose
+        **{
+            f"222_{side}": {
+                "latitude": 42.2801,
+                "longitude": -83.7395,
+                "original_width": 1440,
+                "original_height": 1440,
+                "pano_crop": {"id": "222", "side": side},
+            }
+            for side in ("right", "left")
         },
     }
     summary = _apply_alignment(paths, mapillary)
@@ -146,9 +152,8 @@ def test_apply_alignment_overrides_and_adds_360_crops(tmp_path):
     assert (
         mapillary["111"]["focal_length_pixels"] == 800.0 * 4000 / 1000
     )  # scaled to the original size
-    assert (
-        "pose_source" not in mapillary["222"]
-    )  # the 360 image itself keeps Mapillary's pose
+    # the aligned views replace the fetch stage's unaligned ones
+    assert "222_right" not in mapillary and "222_left" not in mapillary
     for side in ("line2_cam0_pppppppp", "line2_cam1_pppppppp"):
         added = mapillary[f"222_{side}"]
         assert Path(added["image_url"]).parts[-2:] == (side, "frame_0001.jpg")
@@ -181,3 +186,55 @@ def test_apply_alignment_skips_unreliable_and_off_street_legs(tmp_path):
     summary = _apply_alignment(paths, mapillary)
     assert summary["overridden"] == 0 and summary["rejected_legs_off_street_m"]
     assert all("pose_source" not in m for m in mapillary.values())
+
+
+def test_pano_views_turn_a_360_photo_into_right_and_left_views():
+    from data_ingest.pano import crop_rotvec, pano_views
+
+    # a 360 sequence driving east; the image centre looks along travel
+    records = [
+        {
+            "id": str(k),
+            "sequence": "s360",
+            "camera_type": "spherical",
+            "captured_at": k * 1000,
+            "computed_compass_angle": 90.0,
+            "width": 5760,
+            "geometry": {"coordinates": [-83.74 + k * 1e-4, 42.28]},
+        }
+        for k in range(3)
+    ] + [{"id": "9", "camera_type": "perspective", "geometry": {"coordinates": [0, 0]}}]
+    rot = [0.3, -1.1, 0.4]
+    metadata = {
+        r["id"]: {
+            "rotvec": rot,
+            "original_width": r.get("width"),
+            "camera_type": r["camera_type"],
+        }
+        for r in records
+    }
+    out = pano_views(metadata, records)
+    assert (
+        "1" not in out and "9" in out
+    )  # the 360 photo is replaced, a perspective one kept
+    right, left = out["1_right"], out["1_left"]
+    assert right["pano_crop"]["yaw_deg"] == pytest.approx(90.0, abs=1)
+    assert left["pano_crop"]["yaw_deg"] == pytest.approx(-90.0, abs=1)
+    assert (
+        right["original_width"] == right["original_height"] == 1440
+    )  # 5760 * 90 / 360
+    assert right["focal_length_pixels"] == pytest.approx(720.0)  # 90 deg across
+    np.testing.assert_allclose(
+        right["rotvec"], crop_rotvec(rot, right["pano_crop"]["yaw_deg"])
+    )
+
+
+def test_crop_view_looks_where_its_yaw_says():
+    from data_ingest.pano import crop_view
+
+    # an equirectangular image whose blue channel is a quarter of its column
+    pano = np.zeros((400, 800, 3), np.uint8)
+    pano[..., 0] = (np.arange(800) // 4)[None, :]
+    centre = lambda yaw: int(crop_view(pano, yaw, 90.0, 100)[50, 50, 0])  # noqa: E731
+    assert abs(centre(90.0) - 150) <= 1  # +90 deg: column 600, three quarters across
+    assert abs(centre(-90.0) - 50) <= 1  # -90 deg: column 200, one quarter across

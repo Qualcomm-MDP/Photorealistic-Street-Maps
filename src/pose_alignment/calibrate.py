@@ -16,7 +16,7 @@ Per sequence folder of the ROI:
 With --calibration mapillary, step 1 is Mapillary's focal, k1 and k2 instead (the sequence's
 most common camera_parameters; GeoCalib's where Mapillary has none), written to
 data/calibration_mapillary/; step 2 is the same, with Mapillary's focal as the prior.
-Crops of a 360 camera (mapillary_layer.py) are pinhole views with an exactly known focal and no
+Crops of a 360 camera (data_ingest/mapillary_sequences.py) are pinhole views with an exactly known focal and no
 distortion: step 1 is that focal (source "pano") with either --calibration; step 2 the same.
 
 A warning suggests --calibration mapillary when GeoCalib's calibration looks unreliable: its

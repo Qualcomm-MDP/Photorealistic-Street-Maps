@@ -11,15 +11,17 @@ reliable leg typically sit 0.5–1 m (median) from the OSM footprint edges.
 
 ## Stages
 
-| #   | Stage        | Script                  | Output (in the ROI folder)                                                                                                              |
-| --- | ------------ | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | gui          | `route_gui.py`          | the drawn route (`outputs/alignment/routes/*.json`)                                                                                     |
-| 2   | mapillary    | `mapillary_layer.py`    | `data/mapillary/`: frames and `cameras.json` per sequence, `roi.json`, `sequences.json`                                                 |
-| 3   | segmentation | `segmentation_layer.py` | `data/masks/`: building/road/sky-and-moving mask per frame                                                                              |
-| 4   | calibrate    | `calibrate.py`          | `data/calibration/<sequence>.json`: focal, distortion, per-frame gravity (`data/calibration_mapillary/` with `--calibration mapillary`) |
-| 5   | reconstruct  | `reconstruct.py`        | `data/reconstruction/`: COLMAP model per leg and sequence, `legs.json`                                                                  |
-| 6   | align        | `align.py`              | `data/alignment/`: aligned cameras per sequence, `summary.json`; figures in `results/`                                                  |
+| #   | Stage        | Script                               | Output (in the ROI folder)                                                                                                              |
+| --- | ------------ | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | gui          | `route_gui.py`                       | the drawn route (`outputs/alignment/routes/*.json`)                                                                                     |
+| 2   | mapillary    | `data_ingest/mapillary_sequences.py` | `data/mapillary/`: frames and `cameras.json` per sequence, `roi.json`, `sequences.json`                                                 |
+| 3   | segmentation | `segmentation/street_masks.py`       | `data/masks/`: building/road/sky-and-moving mask per frame                                                                              |
+| 4   | calibrate    | `calibrate.py`                       | `data/calibration/<sequence>.json`: focal, distortion, per-frame gravity (`data/calibration_mapillary/` with `--calibration mapillary`) |
+| 5   | reconstruct  | `reconstruct.py`                     | `data/reconstruction/`: COLMAP model per leg and sequence, `legs.json`                                                                  |
+| 6   | align        | `align.py`                           | `data/alignment/`: aligned cameras per sequence, `summary.json`; figures in `results/`                                                  |
 
+The mapillary and segmentation stages live with the main pipeline's own stages of the same
+kind (`src/data_ingest/`, `src/segmentation/`); the others are in this folder.
 `run_pipeline.py` runs them in order from any stage. Helpers: `geo_common.py` (geography, ROI
 folders, COLMAP readers), `osm.py` (OSM buildings), `learned_features.py` and `nn_features.py`
 (feature matching), `plot_fit.py` (figures). Tools: `shape_check.py` (how straight and
@@ -32,7 +34,18 @@ drift-free each reconstruction is), `export_blender.py` (scene for Blender) and
 
 `src/main.py --poses colmap` runs this pipeline on the OSM streets in the bounding box
 (`streets_from_bbox.py`) and textures with the aligned poses (`align_poses.py`); see that
-file's docstring for what happens to images the pipeline does not align.
+file's docstring for what happens to images the pipeline does not align. The stages share
+their work with the main pipeline's:
+
+- **Images:** the fetch stage (`data_ingest/ingest.py`) asks Mapillary for the fields this
+    pipeline needs too, over the box grown by 70 m, and the captures are picked from those
+    records instead of a second search. Each photo is downloaded once, at full resolution,
+    into the ROI's `data/mapillary/originals/` (`data_ingest/image_store.py`); the frames are
+    scaled from it to 2048 px, and texturing uses the stored photo instead of downloading it.
+- **Segmentation:** one Mask2Former checkpoint (Mapillary Vistas, `segmentation/model.py`)
+    serves both. The segmentation stage keeps each frame's class map in `data/labels/`, and
+    texturing's obstruction removal uses those maps for the same photos instead of
+    segmenting them again.
 
 ### On its own
 
@@ -41,7 +54,7 @@ with `src` on the import path (`export PYTHONPATH=src`). ROI folders go to
 `outputs/alignment/`.
 
 ```bash
-export MAPILLARY_TOKEN='MLY|...'                       # for the mapillary stage
+export MAPILLARY_ACCESS_TOKEN='MLY|...'                # for the mapillary stage
 python -m pose_alignment.run_pipeline                  # draw a route, run everything
 python -m pose_alignment.run_pipeline --roi outputs/alignment/routes/my_route.json    # reuse a drawn route
 python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_19   # resume where it stopped
@@ -49,7 +62,9 @@ python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_
 python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_19 --from reconstruct --tag test
 ```
 
-Every stage script also runs on its own (`python -m pose_alignment.<script> --help`).
+Every stage script also runs on its own (`python -m pose_alignment.<script> --help`;
+the first two as `python -m data_ingest.mapillary_sequences` and
+`python -m segmentation.street_masks`).
 
 - **`--from` / `--to`**: first and last stage. The default starts a new ROI at the GUI, or
     an existing one (`--roi-dir`) at its first unfinished stage.
@@ -126,9 +141,11 @@ Opens a map in your browser. Click along the streets you want; turns are fine. *
 street** starts a separate line. The corridor half-width must cover your clicking error but
 not reach parallel streets (15 m works for most roads). **Use this route** saves it.
 
-## 2. Fetch the imagery (`mapillary_layer.py`)
+## 2. Fetch the imagery (`data_ingest/mapillary_sequences.py`)
 
-Mapillary is searched in small tiles along each line (a large query returns only a sample).
+On its own, Mapillary is searched (`common.providers.MapillaryClient`) in small tiles along
+each line (a large query returns only a sample); in the main pipeline the fetch stage's
+records are used.
 Images outside the corridor are dropped. Each sequence (one capture session of one camera)
 is split into continuous runs, and the best run is picked:
 
@@ -164,10 +181,12 @@ Frames are saved as `data/mapillary/line<L>_cam<k>_<id>/frame_0001.jpg …` with
 `cameras.json` (Mapillary id, time, raw GPS, Mapillary's computed position and rotation,
 compass, make, model, calibration). About 10 s per 100 frames.
 
-## 3. Segment (`segmentation_layer.py`)
+## 3. Segment (`segmentation/street_masks.py`)
 
-Mask2Former (Swin-Large, Mapillary Vistas) labels every pixel, reduced to four values per
-mask: 0 other, 100 road, 200 building, 255 sky and moving things. About 0.3 s per frame on
+Mask2Former (Swin-Large, Mapillary Vistas; `segmentation/model.py`, shared with texturing's
+obstruction removal) labels every pixel, reduced to four values per mask: 0 other, 100 road,
+200 building, 255 sky and moving things. The class maps themselves are kept too
+(`data/labels/<image key>.png`) for texturing. About 0.3 s per frame on
 an Apple-silicon GPU. `--previews` saves colour overlays.
 
 ## 4. Calibrate (`calibrate.py`)
@@ -340,7 +359,7 @@ min when used, COLMAP 0.5 min, alignment 0.3 min).
     set as `MAPILLARY_TOKEN` (or the main pipeline's `MAPILLARY_ACCESS_TOKEN`). Do not
     commit it.
 
-OSM buildings come from the public Overpass API (or the main OSM API when Overpass is down)
+OSM buildings come from the public Overpass API (`common.providers.OverpassClient`; the main OSM API when Overpass is down)
 and are saved per ROI. No keys are needed for OSM or the GUI's basemaps.
 
 ## Data layout

@@ -1,4 +1,4 @@
-"""Shared helpers for the pipeline layers: HTTP and Overpass, a local metric frame, the ROI
+"""Shared helpers for the pipeline layers: HTTP (Overpass: common.providers.overpass), a local metric frame, the ROI
 folder layout, COLMAP model readers, 2D similarity transforms and the segmentation mask
 values."""
 
@@ -24,12 +24,6 @@ ROIS_DIR = (
 )  # one parent folder per ROI: mapillary_roi_N/{data,results}
 ROUTES_DIR = ROIS_DIR / "routes"  # routes drawn in route_gui.py
 USER_AGENT = "umich-mdp-alignment-pipeline/1.0"
-OVERPASS_URLS = [
-    "https://overpass-api.de/api/interpreter",
-    "https://overpass.private.coffee/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",
-    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
-]
 OSM_API_MAP = "https://api.openstreetmap.org/api/0.6/map"  # fallback for buildings when Overpass is down
 # certifi's certificates: python.org's macOS Python has none of its own until "Install Certificates" is run
 try:
@@ -39,7 +33,7 @@ try:
 except ImportError:
     SSL_CONTEXT = ssl.create_default_context()
 
-# Values in the segmentation masks (segmentation_layer.py). Spread over 0-255 so a mask PNG
+# Values in the segmentation masks (segmentation/street_masks.py). Spread over 0-255 so a mask PNG
 # is readable in any image viewer: black other, dark grey road, light grey building, white
 # sky and things that move.
 MASK_OTHER, MASK_ROAD, MASK_BUILDING, MASK_SKY_OR_MOVING = 0, 100, 200, 255
@@ -80,33 +74,10 @@ def get_json(url, data=None, headers=None, retries=3, timeout=120):
     return json.loads(http_get(url, data, headers, retries, timeout))
 
 
-_overpass_down_until = 0.0
-
-
-def overpass(query):
-    """Run an Overpass QL query, trying each server once. When all fail, Overpass is skipped
-    for the next 10 minutes of the run (callers fall back or go without), so an outage costs
-    one round of attempts rather than one per query."""
-    global _overpass_down_until
-    if time.time() < _overpass_down_until:
-        raise SystemExit("Overpass is down (skipping it for now)")
-    for url in OVERPASS_URLS:
-        try:
-            return get_json(
-                url,
-                data=urllib.parse.urlencode({"data": query}).encode(),
-                retries=1,
-                timeout=45,
-            )
-        except RuntimeError as e:
-            print(f"  Overpass failed ({str(e)[:80]}), trying next server")
-    _overpass_down_until = time.time() + 600
-    raise SystemExit("All Overpass servers failed; try again later")
-
-
 def module_command(script, *args):
-    """(command, environment) running one of this package's scripts (e.g. "align.py") as
-    `python -m pose_alignment.<name>`, with src/ on the import path."""
+    """(command, environment) running a stage in its own Python process, with src/ on the
+    import path: one of this package's scripts (e.g. "align.py", as `python -m
+    pose_alignment.align`) or any module under src/ (e.g. "segmentation.street_masks")."""
     env = {
         **os.environ,
         "PYTHONPATH": os.pathsep.join(
@@ -116,7 +87,7 @@ def module_command(script, *args):
     return [
         sys.executable,
         "-m",
-        f"pose_alignment.{Path(script).stem}",
+        f"pose_alignment.{Path(script).stem}" if script.endswith(".py") else script,
         *map(str, args),
     ], env
 
@@ -271,6 +242,10 @@ class RoiPaths:
         self.data = root / "data"
         self.images = self.data / "mapillary"
         self.masks = self.data / "masks"
+        # Mask2Former class maps by image key (segmentation.model.LabelCache), reused by
+        # texturing; full-resolution downloads (data_ingest.image_store), likewise
+        self.labels = self.data / "labels"
+        self.originals = self.images / "originals"
         suffix = f"_{tag}" if tag else ""
         self.reconstruction = self.data / f"reconstruction{suffix}"
         self.alignment = self.data / f"alignment{suffix}"
@@ -300,11 +275,19 @@ class RoiPaths:
         return json.loads(self.sequences_json.read_text())
 
     def pano(self, folder):
-        """A 360 crop's "pano" header (side, yaw_deg, fov_deg, ...; mapillary_layer.download_pano), or None
+        """A 360 crop's "pano" header (side, yaw_deg, fov_deg, ...; data_ingest.mapillary_sequences.download_pano), or None
         for a perspective camera's sequence."""
         return json.loads((self.images / folder / "cameras.json").read_text()).get(
             "pano"
         )
+
+    @staticmethod
+    def image_key(folder, frame):
+        """The key of a frame in the pipeline's Mapillary metadata: its Mapillary id, or for a
+        crop of a 360 frame (both crops share the id) "<id>_<sequence folder>"."""
+        if frame.get("pano_yaw_deg") is not None:
+            return f"{frame['id']}_{folder}"
+        return str(frame["id"])
 
     def frames(self, folder):
         """Per-frame Mapillary data of one sequence folder, by file name."""
@@ -413,7 +396,7 @@ def label_points(model_txt, mask_dir, values, min_fraction=0.5):
     """Per 3D point (points3D.txt order): (has the label, observations checked).
 
     A point has the label when at least min_fraction of its observations fall on mask pixels
-    whose value is in `values` (segmentation_layer.py masks, <mask_dir>/<frame stem>.png; for a
+    whose value is in `values` (segmentation/street_masks.py masks, <mask_dir>/<frame stem>.png; for a
     joint multi-pass model, whose images are named <sequence folder>/<frame>, mask_dir is the
     masks root and the mask is <mask_dir>/<sequence folder>/<frame stem>.png)."""
     import cv2

@@ -14,7 +14,9 @@ from common import PipelineState
 from common.MeshUtils import _get_utm_transformer
 from common.reporter import Reporter, get_reporter
 from naip.naip import roof_faces, roof_patches
+from data_ingest.pano import PANO_TYPES, crop_view
 from segmentation import remove_obstructions
+from segmentation.model import LabelCache, model_id_or_default
 
 CAMERA_HEIGHT_M = 1.6
 ATLAS_W = 4096
@@ -91,6 +93,8 @@ def apply_textures(
     reporter: Reporter | None = None,
     terrain=None,
     aerial=None,
+    image_store=None,
+    seg_labels: LabelCache | None = None,
 ) -> trimesh.Trimesh:
     """Project street photos onto the mesh.
 
@@ -103,6 +107,10 @@ def apply_textures(
 
     If aerial (a naip.Ortho) is given, roofs are textured from it instead of
     from street photos.
+
+    image_store (data_ingest.image_store.ImageStore) and seg_labels hold photos and
+    class maps the pose alignment already made: those photos are not downloaded or
+    segmented again.
     """
     # Full-resolution photos are ~12 MP (~36 MB decoded) and an area can have
     # ~1000 of them, so they're kept on disk and loaded one at a time.
@@ -120,6 +128,8 @@ def apply_textures(
             reporter or get_reporter(),
             terrain,
             aerial,
+            image_store,
+            seg_labels,
         )
 
 
@@ -136,6 +146,8 @@ def _apply_textures(
     reporter: Reporter,
     terrain=None,
     aerial=None,
+    image_store=None,
+    seg_labels: LabelCache | None = None,
 ) -> trimesh.Trimesh:
     center_lon = (bbox.min_lon + bbox.max_lon) / 2
     center_lat = (bbox.min_lat + bbox.max_lat) / 2
@@ -149,6 +161,8 @@ def _apply_textures(
         and v.get("focal_length_pixels")
         and v.get("original_width")
         and v.get("original_height")
+        # a 360 photo is used through its right and left views (data_ingest.pano)
+        and v.get("camera_type") not in PANO_TYPES
     ]
     if not candidates and aerial is None:
         reporter.info("  No images with valid metadata, skipping texturing.")
@@ -159,10 +173,42 @@ def _apply_textures(
         image_dir = Path(image_dir)
         image_dir.mkdir(parents=True, exist_ok=True)
 
+    # class maps from the alignment, when they come from the model obstruction removal uses
+    cached_labels = None
+    if remove_obs and seg_labels is not None:
+        cached_model, names = seg_labels.model()
+        if cached_model == model_id_or_default(seg_model):
+            cached_labels = names
+    reused = {"photos": 0, "class maps": 0}
+
     cam_data: list[dict] = []
+    pano: tuple[str, np.ndarray] | None = None  # the last 360 photo: (id, image)
     for img_id, meta in reporter.progress(candidates, desc="Downloading images"):
+        crop = meta.get("pano_crop")  # a view of a 360 photo (data_ingest.pano)
+        source_id = crop["id"] if crop else str(img_id)
         try:
-            img, raw = _download_image(meta["image_url"])
+            if crop and pano is not None and pano[0] == source_id:
+                img = pano[1]  # the other view of the 360 photo just downloaded
+            else:
+                # the stored original stands in for its URL (an image the alignment
+                # added already points at its own frame, whose size its pose was
+                # solved for)
+                stored = (
+                    image_store is not None
+                    and str(meta["image_url"]).startswith(("http://", "https://"))
+                    and image_store.has(source_id)
+                )
+                if stored:
+                    img, raw = _download_image(str(image_store.path(source_id)))
+                    reused["photos"] += 1
+                else:
+                    img, raw = _download_image(meta["image_url"])
+            if crop:
+                pano = (source_id, img)
+                img = crop_view(img, crop["yaw_deg"], crop["fov_deg"], crop["size"])
+                raw = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 95])[
+                    1
+                ].tobytes()
         except Exception as exc:
             reporter.info(f"  Download failed [{img_id}]: {exc}")
             continue
@@ -171,7 +217,13 @@ def _apply_textures(
         if preview_dir is not None:
             _save_preview(img, preview_dir / f"{img_id}_original.jpg")
         if remove_obs:
-            img = remove_obstructions(img, seg_model, seg_device, reporter)
+            labels = None
+            if cached_labels is not None and seg_labels is not None:
+                seg = seg_labels.get(str(img_id), img.shape[:2])
+                if seg is not None:
+                    labels = (seg, cached_labels)
+                    reused["class maps"] += 1
+            img = remove_obstructions(img, seg_model, seg_device, reporter, labels)
             if preview_dir is not None:
                 _save_preview(img, preview_dir / f"{img_id}_cleaned.jpg")
         if preview_dir is not None:
@@ -215,6 +267,11 @@ def _apply_textures(
     if image_dir is not None:
         with open(image_dir / "images.json", "w") as f:
             json.dump(saved, f, indent=2)
+    if any(reused.values()):
+        reporter.info(
+            "  Reused from the pose alignment: "
+            + ", ".join(f"{n} {k}" for k, n in reused.items())
+        )
 
     if not cam_data and aerial is None:
         reporter.info("  All image downloads failed, skipping texturing.")
@@ -430,6 +487,8 @@ def tex_projection(value, state: PipelineState):
         aerial=state.get_metadata("naip", None),
         image_dir=state.get_metadata("image_dir", None),
         reporter=get_reporter(state),
+        image_store=state.get_metadata("image_store", None),
+        seg_labels=state.get_metadata("segmentation_labels", None),
     )
     state.require_metadata("progress_monitor").next()
     return mesh
