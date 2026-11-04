@@ -2,6 +2,7 @@
 
 import json
 import sqlite3
+from pathlib import Path
 
 import numpy as np
 
@@ -150,7 +151,7 @@ def test_apply_alignment_overrides_and_adds_360_crops(tmp_path):
     )  # the 360 image itself keeps Mapillary's pose
     for side in ("line2_cam0_pppppppp", "line2_cam1_pppppppp"):
         added = mapillary[f"222_{side}"]
-        assert added["image_url"].endswith(f"{side}/frame_0001.jpg")
+        assert Path(added["image_url"]).parts[-2:] == (side, "frame_0001.jpg")
         assert added["original_width"] == 960 and added["focal_length_pixels"] == 480.0
     overrides = json.loads((paths.root / "pose_overrides.json").read_text())
     assert overrides["images"]["111"]["leg_fit_to_walls_m"] == 0.8
