@@ -13,7 +13,7 @@ MAPILLARY_URL = "https://graph.mapillary.com/images"
 # Acceptable, so identify the app explicitly.
 USER_AGENT = (
     "photorealistic-street-maps/0.1 "
-    "(+https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps)"
+    "(+https://github.com/Qualcomm-MDP/PSM)"
 )
 
 
