@@ -23,7 +23,8 @@ reliable leg typically sit 0.5–1 m (median) from the OSM footprint edges.
 `run_pipeline.py` runs them in order from any stage. Helpers: `common.py` (geography, ROI
 folders, COLMAP readers), `osm.py` (OSM buildings), `learned_features.py` and `nn_features.py`
 (feature matching), `plot_fit.py` (figures). Tools: `shape_check.py` (how straight and
-drift-free each reconstruction is) and `export_blender.py` (scene for Blender).
+drift-free each reconstruction is), `export_blender.py` (scene for Blender) and
+`viewer/bake_projection.py` (web viewer with photos projected onto the buildings).
 
 ## Running
 
@@ -273,6 +274,12 @@ instead of 9–14 m, and failures are reported as unreliable instead of passing.
   the sparse points. In Blender, run the repo root's `compare_cameras_blender.py` with
   `SCENE_DIR` set to that folder and `LOAD = ("pipeline", "gps", "points")`. Camera heights
   are measured from the road under the path, so streets that climb or dip sit flat.
+- `python viewer/bake_projection.py <roi> <roi>/results/blender <out> [--every 3] [--subtitle s]`:
+  after `export_blender.py`, builds a web viewer of the ROI's OSM buildings with the aligned
+  photos projected onto the walls (every 5th frame of each camera by default; each wall spot
+  takes the most square-on, closest views, with sky, vehicles and people masked out). Writes
+  `<out>/index.html` and `<out>/data/`; open it with `python -m http.server -d <out>`. Takes
+  about 10 s.
 
 ## Results so far
 

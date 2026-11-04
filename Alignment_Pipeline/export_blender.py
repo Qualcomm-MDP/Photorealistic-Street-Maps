@@ -163,7 +163,9 @@ def main():
         for i, n in enumerate(names):
             m = meta[n]
             image_id = str(m["id"])
-            img_name = f"images/{leg}_{image_id}.jpg"
+            # the folder too: a 360 frame's right and left crops share one Mapillary id, and named by the id
+            # alone the second crop's image overwrote the first's (roi_28: right cameras showed left photos)
+            img_name = f"images/{leg}_{folder}_{image_id}.jpg"
             src = cv2.imread(str(p.images / folder / n))
             if src.shape[1] != w:  # COLMAP worked on the same frames; guard against resized copies
                 src = cv2.resize(src, (w, h), interpolation=cv2.INTER_AREA)
