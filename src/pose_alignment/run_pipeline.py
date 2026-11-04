@@ -12,7 +12,7 @@ Stages, in order (each is also its own script):
   align         align.py                building points fitted to the OSM footprints; aligned cameras
                                         -> data/alignment/, figures -> results/
 Each ROI has its own folder, outputs/alignment/mapillary_roi_N/, holding data/ (the folders above) and
-results/ (overview.png, fit_<leg>_<sequence>.png; blender/ with --blender).
+results/ (overview.png, fit_<leg>_<sequence>.png).
 
 --from picks the first stage to run (default: auto). Without --roi-dir a new ROI starts at
 the GUI (or at the Mapillary stage with --roi <file>). With --roi-dir, auto starts at the
@@ -26,7 +26,7 @@ Usage:
   python -m pose_alignment.run_pipeline                                        # draw a route, run everything
   python -m pose_alignment.run_pipeline --roi outputs/alignment/routes/my_route.json             # skip the GUI
   python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_19        # resume where it stopped
-  python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_19 --from reconstruct --one-leg --blender
+  python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_19 --from reconstruct --one-leg
   python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_21 --calibration mapillary --tag mly    # wide rig lenses
   python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_19 --from reconstruct --tag test   # separate run
   python -m pose_alignment.run_pipeline --view right --to segmentation
@@ -319,11 +319,6 @@ def main():
         action="store_true",
         help="Fit each leg on its own instead of tying linked legs together",
     )
-    g.add_argument(
-        "--blender",
-        action="store_true",
-        help="Also export the aligned cameras for Blender (results/blender/)",
-    )
     args = parser.parse_args()
     if args.one_leg:
         args.max_turn, args.trim_deg, args.max_frames = 180.0, 180.0, 1000
@@ -519,13 +514,6 @@ def main():
             *tag,
             *(["--no-link"] if args.no_link else []),
         )
-        t1 = time.time()
-        if args.blender:
-            run_script("export_blender.py", paths.root, *tag)
-            parts["align"] = {
-                "OSM fit and figures": t1 - t0,
-                "Blender export": time.time() - t1,
-            }
         timings["align"] = time.time() - t0
 
     print(f"\nROI folder: {paths.root}")

@@ -25,8 +25,9 @@ kind (`src/data_ingest/`, `src/segmentation/`); the others are in this folder.
 `run_pipeline.py` runs them in order from any stage. Helpers: `geo_common.py` (geography, ROI
 folders, COLMAP readers), `osm.py` (OSM buildings), `learned_features.py` and `nn_features.py`
 (feature matching), `plot_fit.py` (figures). Tools: `shape_check.py` (how straight and
-drift-free each reconstruction is), `export_blender.py` (scene for Blender) and
-`viewer/bake_projection.py` (web viewer with photos projected onto the buildings).
+drift-free each reconstruction is). To see the aligned photos on the buildings, run the main
+pipeline with `--poses colmap`: texturing projects them and the web app's 3D viewer shows the
+.glb (Aadi's `scripts/eval/` renders it from the photos' poses in Blender).
 
 ## Running
 
@@ -58,7 +59,7 @@ export MAPILLARY_ACCESS_TOKEN='MLY|...'                # for the mapillary stage
 python -m pose_alignment.run_pipeline                  # draw a route, run everything
 python -m pose_alignment.run_pipeline --roi outputs/alignment/routes/my_route.json    # reuse a drawn route
 python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_19   # resume where it stopped
-python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_19 --from reconstruct --one-leg --blender
+python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_19 --from reconstruct --one-leg
 python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_19 --from reconstruct --tag test
 ```
 
@@ -127,7 +128,6 @@ the first two as `python -m data_ingest.mapillary_sequences` and
     apart and LightGlue otherwise; `nn` or `lightglue` forces one.
 - **`--tag t`**: a separate run of reconstruct and align (`data/reconstruction_t`,
     `data/alignment_t`, `results/t`); the calibration is shared.
-- **`--blender`**: also export the aligned cameras for Blender (see below).
 - The mapillary stage always writes a new `outputs/alignment/mapillary_roi_N` folder; `--view right`
     prefers cameras looking right, `--sequence ID` forces a sequence, `--no-rig` skips the
     rig's other cameras.
@@ -295,23 +295,12 @@ Fitting the whole point cloud replaced fitting extracted facade lines to street-
 walls: against a three-pass reference on roi_17, single passes came out 1.9–7.7 m away
 instead of 9–14 m, and failures are reported as unreliable instead of passing.
 
-## Checking and exporting
+## Checking
 
 - `python -m pose_alignment.shape_check <roi> [--tag t]`: per leg, how far the camera path bends compared
     with Mapillary's track, how well each camera's tilt agrees with GeoCalib's gravity, and
     the scale drift from the start to the end of the leg. Use it alongside the fit: a bent or
     crushed reconstruction can still fit its walls.
-- `python -m pose_alignment.export_blender <roi> [--tag t]` (or `--blender`): writes `results/blender/`
-    with the aligned cameras (photos undistorted to a pinhole), Mapillary's GPS cameras and
-    the sparse points, for a Blender scene script (`compare_cameras_blender.py`, kept outside
-    this repository) with `SCENE_DIR` set to that folder and `LOAD = ("pipeline", "gps", "points")`. Camera heights
-    are measured from the road under the path, so streets that climb or dip sit flat.
-- `python -m pose_alignment.viewer.bake_projection <roi> <roi>/results/blender <out> [--every 3] [--subtitle s]`:
-    after `export_blender.py`, builds a web viewer of the ROI's OSM buildings with the aligned
-    photos projected onto the walls (every 5th frame of each camera by default; each wall spot
-    takes the most square-on, closest views, with sky, vehicles and people masked out). Writes
-    `<out>/index.html` and `<out>/data/`; open it with `python -m http.server -d <out>`. Takes
-    about 10 s.
 
 ## Results so far
 
@@ -377,5 +366,5 @@ outputs/alignment/
       alignment/    line1_cam0_<id>.json  summary.json  osm_buildings.json  leg01_line1_cam0_<id>/
       reconstruction_<tag>/  alignment_<tag>/      tagged runs
     results/
-      overview.png  fit_leg01_line1_cam0_<id>.png  blender/  <tag>/
+      overview.png  fit_leg01_line1_cam0_<id>.png  <tag>/
 ```

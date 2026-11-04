@@ -220,7 +220,7 @@ class RoiPaths:
         reconstruction/   COLMAP work folders and models per leg and sequence, legs.json
         alignment/        aligned cameras per sequence (<sequence folder>.json), summary.json
                           and per-leg fit data
-      results/            figures: overview.png, fit_<leg>_<sequence folder>.png, blender/
+      results/            figures: overview.png, fit_<leg>_<sequence folder>.png
 
     tag="t" points the reconstruction, alignment and results at a separate run
     (data/reconstruction_t, data/alignment_t, results/t), so it never overwrites the main one;
@@ -361,6 +361,17 @@ def load_cameras(model_txt):
     cams.sort(key=lambda c: c[0])
     names, centres, rots = zip(*cams)
     return list(names), np.array(centres), np.array(rots)
+
+
+def read_camera(model_txt):
+    """(COLMAP camera model name, width, height, parameters) of the model's first camera."""
+    line = next(
+        row
+        for row in (Path(model_txt) / "cameras.txt").read_text().splitlines()
+        if row and not row.startswith("#")
+    )
+    p = line.split()
+    return p[1], int(p[2]), int(p[3]), [float(v) for v in p[4:]]
 
 
 def load_points(model_txt):

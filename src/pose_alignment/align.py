@@ -62,6 +62,7 @@ from .geo_common import (
     label_points,
     load_cameras,  # noqa: E402
     load_points,
+    read_camera,
     segment_distances,
     similarity_2d,
 )
@@ -513,11 +514,7 @@ def align_camera(
         piece_stats.append(st)
 
     s = math.exp(fits[0][1])
-    from .export_blender import (
-        read_colmap_camera,
-    )  # (export_blender imports this module)
-
-    cam_model, cam_w, cam_h, cam_params = read_colmap_camera(model)
+    cam_model, cam_w, cam_h, cam_params = read_camera(model)
     # what texturing needs: the COLMAP camera (its distortion is not undone) at the frame's size
     intrinsics = {
         "model": cam_model,
