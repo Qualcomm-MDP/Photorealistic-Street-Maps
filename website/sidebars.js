@@ -21,14 +21,13 @@ const sidebars = {
         'pipeline/evaluation',
       ],
     },
-    'contributing',
   ],
   // The API reference has its own tab in the navbar and its own sidebar.
   api: [
     'api/index',
     {
       type: 'category',
-      label: 'Python',
+      label: 'Core',
       collapsed: false,
       items: [
         'api/pipeline',
@@ -45,6 +44,8 @@ const sidebars = {
       items: ['api/web'],
     },
   ],
+  // Contributing also has its own tab.
+  contributing: ['contributing'],
 };
 
 export default sidebars;

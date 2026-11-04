@@ -8,7 +8,7 @@ slug: /api
 
 Reference for PSM's Python code and the web app's HTTP API. For how the pieces fit together, see [Architecture](../architecture.md); for what each pipeline stage does, see [Pipeline](../pipeline/overview.md).
 
-## Python
+## Core
 
 | Page | What's in it |
 | --- | --- |
