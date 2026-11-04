@@ -41,7 +41,9 @@ dependencies = [
   "requests>=2.32.5,<3",
   "rtree>=1.4.1,<2",
   "simple-lama-inpainting>=0.1",
-  "torch>=2.11,<3",
+  # 2.11-2.13 match ALIKED features several times slower on Apple GPUs (MPS); with 2.15,
+  # torchvision 0.29's MPS kernels fail (deform_conv2d in ALIKED)
+  "torch>=2.14,<2.15",
   "tqdm>=4.67.3,<5",
   "transformers>=4.45,<5",
   "trimesh>=4.11.3,<5",
