@@ -66,7 +66,7 @@ Every pull request runs (`.github/workflows/ci.yml`):
 - a native build of the **CPU Docker image** on amd64 and arm64, with a smoke test inside it;
 - **build-and-test**, the check required to merge: it passes when the Linux and Windows tests and both Docker builds passed.
 
-The docs workflow (`.github/workflows/docs.yml`) checks that the API pages are up to date and builds this site, and deploys it from `main`.
+The docs workflow (`.github/workflows/docs.yml`) checks that the API pages are up to date, builds this site, opens every page of the build in a browser (`npm run test:site`), and deploys it from `main`.
 
 ## Adding a pipeline stage
 
@@ -103,9 +103,17 @@ cd website
 npm ci              # install
 npm start           # live preview at http://localhost:3000/Photorealistic-Street-Maps/
 npm run build       # production build into website/build (fails on broken links)
+npx playwright install chromium   # once, for the tests below
+npm run test:site   # opens every page of the build and fails on errors or missing chunks
 ```
 
 The pages are Markdown files in `website/docs/`; the sidebar is `website/sidebars.js`.
+
+:::tip["Loading chunk ... failed" in `npm start`]
+
+The live preview rebuilds a page's JavaScript under a new name when you edit it (or restart the server, or switch branches), so a tab that was already open can ask for a file that's gone. Hard-refresh the page (Ctrl+Shift+R / Cmd+Shift+R). If it keeps happening, run `npm run clear` and start again, and make sure only one `npm start` is running. The production build doesn't have this problem; `npm run test:site` checks that.
+
+:::
 
 The **API reference** pages (except Web API) are generated from the docstrings in `src/` by `website/scripts/gen_api.py`. After changing docstrings, regenerate them from the repo root and commit the result:
 

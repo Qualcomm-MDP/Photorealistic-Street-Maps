@@ -8,7 +8,8 @@
     "build": "docusaurus build",
     "clear": "docusaurus clear",
     "serve": "docusaurus serve",
-    "api": "python scripts/gen_api.py"
+    "api": "python scripts/gen_api.py",
+    "test:site": "playwright test"
   },
   "dependencies": {
     "@docusaurus/core": "3.10.2",
@@ -23,7 +24,8 @@
   },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "3.10.2",
-    "@docusaurus/types": "3.10.2"
+    "@docusaurus/types": "3.10.2",
+    "@playwright/test": "1.49.0"
   },
   "browserslist": {
     "production": [

@@ -6,6 +6,8 @@ The documentation site, built with [Docusaurus](https://docusaurus.io/). Needs N
 npm ci          # install
 npm start       # live preview at http://localhost:3000/Photorealistic-Street-Maps/
 npm run build   # production build into build/
+npm run test:site   # open every page of the build; fails on errors or missing chunks
+                    # (first time: npx playwright install chromium)
 ```
 
 - Pages: `docs/` (Markdown). Sidebar: `sidebars.js`. Site settings: `docusaurus.config.js`.

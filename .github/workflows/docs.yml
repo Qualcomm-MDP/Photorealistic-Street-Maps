@@ -57,6 +57,14 @@ jobs:
           npm ci
           npm run build
 
+      # Opens every page of the built site, directly and through in-app
+      # navigation, and fails on script errors, missing chunks or broken requests.
+      - name: Test the built site
+        working-directory: website
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:site
+
       - name: Upload the site
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
