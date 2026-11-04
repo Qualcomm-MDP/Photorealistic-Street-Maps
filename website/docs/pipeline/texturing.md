@@ -88,7 +88,7 @@ All patches (street and roof) are packed into one atlas **4096 px** wide, row by
 | 17                  | motorcycle    |
 | 18                  | bicycle       |
 
-:::tip Faster runs
+:::tip[Faster runs]
 
 `--no-seg` (or turning off **Remove obstructions** in the web app) skips this step entirely. Swin-Tiny is a middle ground on a CPU.
 

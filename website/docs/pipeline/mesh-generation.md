@@ -28,7 +28,7 @@ Heights come from the OSM tags, in this order (`get_height()` in `src/common/Mes
 2. `building:levels`: 3 m per level;
 3. otherwise 3 m (one level).
 
-:::warning Missing heights
+:::warning[Missing heights]
 
 Many OSM buildings have neither tag, so they come out as 3 m boxes. Better height estimation is an open area of work.
 

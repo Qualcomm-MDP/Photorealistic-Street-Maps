@@ -26,7 +26,7 @@ Each building element has:
 - **id**: the OSM way/relation id
 - **tags**: including `height` and `building:levels`, which give the building height (see [Mesh Generation](mesh-generation.md))
 
-:::warning OSM data quality
+:::warning[OSM data quality]
 
 OSM heights are community-contributed and often missing. Buildings without a `height` or `building:levels` tag get a default height of 3 m.
 

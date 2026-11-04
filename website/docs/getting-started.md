@@ -10,7 +10,7 @@ There are three ways to run POSM. Pick one:
 
 All of them need a **Mapillary access token** (free).
 
-:::tip Getting a Mapillary token
+:::tip[Getting a Mapillary token]
 
 Sign in at [mapillary.com](https://www.mapillary.com/), open your dashboard, go to **Developers**, register an app, and copy its **client token** (it starts with `MLY|`).
 
@@ -34,7 +34,7 @@ See [Web App](web-app.md) for everything the UI can do.
 
 The image runs natively on Intel/AMD and ARM machines, including Apple Silicon Macs. Model weights download on the first job and are kept in a Docker volume.
 
-:::note NVIDIA GPU
+:::note[NVIDIA GPU]
 
 On Linux (or Windows with WSL2) with the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html), use the GPU image instead:
 
@@ -90,7 +90,7 @@ or the web app:
 poetry run uvicorn api.app:create_app --factory --app-dir src
 ```
 
-:::note PyTorch from source
+:::note[PyTorch from source]
 
 On Linux, `poetry install` gets PyTorch from PyPI, which includes CUDA (several GB) even without an NVIDIA GPU. The Docker images install the right build for you (CPU or CUDA).
 
@@ -119,7 +119,7 @@ In the web app you pick the area on the map. For the command line:
 2. Click **Export** in the top menu, then **Manually select a different area**.
 3. Read the four values (west, south, east, north).
 
-:::warning Area size
+:::warning[Area size]
 
 Bigger areas mean more buildings and many more street photos, so runs get long. Start with a few city blocks. The web app limits each side to 2.5 km.
 

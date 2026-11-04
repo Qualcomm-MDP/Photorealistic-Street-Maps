@@ -85,7 +85,7 @@ Texturing dominated the runtime in all three, and segmentation added about 2 min
 | Total runtime      | < 25 min per 247 acres                    | Profiler                      |
 | Usability          | Average rating ≥ 7/10                     | User survey                   |
 
-:::info User survey
+:::info[User survey]
 
 Quality is assessed by asking 20 randomly chosen University of Michigan students to rate POSM buildings against photographs of the real ones. This evaluation is in progress.
 

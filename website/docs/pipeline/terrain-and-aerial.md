@@ -34,7 +34,7 @@ The terrain is used three times:
 3. **Roofs**: up-facing faces get their texture cut from the photo at the shifted position, and those patches go into the same texture atlas as the street photos. The buildings stay on the OSM footprints and remain one mesh with one material. Roof faces are no longer given to street photos.
 4. **Ground**: the roofs (at both the footprint and the shifted position, grown by 1.2 m) are painted out of the photo with OpenCV inpainting, so no "ghost roof" appears on the ground next to a building. The export drapes the result on the terrain mesh from above.
 
-:::note Coverage
+:::note[Coverage]
 
 NAIP covers the continental US only; outside it there's no imagery to use, so don't turn aerial photos on there. The web app shows a note when the selected area looks outside the continental US.
 
