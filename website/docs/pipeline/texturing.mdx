@@ -1,3 +1,5 @@
+import AtlasDiagram from '@site/src/components/AtlasDiagram';
+
 # Texturing
 
 The **Texture** stage (`texturing`, `src/texturing/tex_projection.py`) maps the Mapillary street photos onto the building walls and, with aerial photos on, the NAIP image onto the roofs. Everything is packed into one texture atlas.
@@ -53,17 +55,7 @@ For each assigned face, a 2D frame is built on the face, a homography maps it to
 
 All patches (street and roof) are packed into one atlas **4096 px** wide, row by row, left to right. A 16 px strip at the bottom holds the colour for faces no photo covers: a light grey (225 of 255). The atlas becomes the mesh's base-colour texture (a double-sided `PBRMaterial`).
 
-```
-┌──────────────────────────────────┐
-│ patch_0 │ patch_1 │ patch_2 │    │  ← row 0
-├─────────┼─────────┼─────────┤    │
-│ patch_3 │ patch_4 │              │  ← row 1
-├─────────┴─────────┴──────────────┤
-│              ...                 │
-├──────────────────────────────────┤
-│ ░░░░░░░ untextured grey ░░░░░░░░ │  ← 16 px strip
-└──────────────────────────────────┘
-```
+<AtlasDiagram />
 
 ## Obstruction removal
 

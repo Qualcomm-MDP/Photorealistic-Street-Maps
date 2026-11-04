@@ -1,3 +1,5 @@
+import FileTree from '@site/src/components/FileTree';
+
 # Contributing
 
 Contributions are welcome! This page covers setting up a development environment and the project's conventions.
@@ -11,7 +13,7 @@ poetry install
 poetry run pre-commit install
 ```
 
-`poetry install` adds the runtime dependencies and the dev tools (pytest, ruff, pre-commit, httpx for the API tests, griffe for the docs). Add a Mapillary token as described in [Getting Started](getting-started.md#from-source-poetry).
+`poetry install` adds the runtime dependencies and the dev tools (pytest, ruff, pre-commit, httpx for the API tests, griffe for the docs). Add a Mapillary token as described in [Getting Started](getting-started.mdx#from-source-poetry).
 
 ## Running tests
 
@@ -21,21 +23,22 @@ poetry run pytest
 
 The tests don't need a Mapillary token, a GPU or network access: external services and the heavy models are replaced with fakes.
 
-```
-tests/
-├── conftest.py                 # pytest markers
-├── conversions/test_basic.py   # unit and coordinate conversions
-├── test_api.py                 # web API: jobs, logs, WebSocket, search, options
-├── test_dotenv_builder.py      # interactive .env builder
-├── test_joblog.py              # JobReporter and the console reporter
-├── test_naip.py                # NAIP stage: roof offset, roof patches, draping
-├── test_obstruction_cache.py   # segmentation model caching
-├── test_osm_client.py          # Overpass retries and mirrors
-├── test_pipeline.py            # PipelineChain: stages, forks, resume, events
-├── test_redact.py              # keeping the token out of errors and logs
-├── test_settings.py            # Settings: token, env files, defaults
-└── test_terrain.py             # terrain stage and buildings on terrain
-```
+<FileTree items={[
+  {name: 'tests', children: [
+    {name: 'conftest.py', note: 'pytest markers'},
+    {name: 'conversions/test_basic.py', note: 'unit and coordinate conversions'},
+    {name: 'test_api.py', note: 'web API: jobs, logs, WebSocket, search, options'},
+    {name: 'test_dotenv_builder.py', note: 'interactive .env builder'},
+    {name: 'test_joblog.py', note: 'JobReporter and the console reporter'},
+    {name: 'test_naip.py', note: 'NAIP stage: roof offset, roof patches, draping'},
+    {name: 'test_obstruction_cache.py', note: 'segmentation model caching'},
+    {name: 'test_osm_client.py', note: 'Overpass retries and mirrors'},
+    {name: 'test_pipeline.py', note: 'PipelineChain: stages, forks, resume, events'},
+    {name: 'test_redact.py', note: 'keeping the token out of errors and logs'},
+    {name: 'test_settings.py', note: 'Settings: token, env files, defaults'},
+    {name: 'test_terrain.py', note: 'terrain stage and buildings on terrain'},
+  ]},
+]} />
 
 ## Code style and pre-commit
 

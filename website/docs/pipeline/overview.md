@@ -21,7 +21,7 @@ flowchart LR
 | **Terrain** (`terrain`)         | With `--terrain`: ground heights for the area. Otherwise passes the data through.            | the fetch output (the terrain goes in the state)          | [Terrain & Aerial Photos](terrain-and-aerial.md)        |
 | **Build mesh** (`build_mesh`)   | Extrudes each footprint into a 3D building, standing on the terrain if there is one.          | one untextured `trimesh.Trimesh`                          | [Mesh Generation](mesh-generation.md)                   |
 | **Aerial photo** (`naip`)       | With `--naip`: NAIP aerial photo for the ground and roofs. Otherwise passes the mesh through. | the mesh (the aerial photo goes in the state)             | [Terrain & Aerial Photos](terrain-and-aerial.md)        |
-| **Texture** (`texturing`)       | Cleans the street photos and projects them onto the walls; packs a texture atlas.             | the textured mesh                                         | [Texturing](texturing.md)                               |
+| **Texture** (`texturing`)       | Cleans the street photos and projects them onto the walls; packs a texture atlas.             | the textured mesh                                         | [Texturing](texturing.mdx)                               |
 | **Export** (`export`)           | Moves the model to the origin, turns it to glTF's Y-up, adds the ground, writes the `.glb`.   | the mesh, or a scene with `buildings` and `terrain` nodes | below                                                   |
 
 Each stage is a function `(value, state) -> value`. `value` is the previous stage's output; `state` (a `PipelineState`) gives access to the shared metadata below.

@@ -1,3 +1,5 @@
+import FileTree from '@site/src/components/FileTree';
+
 # Getting Started
 
 There are three ways to run PSM. Pick one:
@@ -24,7 +26,7 @@ cd PSM
 docker compose up --build api
 ```
 
-Open <http://localhost:8000>. On first use:
+Open [http://localhost:8000](http://localhost:8000). On first use:
 
 1. Click the **gear icon** (Settings), paste your Mapillary token, and press **Save token**. If no `.env` file exists yet, PSM creates one with the token.
 2. Pick an area: search for an address, or press **Draw area** and drag a box on the map.
@@ -136,23 +138,25 @@ The `.glb` opens in:
 
 ## Project structure
 
-```
-PSM/
-├── src/
-│   ├── main.py                  # Command-line entry point
-│   ├── pipeline.py              # The pipeline: stages, export (shared by CLI and web)
-│   ├── api/                     # Web app backend (FastAPI): jobs, logs, settings, search
-│   ├── data_ingest/ingest.py    # Fetch stage: OSM + Mapillary
-│   ├── terrain/terrain.py       # Terrain stage: ground heights
-│   ├── mesh_builder/extrude.py  # Build-mesh stage: footprints → 3D buildings
-│   ├── naip/naip.py             # Aerial-photo stage: NAIP ground and roofs
-│   ├── texturing/               # Texture stage: camera projection and texture atlas
-│   ├── segmentation/            # Mask2Former + LaMa obstruction removal
-│   └── common/                  # Pipeline framework, reporter, providers, geometry helpers
-├── web/                         # Web app frontend (HTML, CSS, JavaScript)
-├── website/                     # This documentation site (Docusaurus)
-├── tests/                       # Pytest suite
-├── Dockerfile                   # CPU and CUDA images
-├── docker-compose.yml           # pipeline / api services, CPU and GPU
-└── dotenv_builder.py            # Interactive .env setup
-```
+<FileTree items={[
+  {name: 'PSM', children: [
+    {name: 'src', children: [
+      {name: 'main.py', note: 'Command-line entry point'},
+      {name: 'pipeline.py', note: 'The pipeline: stages and export (shared by the CLI and the web app)'},
+      {name: 'api', folder: true, note: 'Web app backend (FastAPI): jobs, logs, settings, search'},
+      {name: 'data_ingest/ingest.py', note: 'Fetch stage: OSM + Mapillary'},
+      {name: 'terrain/terrain.py', note: 'Terrain stage: ground heights'},
+      {name: 'mesh_builder/extrude.py', note: 'Build-mesh stage: footprints → 3D buildings'},
+      {name: 'naip/naip.py', note: 'Aerial-photo stage: NAIP ground and roofs'},
+      {name: 'texturing', folder: true, note: 'Texture stage: camera projection and texture atlas'},
+      {name: 'segmentation', folder: true, note: 'Mask2Former + LaMa obstruction removal'},
+      {name: 'common', folder: true, note: 'Pipeline framework, reporter, providers, geometry helpers'},
+    ]},
+    {name: 'web', folder: true, note: 'Web app frontend (HTML, CSS, JavaScript)'},
+    {name: 'website', folder: true, note: 'This documentation site (Docusaurus)'},
+    {name: 'tests', folder: true, note: 'Pytest suite'},
+    {name: 'Dockerfile', note: 'CPU and CUDA images'},
+    {name: 'docker-compose.yml', note: 'pipeline / api services, CPU and GPU'},
+    {name: 'dotenv_builder.py', note: 'Interactive .env setup'},
+  ]},
+]} />

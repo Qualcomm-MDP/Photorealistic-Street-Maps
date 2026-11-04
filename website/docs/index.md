@@ -41,7 +41,7 @@ The quickest way is the web app in Docker:
 docker compose up --build api
 ```
 
-Then open <http://localhost:8000>, add your Mapillary token in **Settings**, pick an area and press **Generate model**. See [Getting Started](getting-started.md) for the other ways to install and run PSM.
+Then open <http://localhost:8000>, add your Mapillary token in **Settings**, pick an area and press **Generate model**. See [Getting Started](getting-started.mdx) for the other ways to install and run PSM.
 
 ## Who Benefits
 

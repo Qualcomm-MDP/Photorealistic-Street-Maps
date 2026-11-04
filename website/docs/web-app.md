@@ -1,6 +1,6 @@
 # Web App
 
-The web app runs the same pipeline as the command line, with a map to pick the area, live progress, a 3D preview and a history of jobs. Start it with `docker compose up --build api` and open <http://localhost:8000> (see [Getting Started](getting-started.md)).
+The web app runs the same pipeline as the command line, with a map to pick the area, live progress, a 3D preview and a history of jobs. Start it with `docker compose up --build api` and open <http://localhost:8000> (see [Getting Started](getting-started.mdx)).
 
 ## Picking an area
 
