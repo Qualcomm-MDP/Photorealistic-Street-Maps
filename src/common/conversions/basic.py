@@ -121,8 +121,10 @@ def haversine_distance(
     Calculate great-circle distance between two points using Haversine formula.
 
     Args:
-        lon1, lat1: First point coordinates (degrees)
-        lon2, lat2: Second point coordinates (degrees)
+        lon1: First point's longitude (degrees)
+        lat1: First point's latitude (degrees)
+        lon2: Second point's longitude (degrees)
+        lat2: Second point's latitude (degrees)
         unit: Output unit ('meters', 'kilometers', 'miles', 'feet')
 
     Returns:
