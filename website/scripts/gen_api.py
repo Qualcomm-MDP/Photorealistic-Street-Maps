@@ -6,8 +6,9 @@ without the project's heavy dependencies (PyTorch, transformers, ...).
     poetry run python website/scripts/gen_api.py     # from the repo root
     poetry run npm run api --prefix website          # same, through npm
 
-The output is committed so the site builds without Python; CI regenerates it
-and fails if it's out of date. Edit this file (PAGES), not the generated pages.
+The output is committed so the site builds without Python. CI regenerates it
+before building, so the published site is always current, and warns if the
+committed copies differ. Edit this file (PAGES), not the generated pages.
 """
 
 from __future__ import annotations

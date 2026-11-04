@@ -69,7 +69,7 @@ Every pull request runs (`.github/workflows/ci.yml`):
 - a native build of the **CPU Docker image** on amd64 and arm64, with a smoke test inside it;
 - **build-and-test**, the check required to merge: it passes when the Linux and Windows tests and both Docker builds passed.
 
-The docs workflow (`.github/workflows/docs.yml`) checks that the API pages are up to date, builds this site, opens every page of the build in a browser (`npm run test:site`), and deploys it from `main`.
+The docs workflow (`.github/workflows/docs.yml`) regenerates the API pages from the docstrings, builds this site, opens every page of the build in a browser (`npm run test:site`), and deploys it from `main`.
 
 ## Adding a pipeline stage
 
@@ -118,7 +118,7 @@ The **API reference** pages (except Web API) are generated from the docstrings i
 poetry run npm run api --prefix website
 ```
 
-CI fails if they're out of date. Docstrings use the Google style (`Args:`, `Returns:`, `Raises:`).
+The deployed site is always built from freshly generated pages; CI only warns when the committed copies have fallen behind. Docstrings use the Google style (`Args:`, `Returns:`, `Raises:`).
 
 ## Pull requests
 

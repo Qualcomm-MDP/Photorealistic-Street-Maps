@@ -32,16 +32,17 @@ jobs:
         with:
           python-version: "3.11"
 
+      # The site is always built from freshly generated API pages, so it's
+      # never stale. The committed copies (for `npm start` without Python) can
+      # lag behind when code in src/ moves, e.g. source line numbers; that's
+      # only a warning, so a code change elsewhere can't block the docs.
       - name: Regenerate the API pages
         run: |
           pip install "griffelib>=2.4.1,<3"
           python website/scripts/gen_api.py
-
-      - name: Check the API pages are up to date
-        run: |
-          if ! git diff --exit-code -- website/docs/api; then
-            echo "::error::The API pages are out of date. Run 'poetry run npm run api --prefix website' and commit the result."
-            exit 1
+          if ! git diff --quiet -- website/docs/api; then
+            echo "::warning::The committed API pages differ from the docstrings in src/. The site uses fresh ones; to update the committed copies, run 'poetry run npm run api --prefix website' and commit the result."
+            git diff --stat -- website/docs/api
           fi
 
       - name: Set up Node.js
