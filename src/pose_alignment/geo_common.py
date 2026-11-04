@@ -4,15 +4,21 @@ values."""
 
 import json
 import math
+import os
+import ssl
+import sys
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
 
-REPO = Path(__file__).resolve().parents[2]
+HERE = Path(__file__).resolve().parent
+SRC = HERE.parent  # src/, the import root of the pose_alignment package
+REPO = HERE.parents[1]
 ROIS_DIR = (
     REPO / "outputs" / "alignment"
 )  # one parent folder per ROI: mapillary_roi_N/{data,results}
@@ -21,7 +27,17 @@ USER_AGENT = "umich-mdp-alignment-pipeline/1.0"
 OVERPASS_URLS = [
     "https://overpass-api.de/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ]
+OSM_API_MAP = "https://api.openstreetmap.org/api/0.6/map"  # fallback for buildings when Overpass is down
+# certifi's certificates: python.org's macOS Python has none of its own until "Install Certificates" is run
+try:
+    import certifi
+
+    SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    SSL_CONTEXT = ssl.create_default_context()
 
 # Values in the segmentation masks (segmentation_layer.py). Spread over 0-255 so a mask PNG
 # is readable in any image viewer: black other, dark grey road, light grey building, white
@@ -38,15 +54,16 @@ MASK_NAMES = {
 # ----------------------------------------------------------------------------- web
 
 
-def get_json(url, data=None, headers=None, retries=3):
-    """GET/POST and parse JSON, retrying transient failures (429, 5xx, timeouts)."""
+def http_get(url, data=None, headers=None, retries=3, timeout=120):
+    """GET (or POST with data) and return the body, retrying transient failures (429, 5xx,
+    timeouts)."""
     req = urllib.request.Request(
         url, data=data, headers={"User-Agent": USER_AGENT, **(headers or {})}
     )
     for attempt in range(retries):
         try:
-            with urllib.request.urlopen(req, timeout=120) as r:
-                return json.load(r)
+            with urllib.request.urlopen(req, timeout=timeout, context=SSL_CONTEXT) as r:
+                return r.read()
         except urllib.error.HTTPError as e:
             if e.code != 429 and e.code < 500 or attempt == retries - 1:
                 raise RuntimeError(
@@ -58,14 +75,50 @@ def get_json(url, data=None, headers=None, retries=3):
         time.sleep(5 * (attempt + 1))
 
 
+def get_json(url, data=None, headers=None, retries=3, timeout=120):
+    """http_get, parsed as JSON."""
+    return json.loads(http_get(url, data, headers, retries, timeout))
+
+
+_overpass_down_until = 0.0
+
+
 def overpass(query):
-    """Run an Overpass QL query, trying each server in turn."""
+    """Run an Overpass QL query, trying each server once. When all fail, Overpass is skipped
+    for the next 10 minutes of the run (callers fall back or go without), so an outage costs
+    one round of attempts rather than one per query."""
+    global _overpass_down_until
+    if time.time() < _overpass_down_until:
+        raise SystemExit("Overpass is down (skipping it for now)")
     for url in OVERPASS_URLS:
         try:
-            return get_json(url, data=urllib.parse.urlencode({"data": query}).encode())
+            return get_json(
+                url,
+                data=urllib.parse.urlencode({"data": query}).encode(),
+                retries=1,
+                timeout=45,
+            )
         except RuntimeError as e:
             print(f"  Overpass failed ({str(e)[:80]}), trying next server")
+    _overpass_down_until = time.time() + 600
     raise SystemExit("All Overpass servers failed; try again later")
+
+
+def module_command(script, *args):
+    """(command, environment) running one of this package's scripts (e.g. "align.py") as
+    `python -m pose_alignment.<name>`, with src/ on the import path."""
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(
+            filter(None, [str(SRC), os.environ.get("PYTHONPATH")])
+        ),
+    }
+    return [
+        sys.executable,
+        "-m",
+        f"pose_alignment.{Path(script).stem}",
+        *map(str, args),
+    ], env
 
 
 # ----------------------------------------------------------------------------- geography
@@ -188,17 +241,22 @@ class RoiPaths:
     outputs/alignment/mapillary_roi_N/ by default:
 
       data/
-        mapillary/     roi.json, sequences.json, one folder per sequence
-                       (frame_0001.jpg ... and cameras.json)
-        masks/         segmentation masks, one folder per sequence
-        colmap/        COLMAP models per leg and sequence, legs.json
-        alignment/     corrected cameras per sequence (<sequence folder>.json),
-                       summary.json and per-leg alignment data
-      results/         images: alignment_overview.png, raw_gps_vs_pipeline.png,
-                       legs/<leg>_alignment.png, sparse_views/<leg>_<sequence folder>.png
-    """
+        mapillary/        roi.json, sequences.json, one folder per sequence
+                          (frame_0001.jpg ... and cameras.json)
+        masks/            segmentation masks, one folder per sequence
+        calibration/      GeoCalib's calibration and per-frame gravity, <sequence folder>.json
+        calibration_mapillary/  the same with Mapillary's focal and distortion (--calibration mapillary)
+        reconstruction/   COLMAP work folders and models per leg and sequence, legs.json
+        alignment/        aligned cameras per sequence (<sequence folder>.json), summary.json
+                          and per-leg fit data
+      results/            figures: overview.png, fit_<leg>_<sequence folder>.png, blender/
 
-    def __init__(self, roi_dir):
+    tag="t" points the reconstruction, alignment and results at a separate run
+    (data/reconstruction_t, data/alignment_t, results/t), so it never overwrites the main one;
+    the calibration is shared. calibration="geocalib" or "mapillary" picks the calibration folder;
+    left out, it is the one the run's reconstruction used (legs.json), else GeoCalib's."""
+
+    def __init__(self, roi_dir, tag=None, calibration=None):
         root = Path(roi_dir).resolve()
         # Accept a subfolder too (e.g. .../mapillary_roi_1/data or its data/mapillary).
         for _ in range(2):
@@ -209,16 +267,30 @@ class RoiPaths:
                 root = root.parent
         self.root = root
         self.name = root.name
+        self.tag = tag
         self.data = root / "data"
         self.images = self.data / "mapillary"
         self.masks = self.data / "masks"
-        self.colmap = self.data / "colmap"
-        self.alignment = self.data / "alignment"
-        self.results = root / "results"
+        suffix = f"_{tag}" if tag else ""
+        self.reconstruction = self.data / f"reconstruction{suffix}"
+        self.alignment = self.data / f"alignment{suffix}"
+        self.results = root / "results" / tag if tag else root / "results"
         self.roi_json = self.images / "roi.json"
         self.sequences_json = self.images / "sequences.json"
-        self.legs_json = self.colmap / "legs.json"
+        self.legs_json = self.reconstruction / "legs.json"
         self.summary_json = self.alignment / "summary.json"
+        if calibration is None and self.legs_json.exists():
+            calibration = json.loads(self.legs_json.read_text()).get("calibration")
+        self.calibration_source = calibration or "geocalib"
+        self.calibration = self.data / (
+            "calibration"
+            if self.calibration_source == "geocalib"
+            else f"calibration_{self.calibration_source}"
+        )
+
+    def calibration_json(self, folder):
+        """The calibration of one sequence (shared by every tagged run)."""
+        return self.calibration / f"{folder}.json"
 
     def sequences(self):
         if not self.sequences_json.exists():
@@ -226,6 +298,13 @@ class RoiPaths:
                 f"{self.sequences_json} not found: run the mapillary stage first"
             )
         return json.loads(self.sequences_json.read_text())
+
+    def pano(self, folder):
+        """A 360 crop's "pano" header (side, yaw_deg, fov_deg, ...; mapillary_layer.download_pano), or None
+        for a perspective camera's sequence."""
+        return json.loads((self.images / folder / "cameras.json").read_text()).get(
+            "pano"
+        )
 
     def frames(self, folder):
         """Per-frame Mapillary data of one sequence folder, by file name."""
@@ -235,6 +314,19 @@ class RoiPaths:
                 "frames"
             ]
         }
+
+
+def mapillary_calibration(p, folder):
+    """(make, the sequence's most common Mapillary [focal, k1, k2]) or (make, None). Focal as a
+    fraction of the long side; k1, k2 radial on normalised coordinates (COLMAP's RADIAL)."""
+    frames = list(p.frames(folder).values())
+    make = next((f.get("make") for f in frames if f.get("make")), "") or ""
+    cands = Counter(
+        tuple(f["camera_parameters"])
+        for f in frames
+        if len(f.get("camera_parameters") or []) == 3
+    )
+    return make, (list(cands.most_common(1)[0][0]) if cands else None)
 
 
 def next_roi_dir(rois_dir=ROIS_DIR):
@@ -273,9 +365,9 @@ def quat_to_rot(qw, qx, qy, qz):
 def load_cameras(model_txt):
     """(names, centres Nx3, world-from-camera rotations Nx3x3) from images.txt, sorted by name."""
     lines = [
-        line
-        for line in (Path(model_txt) / "images.txt").read_text().splitlines()
-        if line and not line.startswith("#")
+        text_line
+        for text_line in (Path(model_txt) / "images.txt").read_text().splitlines()
+        if text_line and not text_line.startswith("#")
     ]
     cams = []
     for line in lines[0::2]:
@@ -291,48 +383,15 @@ def load_cameras(model_txt):
 def load_points(model_txt):
     """(xyz Nx3, rgb Nx3 in 0..1, track length N) from points3D.txt."""
     rows = [
-        line.split()
-        for line in (Path(model_txt) / "points3D.txt").read_text().splitlines()
-        if line and not line.startswith("#")
+        text_line.split()
+        for text_line in (Path(model_txt) / "points3D.txt").read_text().splitlines()
+        if text_line and not text_line.startswith("#")
     ]
     if not rows:
         return np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0, int)
     data = np.array([r[:8] for r in rows], dtype=float)
     track = np.array([(len(r) - 8) // 2 for r in rows])
     return data[:, 1:4], data[:, 4:7] / 255.0, track
-
-
-def read_camera(model_txt):
-    """(model name, width, height, K, OpenCV distortion [k1, k2, p1, p2]) of the model's single camera."""
-    line = next(
-        row
-        for row in (Path(model_txt) / "cameras.txt").read_text().splitlines()
-        if row and not row.startswith("#")
-    )
-    p = line.split()
-    model, w, h, params = p[1], int(p[2]), int(p[3]), [float(v) for v in p[4:]]
-    if model == "SIMPLE_RADIAL":
-        f, cx, cy, k = params
-        return (
-            model,
-            w,
-            h,
-            np.array([[f, 0, cx], [0, f, cy], [0, 0, 1]]),
-            np.array([k, 0, 0, 0]),
-        )
-    if model == "OPENCV":
-        fx, fy, cx, cy, k1, k2, p1, p2 = params
-        return (
-            model,
-            w,
-            h,
-            np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]]),
-            np.array([k1, k2, p1, p2]),
-        )
-    if model == "PINHOLE":
-        fx, fy, cx, cy = params
-        return model, w, h, np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]]), np.zeros(4)
-    raise ValueError(f"Unsupported camera model {model}")
 
 
 def model_size(model_dir):
@@ -343,52 +402,40 @@ def model_size(model_dir):
     return (
         sum(
             1
-            for line in images.read_text().splitlines()
-            if line and not line.startswith("#")
+            for text_line in images.read_text().splitlines()
+            if text_line and not text_line.startswith("#")
         )
         // 2
     )
-
-
-def gravity_frame(centres, rots):
-    """(origin, basis) mapping COLMAP world to (right, forward, up): p = (X - origin) @ basis.T.
-
-    forward = first to last camera; up = perpendicular to forward and to the mean camera
-    x (image-right) axis, which stays horizontal without roll. Assumes a straight path."""
-    forward = centres[-1] - centres[0]
-    forward /= np.linalg.norm(forward)
-    up = np.cross(rots[:, :, 0].mean(axis=0), forward)
-    up /= np.linalg.norm(up)
-    if up.dot(-rots[:, :, 1].mean(axis=0)) < 0:
-        up = -up
-    right = np.cross(forward, up)
-    return centres[0], np.stack([right, forward, up])
 
 
 def label_points(model_txt, mask_dir, values, min_fraction=0.5):
     """Per 3D point (points3D.txt order): (has the label, observations checked).
 
     A point has the label when at least min_fraction of its observations fall on mask pixels
-    whose value is in `values` (segmentation_layer.py masks, <mask_dir>/<frame stem>.png)."""
+    whose value is in `values` (segmentation_layer.py masks, <mask_dir>/<frame stem>.png; for a
+    joint multi-pass model, whose images are named <sequence folder>/<frame>, mask_dir is the
+    masks root and the mask is <mask_dir>/<sequence folder>/<frame stem>.png)."""
     import cv2
 
     model_txt, mask_dir = Path(model_txt), Path(mask_dir)
     order = [
-        int(line.split()[0])
-        for line in (model_txt / "points3D.txt").read_text().splitlines()
-        if line and not line.startswith("#")
+        int(text_line.split()[0])
+        for text_line in (model_txt / "points3D.txt").read_text().splitlines()
+        if text_line and not text_line.startswith("#")
     ]
     index = {pid: i for i, pid in enumerate(order)}
     hits, total = np.zeros(len(order)), np.zeros(len(order))
     values = np.atleast_1d(values)
     lines = [
-        line
-        for line in (model_txt / "images.txt").read_text().splitlines()
-        if not line.startswith("#")
+        text_line
+        for text_line in (model_txt / "images.txt").read_text().splitlines()
+        if not text_line.startswith("#")
     ]
     for header, obs in zip(lines[0::2], lines[1::2]):
+        rel = Path(header.split()[9])
         mask = cv2.imread(
-            str(mask_dir / f"{Path(header.split()[9]).stem}.png"), cv2.IMREAD_GRAYSCALE
+            str(mask_dir / rel.parent / f"{rel.stem}.png"), cv2.IMREAD_GRAYSCALE
         )
         if mask is None:
             continue
@@ -437,69 +484,3 @@ def segment_distances(P, A, B):
         1,
     )
     return np.linalg.norm(P[:, None] - (A + t[..., None] * d), axis=2)
-
-
-def fit_plane(P, thresh, rng, iters=1000):
-    """RANSAC plane, refined by least squares on its inliers: (unit normal, inlier mask)."""
-    best = None
-    for _ in range(iters):
-        a, b, c = P[rng.choice(len(P), 3, replace=False)]
-        n = np.cross(b - a, c - a)
-        if np.linalg.norm(n) < 1e-12:
-            continue
-        inl = np.abs((P - a) @ (n / np.linalg.norm(n))) < thresh
-        if best is None or inl.sum() > best.sum():
-            best = inl
-    if best is None:
-        return None, None
-    Q = P[best]
-    return np.linalg.svd(Q - Q.mean(axis=0))[2][2], best
-
-
-def ransac_lines(xy, thresh, min_inliers, iters=2000, rng=None):
-    """Sequential RANSAC for 2D lines: [(centre, direction, inlier indices)]."""
-    rng = rng or np.random.default_rng(0)
-    remaining = np.arange(len(xy))
-    lines = []
-    while len(remaining) >= min_inliers:
-        pts = xy[remaining]
-        best = None
-        for _ in range(iters):
-            a, b = pts[rng.choice(len(pts), 2, replace=False)]
-            d = b - a
-            if np.linalg.norm(d) < 1e-6:
-                continue
-            inl = np.flatnonzero(
-                np.abs((pts - a) @ (np.array([-d[1], d[0]]) / np.linalg.norm(d)))
-                < thresh
-            )
-            if best is None or len(inl) > len(best):
-                best = inl
-        if best is None or len(best) < min_inliers:
-            break
-        # Refine with PCA on the inliers, then recollect inliers against the refined line.
-        for _ in range(2):
-            c = pts[best].mean(axis=0)
-            d = np.linalg.svd(pts[best] - c)[2][0]
-            best = np.flatnonzero(np.abs((pts - c) @ np.array([-d[1], d[0]])) < thresh)
-        lines.append((c, d, remaining[best]))
-        remaining = np.delete(remaining, best)
-    return lines
-
-
-def split_segments(s, max_gap, min_inliers, min_length):
-    """Split positions along a line into contiguous runs; return index arrays into s."""
-    order = np.argsort(s)
-    runs = np.split(order, np.flatnonzero(np.diff(s[order]) > max_gap) + 1)
-    return [
-        run for run in runs if len(run) >= min_inliers and np.ptp(s[run]) >= min_length
-    ]
-
-
-def planarity(xy, c, d, s0, s1, thresh):
-    """Fraction of nearby points (within 3x thresh) that lie within thresh of the line.
-    A wall is a thin sheet, so nearly all nearby points sit on it; a tree canopy is a
-    volume, so a thin slice through it holds only about a third of its neighbours."""
-    s, dist = (xy - c) @ d, np.abs((xy - c) @ np.array([-d[1], d[0]]))
-    span = (s >= s0) & (s <= s1)
-    return (span & (dist < thresh)).sum() / max(1, (span & (dist < 3 * thresh)).sum())

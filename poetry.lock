@@ -658,6 +658,32 @@ test-full = ["adlfs", "aiohttp (!=4.0.0a0,!=4.0.0a1)", "backports-zstd ; python_
 tqdm = ["tqdm"]
 
 [[package]]
+name = "geocalib"
+version = "1.0"
+description = "GeoCalib Inference Package"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = []
+develop = false
+
+[package.dependencies]
+kornia = "*"
+matplotlib = "*"
+opencv-python = "*"
+torch = "*"
+torchvision = "*"
+
+[package.extras]
+dev = ["black (==23.9.1)", "flake8", "isort (==5.12.0)"]
+
+[package.source]
+type = "git"
+url = "https://github.com/cvg/GeoCalib"
+reference = "HEAD"
+resolved_reference = "1dedb29f94fc11b896c5f572005978aeebccd67f"
+
+[[package]]
 name = "geojson"
 version = "3.2.0"
 description = "Python bindings and utilities for GeoJSON"
@@ -1020,6 +1046,120 @@ files = [
     {file = "kiwisolver-1.5.0-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:59cd8683f575d96df5bb48f6add94afc055012c29e28124fcae2b63661b9efb1"},
     {file = "kiwisolver-1.5.0.tar.gz", hash = "sha256:d4193f3d9dc3f6f79aaed0e5637f45d98850ebf01f7ca20e69457f3e8946b66a"},
 ]
+
+[[package]]
+name = "kornia"
+version = "0.9.0"
+description = "Open Source Differentiable Computer Vision Library for PyTorch"
+optional = false
+python-versions = ">=3.11"
+groups = ["main"]
+files = [
+    {file = "kornia-0.9.0-py3-none-any.whl", hash = "sha256:7a1632fe004a305c94f2b979fc6ab4df26e01f925e74bdb9f8b8a03a1229caaf"},
+    {file = "kornia-0.9.0.tar.gz", hash = "sha256:65e82219b10e73289fb8cb3c739879d917e6908c0a977b1d65f388cba1741f71"},
+]
+
+[package.dependencies]
+kornia-rs = ">=0.2.0"
+numpy = ">=1.21"
+torch = ">=2.5.1"
+
+[package.extras]
+dev = ["coverage", "onnx", "onnxruntime", "onnxscript", "pillow", "pre-commit", "pytest (>=7)", "pytest-timeout", "setuptools"]
+docs = ["matplotlib", "onnx", "pillow", "pydata-sphinx-theme (>=0.21,<0.24)", "sphinx", "sphinx-autodoc-defaultargs", "sphinx-autodoc-typehints", "sphinx-copybutton (>=0.3)", "sphinx-design", "sphinx-notfound-page", "sphinxcontrib-bibtex", "sphinxcontrib-gtagjs", "sphinxcontrib-youtube"]
+image = ["pillow"]
+onnx = ["onnx", "onnxruntime", "onnxscript"]
+sd = ["diffusers", "transformers"]
+
+[[package]]
+name = "kornia-rs"
+version = "0.2.0"
+description = "Low level implementations for computer vision in Rust"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "kornia_rs-0.2.0-cp310-cp310-macosx_10_12_x86_64.whl", hash = "sha256:e00a4cfc81dbf8244705905340fc4160c6a3c64c570e9cf594892386c8dc9f86"},
+    {file = "kornia_rs-0.2.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:5861641c607cbe406a0066757e09e4fc05ab757f7505fa115229488c67bd9f94"},
+    {file = "kornia_rs-0.2.0-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:0c226a5dd07f0c4618713104867a2b0356ca15e131ad347462294b30965a4d49"},
+    {file = "kornia_rs-0.2.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ebbf3563956f6e5e14b5afc90d1bb045119aa6b8ca2e272fde1e6e214405598d"},
+    {file = "kornia_rs-0.2.0-cp310-cp310-win_amd64.whl", hash = "sha256:49b65eb09ebd3d4138dab967ff6ba9f34e97242ec5b84b3ebe5b866258a216a1"},
+    {file = "kornia_rs-0.2.0-cp311-cp311-macosx_10_12_x86_64.whl", hash = "sha256:c9f2b6a358253ad36d6daeee752d09dcd6cf53a098bb09be442e97b3bbbbc132"},
+    {file = "kornia_rs-0.2.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:291abe5874d8b746cee439d93b94be6a95313b9301c4bd0a51de25124f17b5a4"},
+    {file = "kornia_rs-0.2.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:b0cf5ba74439c4bacc2136cb6811dbd0fec6d951ae04df4936ca91af95c4f588"},
+    {file = "kornia_rs-0.2.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:82833277685b31e9ae1a2e9ecd00a28646463a05c0ea8b72e3ddb329699f8d16"},
+    {file = "kornia_rs-0.2.0-cp311-cp311-win_amd64.whl", hash = "sha256:f85141d602f4e27cb07e2adaa03827a6533a45ea70956e6688073544018887bb"},
+    {file = "kornia_rs-0.2.0-cp311-cp311-win_arm64.whl", hash = "sha256:2f3e8478f9c7a913974cf5096c9f2f89083165f5ba914cf9db71ba272ea30cb8"},
+    {file = "kornia_rs-0.2.0-cp312-cp312-macosx_10_12_x86_64.whl", hash = "sha256:b32aaae48c6893e50dd4dbcc10b5e4a77c6df39971d202e035b0f52aed3b1b94"},
+    {file = "kornia_rs-0.2.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:0e17d8c61836e67c9b5d3ca3227a68c06e52c72e737637795177bb0ca4c33031"},
+    {file = "kornia_rs-0.2.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:a180fff70120c4558355e52eec7ea40e00a556f0d6bb760e0f511c937847cdf9"},
+    {file = "kornia_rs-0.2.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a5ccc43e7b54a845c4250dee107b62d221b4a76f6812a8041196784f4add342a"},
+    {file = "kornia_rs-0.2.0-cp312-cp312-win_amd64.whl", hash = "sha256:1a222a68555d1b974f0a96694ed2d3965d0e084860da1ba2d7fcffc541bd9b36"},
+    {file = "kornia_rs-0.2.0-cp312-cp312-win_arm64.whl", hash = "sha256:d77c5e5d789b2bfc3c51b0cd66bf4854705636a1d30fe84b95eb424b5b7eb941"},
+    {file = "kornia_rs-0.2.0-cp313-cp313-macosx_10_12_x86_64.whl", hash = "sha256:ef04e0c95dec1f4367ced2197c6884848d4c0fec18fbc4e03426520f50c08843"},
+    {file = "kornia_rs-0.2.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:712a76c0e163c86f646188c4aa3ded6079894a4a570ee8847627a500e1353a7e"},
+    {file = "kornia_rs-0.2.0-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:7ea1a91d30abf6b057b75be8816f635f82eec60c23e1e766ba044f242f5a91de"},
+    {file = "kornia_rs-0.2.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f8b71a0c0bc54ba7fc76f184d66a8f600c19754495313d245e8b28e847ef902e"},
+    {file = "kornia_rs-0.2.0-cp313-cp313-win_amd64.whl", hash = "sha256:568dcbe7f4a352d73ed628383a085e772cd7576f6740eed0b75b15a815b19b73"},
+    {file = "kornia_rs-0.2.0-cp313-cp313-win_arm64.whl", hash = "sha256:fa77412c0167bf75e06b7f6bbd764618f99d6be2e2391f6d41ca116e4d382b09"},
+    {file = "kornia_rs-0.2.0-cp313-cp313t-macosx_10_12_x86_64.whl", hash = "sha256:b1f1483adfa5fb415ecb0318a42e26e91b7e269bcaae983a7587ebfb89a65e8e"},
+    {file = "kornia_rs-0.2.0-cp313-cp313t-macosx_11_0_arm64.whl", hash = "sha256:9b10498e5661f222c334f659f8db4606ec5d6eb0343710ebda67b9e49914566a"},
+    {file = "kornia_rs-0.2.0-cp313-cp313t-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:17ff32b28f440f86b4e33a41629c4c186d48fe36c293816fae9389de5eed6f6c"},
+    {file = "kornia_rs-0.2.0-cp313-cp313t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0f851abc425eab7745b75ed890f8215af1105adbaf709713027898e19e20bf32"},
+    {file = "kornia_rs-0.2.0-cp313-cp313t-win_amd64.whl", hash = "sha256:98d0f6a17d114304755dd922d0fbf5e917db59a2602dbc1aad63c1ae051ce7b1"},
+    {file = "kornia_rs-0.2.0-cp314-cp314-macosx_10_12_x86_64.whl", hash = "sha256:e7bc5a25f3cdedc1496d3a709efa9f088287e63a628d10ff683be8bc5e99e683"},
+    {file = "kornia_rs-0.2.0-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:4bbbdf91d3428a9e67e79edf4ac1841c86a0f5f33f7e805910924219c9a89c0c"},
+    {file = "kornia_rs-0.2.0-cp314-cp314-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e310bbd431a8d6df14800a3afb9fa593d475970339b472311d26ad2e5fb40d26"},
+    {file = "kornia_rs-0.2.0-cp314-cp314-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:504f383d0da23056f0ef8f2a10022ca573e8dfb1f9a887a7dce7b20dc873df06"},
+    {file = "kornia_rs-0.2.0-cp314-cp314-win_amd64.whl", hash = "sha256:5d93fea9f284fe1349edd99c3f36804200e8d039296330b205cdf1c7670b1984"},
+    {file = "kornia_rs-0.2.0-cp314-cp314-win_arm64.whl", hash = "sha256:1efa260d5aa243fd4e3b689e26dbea9bd7da6c4a22e8bff948e505d41e1d4a4f"},
+    {file = "kornia_rs-0.2.0-cp314-cp314t-macosx_10_12_x86_64.whl", hash = "sha256:b8778c29eeedfc0a265751b7afd05577be53eb1ad0b3ff8bb509c02753b15f5e"},
+    {file = "kornia_rs-0.2.0-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:9b8c54cbef4e38dc01595192fb3c76dcd35448884301a71d7a9d51042223f824"},
+    {file = "kornia_rs-0.2.0-cp314-cp314t-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e25656994be2b574d9f42e5728113a0e85f68e0390a97a1defeaa7fe2cc265ce"},
+    {file = "kornia_rs-0.2.0-cp314-cp314t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:137e65aa359183c3a4794a20f44f3bce61cdb65c49ab04f282bb090aa8de1176"},
+    {file = "kornia_rs-0.2.0-cp314-cp314t-win_amd64.whl", hash = "sha256:617c04eebe311ddd9ffa5c4fc17ba3acf8a9a1228c38b2346e54fd7753c9f358"},
+    {file = "kornia_rs-0.2.0-cp38-cp38-macosx_10_12_x86_64.whl", hash = "sha256:c3999f92248b0d04efdcd38130c8782a912c2286d2929c93765db1483661861d"},
+    {file = "kornia_rs-0.2.0-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:0e390f20c940c239fb96ac4ad170a2dbcf7c8e6cb5be74b5c0c01de5c813463d"},
+    {file = "kornia_rs-0.2.0-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:46df82415a84acab6ece01c7794cbfc36bb9a73af084fb95f9f8339933eee784"},
+    {file = "kornia_rs-0.2.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:3ae952e8a6d7f63f3de263447f38cfb9bcf42a8fa3d57877180ce02d8be45422"},
+    {file = "kornia_rs-0.2.0-cp38-cp38-win_amd64.whl", hash = "sha256:00facfd3a9f1a1beb09355cfec0c5d2103cf678405394a829dda2cf8f846fbc4"},
+    {file = "kornia_rs-0.2.0-cp39-cp39-macosx_10_12_x86_64.whl", hash = "sha256:f43953e0dc687e71de118e5ededb2739c83a261a67791e65de268bb6ca2a1d52"},
+    {file = "kornia_rs-0.2.0-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:45ef703c7b7d55392f08aa94a803abf16f9503405be462f4b7d8ba7217351bec"},
+    {file = "kornia_rs-0.2.0-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:11ecbb2171a9344c86b2c00e584402cb5e23e32f2b858d5c540493193682b93e"},
+    {file = "kornia_rs-0.2.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5d5c7b8ca6ef465adb2a0f96166acc0dcae333f7adf559d914755d76163dbaf6"},
+    {file = "kornia_rs-0.2.0-cp39-cp39-win_amd64.whl", hash = "sha256:bb287f5d40fda830fdcd86daaacb2c4a84e8e595fd8179ad9ac0ff99f0f17aae"},
+]
+
+[package.extras]
+cuda = ["nvidia-cuda-nvrtc-cu12 ; platform_system == \"Linux\""]
+dev = ["numpy", "pytest", "pytest-run-parallel", "torch"]
+
+[[package]]
+name = "lightglue"
+version = "0.0"
+description = "LightGlue: Local Feature Matching at Light Speed"
+optional = false
+python-versions = ">=3.6"
+groups = ["main"]
+files = []
+develop = false
+
+[package.dependencies]
+kornia = ">=0.6.11"
+matplotlib = "*"
+numpy = "*"
+opencv-python = "*"
+torch = ">=1.9.1"
+torchvision = ">=0.3"
+
+[package.extras]
+dev = ["black (==23.12.1)", "flake8", "isort"]
+
+[package.source]
+type = "git"
+url = "https://github.com/cvg/LightGlue.git"
+reference = "HEAD"
+resolved_reference = "5a650c444718caffc2669dc0094cde908f42dd73"
 
 [[package]]
 name = "mapbox-earcut"
@@ -3499,4 +3639,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.15,!=3.14.1"
-content-hash = "1aaf672be6cdbb7ab58c43cb20551828b5c204a6e1df637034ee3daa5eb975a9"
+content-hash = "de8fa93f7e791ddf665d4d3563c5e3479502278615cd2e851e0e23d191668a67"

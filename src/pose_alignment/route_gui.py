@@ -12,7 +12,7 @@ The Mapillary layer (mapillary_layer.py) takes this file and fetches the cameras
 corridor.
 
 Usage:
-  python -m pose_alignment.route_gui        # saves outputs/alignment/routes/<name>_<time>.json
+  python -m pose_alignment.route_gui                      # saves outputs/alignment/routes/<name>_<time>.json
   python -m pose_alignment.route_gui --out my_route.json
 """
 

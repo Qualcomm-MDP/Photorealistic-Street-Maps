@@ -15,6 +15,11 @@ ARG TORCH_VARIANT=cpu
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
+# git: GeoCalib and LightGlue are installed from their repositories
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN pip install "poetry>=2,<3" poetry-plugin-export
 
 WORKDIR /build

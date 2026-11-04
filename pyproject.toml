@@ -26,6 +26,9 @@ classifiers = [
 dependencies = [
   "dotenv>=0.9.9,<0.10",
   "fastapi>=0.115,<1",
+  # GeoCalib and LightGlue (ALIKED): the --poses colmap alignment; not on PyPI
+  "geocalib @ git+https://github.com/cvg/GeoCalib",
+  "lightglue @ git+https://github.com/cvg/LightGlue.git",
   "mapbox-earcut>=2.1,<3",
   "mapillary>=1.0.15,<2",
   "matplotlib>=3.10.8,<4",

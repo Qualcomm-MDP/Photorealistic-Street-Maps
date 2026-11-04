@@ -6,13 +6,14 @@ focal_length_pixels at original_width x original_height, image_url):
 
   raw       Mapillary's raw GPS position with its computed rotation (the default, unchanged)
   computed  Mapillary's computed (OpenSfM) position with its computed rotation
-  colmap    the alignment layers on the OSM streets in the bounding box (streets_from_bbox ->
-            mapillary -> segmentation -> colmap -> osm). Every image the OSM stage marks
-            reliable gets its corrected pose and measured camera height; reliable images the
-            main fetch did not return are added from the alignment layers' downloads. Other
+  colmap    the alignment pipeline on the OSM streets in the bounding box (streets_from_bbox ->
+            mapillary -> segmentation -> calibrate -> reconstruct -> align; see README.md).
+            Every image the align stage marks reliable gets its corrected pose and measured
+            camera height; reliable images the main fetch did not return (and the right and
+            left crops of 360 frames) are added from the pipeline's downloads. Other
             images keep the `computed` pose, or are dropped with --aligned-only. A leg
             whose aligned cameras end up more than one corridor width (15 m) from the street
-            they were captured on is rejected too: the OSM stage can call a leg reliable when
+            they were captured on is rejected too: the align stage can call a leg reliable when
             a single short facade pinned its heading.
             --alignment-dir reuses an ROI folder from an earlier run, finishing any stage
             that did not complete.
@@ -31,6 +32,7 @@ import json
 import math
 import os
 import shutil
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -57,12 +59,12 @@ def _use_computed(mapillary):
 
 
 def _run_alignment(bbox, roi_dir=None):
-    """Run the alignment layers (or finish an earlier run in roi_dir); returns its RoiPaths."""
-    from .colmap_layer import reconstruct_roi
+    """Run the alignment pipeline (or finish an earlier run in roi_dir); returns its RoiPaths.
+    The stages after the download run in their own processes (run_pipeline.py): GeoCalib,
+    PyTorch and COLMAP each bring an OpenMP runtime, which clash in one process."""
+    from .geo_common import module_command
     from .mapillary_layer import fetch_roi
-    from .osm_alignment_layer import align_roi
     from .run_pipeline import stage_done
-    from .segmentation_layer import segment_roi
     from .streets_from_bbox import streets_roi
 
     if roi_dir is None:
@@ -72,21 +74,19 @@ def _run_alignment(bbox, roi_dir=None):
     done = stage_done(paths)
     if not done["mapillary"]:
         raise RuntimeError(f"{paths.root} has no finished Mapillary download")
-    if not done["segmentation"]:
-        segment_roi(paths.root)
-    if not done["colmap"]:
+    if not done["align"]:
+        cmd, env = module_command("run_pipeline.py", "--roi-dir", paths.root)
         colmap_bin = os.environ.get("COLMAP_BIN")
         if colmap_bin:
-            os.environ["PATH"] = (
-                f"{Path(colmap_bin).parent}{os.pathsep}{os.environ['PATH']}"
-            )
-        if shutil.which("colmap") is None:
+            env["PATH"] = f"{Path(colmap_bin).parent}{os.pathsep}{env['PATH']}"
+        if not done["reconstruct"] and shutil.which("colmap", path=env["PATH"]) is None:
             raise RuntimeError(
                 "COLMAP not found: install it, or set COLMAP_BIN in .env to its executable"
             )
-        reconstruct_roi(paths.root)
-    if not done["osm"]:
-        align_roi(paths.root)
+        if subprocess.run(cmd, env=env).returncode:
+            raise RuntimeError(
+                f"the alignment pipeline stopped; see the output above ({paths.root})"
+            )
     return paths
 
 
@@ -97,12 +97,20 @@ def _heading(R_world_to_cam):
 
 
 def _aligned_cameras(paths):
-    """{Mapillary image id: (sequence folder, camera record)} from the OSM stage's output."""
+    """{image key: (sequence folder, camera record)} from the align stage's output. The key is
+    the Mapillary image id; a 360 frame's right and left crops share one id, so theirs is
+    "<id>_<folder>": they are added as images of their own."""
     cameras = {}
-    for f in sorted(paths.alignment.glob("*.json")):
+    for seq in paths.sequences():
+        f = paths.alignment / f"{seq['folder']}.json"
+        if not f.exists():
+            continue
         doc = json.loads(f.read_text())
         for cam in doc.get("cameras", []):
-            cameras[str(cam["id"])] = (doc["folder"], cam)
+            key = str(cam["id"])
+            if cam.get("pano_yaw_deg") is not None:
+                key = f"{key}_{doc['folder']}"
+            cameras[key] = (doc["folder"], cam)
     return cameras
 
 
@@ -127,10 +135,9 @@ def _off_street_legs(paths, cameras, max_off_street_m, extend_m=50.0):
     lines_xy = [_extend([frame.xy(*p) for p in line], extend_m) for line in lines]
     worst = {}
     for _, cam in cameras.values():
-        pipe = cam.get("pipeline")
-        if pipe and cam["reliable"]:
+        if cam["reliable"]:
             d = min(
-                distance_to_polyline(frame.xy(pipe["lon"], pipe["lat"]), line)
+                distance_to_polyline(frame.xy(cam["lon"], cam["lat"]), line)
                 for line in lines_xy
             )
             worst[cam["leg"]] = max(worst.get(cam["leg"], 0.0), d)
@@ -150,13 +157,12 @@ def _apply_alignment(paths, mapillary, aligned_only=False, max_off_street_m=15.0
             f"  align_poses: {leg} rejected: its aligned cameras end up {d:.0f} m from the street"
         )
     for img_id, (folder, cam) in cameras.items():
-        pipe = cam.get("pipeline")
         info = {
             "sequence_folder": folder,
             "file": cam["file"],
             "leg": cam.get("leg"),
             "reliable": cam["reliable"],
-            "leg_fit_to_walls_m": cam.get("leg_facade_to_wall_median_m"),
+            "leg_fit_to_walls_m": cam.get("leg_fit_m"),
         }
         if cam.get("leg") in off_street:
             info["reason"] = (
@@ -166,7 +172,7 @@ def _apply_alignment(paths, mapillary, aligned_only=False, max_off_street_m=15.0
             if img_id in mapillary:
                 images[img_id] = {"source": "mapillary", **info}
             continue
-        if not (pipe and cam["reliable"]):
+        if not cam["reliable"]:
             info["reason"] = (
                 cam.get("not_aligned_reason")
                 or "leg not reliable (fits the OSM walls worse than 2 m)"
@@ -175,21 +181,21 @@ def _apply_alignment(paths, mapillary, aligned_only=False, max_off_street_m=15.0
                 images[img_id] = {"source": "mapillary", **info}
             continue
 
-        R_wc = np.array(pipe["rotation_cam_to_enu"]).T
+        R_wc = np.array(cam["rotation_cam_to_enu"]).T
         rotvec = Rotation.from_matrix(R_wc).as_rotvec()
         yaw, pitch, roll = Rotation.from_rotvec(rotvec).as_euler("ZYX", degrees=True)
-        intr = pipe["intrinsics"]
+        intr = cam["intrinsics"]
         pose = {
-            "latitude": pipe["lat"],
-            "longitude": pipe["lon"],
+            "latitude": cam["lat"],
+            "longitude": cam["lon"],
             "rotvec": rotvec.tolist(),
             "yaw": round(float(yaw), 2),
             "pitch": round(float(pitch), 2),
             "roll": round(float(roll), 2),
-            "camera_height_m": pipe["height_m"],
+            "camera_height_m": cam["height_m"],
             "pose_source": "colmap",
         }
-        info["camera_height_m"] = round(pipe["height_m"], 3)
+        info["camera_height_m"] = round(cam["height_m"], 3)
 
         meta = mapillary.get(img_id)
         if meta is None:
@@ -214,7 +220,7 @@ def _apply_alignment(paths, mapillary, aligned_only=False, max_off_street_m=15.0
             continue
         frame = LocalFrame(meta["longitude"], meta["latitude"])
         info["moved_m"] = round(
-            math.dist((0.0, 0.0), frame.xy(pipe["lon"], pipe["lat"])), 3
+            math.dist((0.0, 0.0), frame.xy(cam["lon"], cam["lat"])), 3
         )
         if meta.get("rotvec") is not None:
             old = _heading(Rotation.from_rotvec(meta["rotvec"]).as_matrix())
