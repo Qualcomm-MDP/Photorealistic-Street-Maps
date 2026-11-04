@@ -74,7 +74,7 @@ test.beforeAll(async ({browser}) => {
 test('the site has the expected pages', () => {
   // A broken sidebar or a page that failed to build would shrink this.
   expect(pages.length).toBeGreaterThanOrEqual(15);
-  for (const path of ['getting-started', 'web-app', 'configuration', 'api/web']) {
+  for (const path of ['getting-started', 'web-app', 'configuration', 'api', 'api/web']) {
     expect(pages).toContain(BASE + path);
   }
 });

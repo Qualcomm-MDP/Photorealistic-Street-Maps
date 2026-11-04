@@ -71,7 +71,7 @@ const config = {
         title: 'PSM',
         items: [
           {type: 'docSidebar', sidebarId: 'docs', position: 'left', label: 'Docs'},
-          {to: '/api/pipeline', label: 'API', position: 'left'},
+          {type: 'docSidebar', sidebarId: 'api', position: 'left', label: 'API'},
           {href: repo, label: 'GitHub', position: 'right'},
         ],
       },
