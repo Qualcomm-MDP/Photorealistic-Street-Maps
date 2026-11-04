@@ -101,7 +101,7 @@ def apply_textures(
     """
     # Full-resolution photos are ~12 MP (~36 MB decoded) and an area can have
     # ~1000 of them, so they're kept on disk and loaded one at a time.
-    with tempfile.TemporaryDirectory(prefix="posm-textures-") as work_dir:
+    with tempfile.TemporaryDirectory(prefix="psm-textures-") as work_dir:
         return _apply_textures(
             mesh,
             mapillary_data,
