@@ -157,6 +157,34 @@ def main():
     )
     g = parser.add_argument_group("mapillary stage")
     g.add_argument(
+        "--out",
+        type=Path,
+        help="Folder for the new ROI (default: the next free mapillary_roi_N in --rois-dir)",
+    )
+    g.add_argument(
+        "--images",
+        type=Path,
+        help="JSON list of Mapillary records (ALIGNMENT_FIELDS) to pick the captures from, "
+        "instead of searching Mapillary (the main pipeline's fetch stage writes it)",
+    )
+    g.add_argument(
+        "--selection",
+        type=Path,
+        help="JSON selection of captures (data_ingest.mapillary_sequences.choose_roi) to "
+        "download instead of choosing them (the main pipeline's fetch stage writes it)",
+    )
+    g.add_argument(
+        "--one-run",
+        action="store_true",
+        help="Only the best run per line (by default further runs cover where it ends)",
+    )
+    g.add_argument(
+        "--keep-originals",
+        action="store_true",
+        help="Download full-resolution photos into data/mapillary/originals/ and scale the "
+        "frames from them (the main pipeline's texturing reuses them)",
+    )
+    g.add_argument(
         "--view",
         choices=["forward", "right", "back", "left"],
         help="Only start from cameras looking this way",
@@ -330,7 +358,7 @@ def main():
     start = args.start
     if start == "auto":
         if paths is None:
-            start = "mapillary" if args.roi else "gui"
+            start = "mapillary" if args.roi or args.selection else "gui"
         else:
             done = stage_done(paths)
             start = next((s for s in STAGES[1:] if not done[s]), None)
@@ -355,7 +383,9 @@ def main():
                     f"{paths.name}: the {s} stage has not finished, so the pipeline cannot start at "
                     f"{start}. Run with --from {s} (or leave --from out to resume automatically)."
                 )
-    elif start == "mapillary" and not (args.roi or (paths and paths.roi_json.exists())):
+    elif start == "mapillary" and not (
+        args.roi or args.selection or (paths and paths.roi_json.exists())
+    ):
         raise SystemExit(
             "--from mapillary needs --roi <ROI file> (or --roi-dir with a roi.json); "
             "otherwise start from the gui"
@@ -376,21 +406,34 @@ def main():
     if "mapillary" in run:
         from data_ingest.mapillary_sequences import fetch_roi
 
-        if not args.token:
+        if not args.token and not (args.images or args.selection):
             raise SystemExit(
                 "Set MAPILLARY_TOKEN (https://www.mapillary.com/dashboard/developers) or pass --token"
             )
-        if roi is None:
+        if roi is None and not args.selection:
             roi_file = args.roi if args.roi else paths.roi_json
             roi_file = RoiPaths(roi_file).roi_json if roi_file.is_dir() else roi_file
             roi = json.loads(roi_file.read_text())
         t0 = time.time()
-        # Always a new numbered folder, so an earlier ROI's results are never overwritten.
-        paths = RoiPaths(
-            fetch_roi(
+        # A new folder (by default the next numbered one), so an earlier ROI's results are
+        # never overwritten.
+        if args.selection:
+            from data_ingest.mapillary_sequences import download_selection
+
+            roi_dir = download_selection(
+                json.loads(args.selection.read_text()),
+                args.out,
+                args.max_images,
+                args.resolution,
+                args.rois_dir,
+                args.pano_fov,
+                args.keep_originals,
+            )
+        else:
+            roi_dir = fetch_roi(
                 roi,
                 args.token,
-                None,
+                args.out,
                 args.view,
                 sequence=args.sequence,
                 min_images=args.min_images,
@@ -401,10 +444,11 @@ def main():
                 rois_dir=args.rois_dir,
                 pano=args.pano,
                 pano_fov=args.pano_fov,
-            ),
-            args.tag,
-            args.calibration,
-        )
+                images=json.loads(args.images.read_text()) if args.images else None,
+                keep_originals=args.keep_originals,
+                one_run=args.one_run,
+            )
+        paths = RoiPaths(roi_dir, args.tag, args.calibration)
         timings["mapillary"] = time.time() - t0
         from data_ingest.mapillary_sequences import TIMINGS
 

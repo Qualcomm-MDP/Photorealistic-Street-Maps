@@ -15,7 +15,7 @@ from common.MeshUtils import _get_utm_transformer
 from common.reporter import Reporter, get_reporter
 from naip.naip import roof_faces, roof_patches
 from data_ingest.pano import PANO_TYPES, crop_view
-from segmentation import remove_obstructions
+from segmentation import build_obstruction_mask, remove_obstructions
 from segmentation.model import LabelCache, model_id_or_default
 
 CAMERA_HEIGHT_M = 1.6
@@ -24,6 +24,10 @@ MAX_PATCH = 1024
 ENABLE_OCCLUSION = True
 # Colour (0-255) of faces no street photo covers: roofs, back walls, gaps.
 UNTEXTURED_GREY = 225
+# With fill_obstructions off, each photo's obstruction mask is kept at 1/MASK_SCALE size to
+# score how much of a face it hides; a face then takes the photo with the best
+# frontality x unobstructed share.
+MASK_SCALE = 8
 
 
 def camera_position(x: float, y: float, terrain=None) -> np.ndarray:
@@ -74,6 +78,22 @@ def _download_image(url: str) -> tuple[np.ndarray, bytes]:
     return img, resp.content
 
 
+# Barycentric sample points inside a triangle (a 6-step grid, 28 points).
+_BARY = np.array(
+    [(i / 6, j / 6, 1 - (i + j) / 6) for i in range(7) for j in range(7 - i)]
+)
+
+
+def _obstructed_share(mask: np.ndarray, uv: np.ndarray, width: int) -> float:
+    """Share of a face's projected triangle (uv, 3 x 2 image pixels) that a photo's
+    obstruction mask (scaled to mask.shape from an image `width` px wide) covers."""
+    k = mask.shape[1] / width
+    pts = (_BARY @ uv) * k
+    x = np.clip(pts[:, 0].astype(int), 0, mask.shape[1] - 1)
+    y = np.clip(pts[:, 1].astype(int), 0, mask.shape[0] - 1)
+    return float(mask[y, x].mean()) / 255.0
+
+
 def _save_preview(img: np.ndarray, path: Path, max_width: int = 640) -> None:
     h, w = img.shape[:2]
     if w > max_width:
@@ -95,6 +115,7 @@ def apply_textures(
     aerial=None,
     image_store=None,
     seg_labels: LabelCache | None = None,
+    fill_obstructions: bool = True,
 ) -> trimesh.Trimesh:
     """Project street photos onto the mesh.
 
@@ -111,6 +132,11 @@ def apply_textures(
     image_store (data_ingest.image_store.ImageStore) and seg_labels hold photos and
     class maps the pose alignment already made: those photos are not downloaded or
     segmented again.
+
+    With remove_obs, the obstructions (cars, people, poles, ...) are segmented. With
+    fill_obstructions they are painted over (LaMa); without it the photos stay as taken
+    and the masks steer which photo textures a face: the most square-on view that the
+    obstructions hide least.
     """
     # Full-resolution photos are ~12 MP (~36 MB decoded) and an area can have
     # ~1000 of them, so they're kept on disk and loaded one at a time.
@@ -130,6 +156,7 @@ def apply_textures(
             aerial,
             image_store,
             seg_labels,
+            fill_obstructions,
         )
 
 
@@ -148,6 +175,7 @@ def _apply_textures(
     aerial=None,
     image_store=None,
     seg_labels: LabelCache | None = None,
+    fill_obstructions: bool = True,
 ) -> trimesh.Trimesh:
     center_lon = (bbox.min_lon + bbox.max_lon) / 2
     center_lat = (bbox.min_lat + bbox.max_lat) / 2
@@ -223,9 +251,29 @@ def _apply_textures(
                 if seg is not None:
                     labels = (seg, cached_labels)
                     reused["class maps"] += 1
-            img = remove_obstructions(img, seg_model, seg_device, reporter, labels)
+            if fill_obstructions:
+                img = remove_obstructions(img, seg_model, seg_device, reporter, labels)
+            else:
+                mask = build_obstruction_mask(
+                    img, seg_model, seg_device, reporter, labels
+                )
+                small_mask = cv2.resize(
+                    mask,
+                    (
+                        max(1, mask.shape[1] // MASK_SCALE),
+                        max(1, mask.shape[0] // MASK_SCALE),
+                    ),
+                    interpolation=cv2.INTER_AREA,
+                )
+                if preview_dir is not None:
+                    shaded = img.copy()
+                    shaded[mask > 0] = (0.4 * shaded[mask > 0]).astype(np.uint8)
+                    img_for_preview = shaded
             if preview_dir is not None:
-                _save_preview(img, preview_dir / f"{img_id}_cleaned.jpg")
+                _save_preview(
+                    img if fill_obstructions else img_for_preview,
+                    preview_dir / f"{img_id}_cleaned.jpg",
+                )
         if preview_dir is not None:
             yaw = meta.get("yaw")
             saved.append(
@@ -238,7 +286,7 @@ def _apply_textures(
             )
         # Spool to disk without losing quality: the downloaded file as is, or a
         # lossless PNG once obstruction removal has changed the pixels.
-        if remove_obs:
+        if remove_obs and fill_obstructions:
             img_path = work_dir / f"{img_id}.png"
             cv2.imwrite(str(img_path), img, [cv2.IMWRITE_PNG_COMPRESSION, 1])
         else:
@@ -256,6 +304,7 @@ def _apply_textures(
                 "h": h,
                 "K": _build_K(meta["focal_length_pixels"], w, h),
                 "R": _build_R(meta),
+                "mask": small_mask if remove_obs and not fill_obstructions else None,
                 "Cw": (
                     np.array([x, y, meta["camera_height_m"]])
                     if meta.get("camera_height_m") is not None
@@ -334,8 +383,11 @@ def _apply_textures(
                     if idx_tri[nearest] != fi and abs(dists[nearest] - ray_len) >= 0.5:
                         continue
 
-            if fi not in best_hit or frontality > best_hit[fi][3]:
-                best_hit[fi] = (ci, uv_img.astype(np.float32), depths, frontality)
+            score = frontality
+            if cd["mask"] is not None:
+                score *= 1.0 - _obstructed_share(cd["mask"], uv_img, w)
+            if fi not in best_hit or score > best_hit[fi][3]:
+                best_hit[fi] = (ci, uv_img.astype(np.float32), depths, score)
 
     reporter.info(f"  {len(best_hit)} / {len(faces)} faces assigned a camera")
 
@@ -481,6 +533,7 @@ def tex_projection(value, state: PipelineState):
         mapillary_data,
         bbox,
         remove_obs=state.get_metadata("remove_obstructions", True),
+        fill_obstructions=state.get_metadata("fill_obstructions", True),
         seg_model=state.get_metadata("seg_model", None),
         seg_device=state.get_metadata("seg_device", None),
         terrain=state.get_metadata("terrain", None),

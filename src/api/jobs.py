@@ -242,6 +242,7 @@ class JobManager:
                     "bbox": bbox,
                     "progress_monitor": ProgressMonitor(verbose=False),
                     "remove_obstructions": opts.get("remove_obstructions", True),
+                    "fill_obstructions": opts.get("fill_obstructions", True),
                     "seg_model": SEG_MODELS.get(opts.get("seg_model", "large")),
                     "seg_device": opts.get("device", "auto"),
                     "use_terrain": opts.get("terrain", False),

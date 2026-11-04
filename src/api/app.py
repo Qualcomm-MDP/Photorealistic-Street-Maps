@@ -93,6 +93,8 @@ class JobRequest(BaseModel):
     bbox: BBox
     name: str = Field(default="Custom area", max_length=120)
     remove_obstructions: bool = True
+    # False: segment the obstructions but do not paint them over (the CLI's --no-fill)
+    fill_obstructions: bool = True
     seg_model: Literal["large", "tiny"] = "large"
     device: Literal["auto", "cpu", "cuda"] = "auto"
     # Same as the CLI's --terrain and --naip; aerial photos need the terrain.
@@ -261,6 +263,7 @@ def create_app(
             bbox=req.bbox.model_dump(),
             options={
                 "remove_obstructions": req.remove_obstructions,
+                "fill_obstructions": req.fill_obstructions,
                 "seg_model": req.seg_model,
                 "device": req.device,
                 "terrain": req.terrain or req.naip,

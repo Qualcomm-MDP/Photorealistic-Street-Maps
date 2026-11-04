@@ -13,6 +13,7 @@ median view angle (where the image centre looks relative to travel; 0 when unkno
 from __future__ import annotations
 
 import math
+import threading
 
 import cv2
 import numpy as np
@@ -24,6 +25,7 @@ PANO_FOV_DEG = 90.0
 PANO_MAX_WIDTH = 2048  # crops no larger than a perspective frame at 2048 px
 
 _maps: dict[tuple, tuple[np.ndarray, np.ndarray]] = {}
+_maps_lock = threading.Lock()  # download_pano crops in threads: each map is built once
 
 
 def wrap_deg(a: float) -> float:
@@ -65,7 +67,10 @@ def pano_crop_maps(W, H, yaw_deg, fov_deg, size):
     u, v = np.meshgrid(
         np.arange(size) - (size - 1) / 2, np.arange(size) - (size - 1) / 2
     )
-    d = np.stack([u / f, v / f, np.ones_like(u)], axis=-1) @ crop_axes(yaw_deg).T
+    rays = np.stack([u / f, v / f, np.ones_like(u)], axis=-1)
+    # as one 2-D product: NumPy's stacked (3-D) matmul crashed now and then on macOS
+    # (segmentation fault in Accelerate, about 1 call in 10)
+    d = (rays.reshape(-1, 3) @ crop_axes(yaw_deg).T).reshape(rays.shape)
     lon = np.arctan2(d[..., 0], d[..., 2])
     lat = np.arctan2(-d[..., 1], np.hypot(d[..., 0], d[..., 2]))
     return (
@@ -88,9 +93,10 @@ def crop_view(
         )
     H, W = pano.shape[:2]
     key = (W, H, round(yaw_deg, 6), fov_deg, size)
-    if key not in _maps:
-        _maps[key] = pano_crop_maps(W, H, yaw_deg, fov_deg, size)
-    mx, my = _maps[key]
+    with _maps_lock:
+        if key not in _maps:
+            _maps[key] = pano_crop_maps(W, H, yaw_deg, fov_deg, size)
+        mx, my = _maps[key]
     return cv2.remap(pano, mx, my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_WRAP)
 
 

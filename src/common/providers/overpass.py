@@ -30,15 +30,35 @@ class OverpassClient:
             "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
         ),
         timeout: float = 45.0,
+        rounds: int = 2,
+        backoff_s: float = 10.0,
     ):
         self.urls = urls
         self.timeout = timeout
+        self.rounds = rounds
+        self.backoff_s = backoff_s
 
     def fetch(self, query: str) -> dict[str, Any]:
-        """The JSON answer to an Overpass QL query, trying each server once."""
+        """The JSON answer to an Overpass QL query, trying each server in turn, for `rounds`
+        rounds with a growing pause between them (the public servers are often overloaded
+        for a minute or two)."""
         if time.time() < OverpassClient._down_until:
             raise OverpassUnavailable("Overpass is down (skipping it for now)")
-        errors = []
+        errors: list[str] = []
+        for k in range(self.rounds):
+            if k:
+                print(f"  Overpass unavailable, retrying in {self.backoff_s * k:.0f} s")
+                time.sleep(self.backoff_s * k)
+            result = self._round(query, errors)
+            if result is not None:
+                return result
+        OverpassClient._down_until = time.time() + DOWN_FOR_S
+        raise OverpassUnavailable(
+            "All Overpass servers failed; try again later: "
+            + "; ".join(errors[-len(self.urls) :])
+        )
+
+    def _round(self, query: str, errors: list[str]) -> dict[str, Any] | None:
         for url in self.urls:
             try:
                 r = requests.post(
@@ -54,7 +74,4 @@ class OverpassClient:
             except (requests.RequestException, ValueError) as e:
                 errors.append(f"{url}: {redact(str(e))[:80]}")
             print(f"  Overpass failed ({errors[-1]}), trying next server")
-        OverpassClient._down_until = time.time() + DOWN_FOR_S
-        raise OverpassUnavailable(
-            "All Overpass servers failed; try again later: " + "; ".join(errors)
-        )
+        return None

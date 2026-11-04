@@ -62,28 +62,42 @@ def _use_computed(mapillary):
     )
 
 
-def _run_alignment(bbox, roi_dir=None, images=None):
+def _run_alignment(bbox, roi_dir=None, images=None, selection=None):
     """Run the alignment pipeline (or finish an earlier run in roi_dir); returns its RoiPaths.
-    images: the fetch stage's Mapillary records (ingest.py), which the captures are chosen
-    from (without them they are queried); the photos are downloaded at full resolution into
-    the ROI's image store, for texturing to reuse. The stages after the download run in
-    their own processes (run_pipeline.py): GeoCalib, PyTorch and COLMAP each bring an OpenMP
-    runtime, which clash in one process."""
-    from data_ingest.mapillary_sequences import fetch_roi
-
-    from .geo_common import module_command
+    selection: the captures the fetch stage chose (ingest.py), which are reconstructed;
+    without it they are chosen here from images, the fetch stage's Mapillary records (or
+    from a query). The photos are downloaded at full resolution into
+    the ROI's image store, for texturing to reuse. Every stage from the download on runs in
+    its own process (run_pipeline.py), as when the pipeline runs on its own: GeoCalib,
+    PyTorch, OpenCV's threaded image work and COLMAP each bring their own runtimes, which can
+    clash in this process (cutting 360 frames here crashed it)."""
+    from .geo_common import module_command, next_roi_dir
     from .run_pipeline import stage_done
     from .streets_from_bbox import streets_roi
 
     if roi_dir is None:
-        roi = streets_roi((bbox.min_lon, bbox.min_lat, bbox.max_lon, bbox.max_lat))
-        roi_dir = fetch_roi(roi, images=images, keep_originals=True)
-    paths = RoiPaths(roi_dir)
-    done = stage_done(paths)
-    if not done["mapillary"]:
-        raise RuntimeError(f"{paths.root} has no finished Mapillary download")
+        paths = RoiPaths(next_roi_dir())
+        paths.data.mkdir(parents=True)
+        args = ["--out", paths.root, "--keep-originals"]
+        if selection is not None:
+            (paths.data / "selection.json").write_text(json.dumps(selection))
+            args += ["--selection", paths.data / "selection.json"]
+        else:
+            roi = streets_roi((bbox.min_lon, bbox.min_lat, bbox.max_lon, bbox.max_lat))
+            (paths.data / "streets.json").write_text(json.dumps(roi, indent=1))
+            args += ["--roi", paths.data / "streets.json"]
+            if images is not None:
+                (paths.data / "mapillary_records.json").write_text(json.dumps(images))
+                args += ["--images", paths.data / "mapillary_records.json"]
+        done = {"align": False, "reconstruct": False}
+    else:
+        paths = RoiPaths(roi_dir)
+        done = stage_done(paths)
+        if not done["mapillary"]:
+            raise RuntimeError(f"{paths.root} has no finished Mapillary download")
+        args = ["--roi-dir", paths.root]
     if not done["align"]:
-        cmd, env = module_command("run_pipeline.py", "--roi-dir", paths.root)
+        cmd, env = module_command("run_pipeline.py", *args)
         colmap_bin = os.environ.get("COLMAP_BIN")
         if colmap_bin:
             env["PATH"] = f"{Path(colmap_bin).parent}{os.pathsep}{env['PATH']}"
@@ -316,6 +330,7 @@ def align_poses(value, state):
                 state.require_metadata("bbox"),
                 state.get_metadata("alignment_dir", None),
                 state.require_metadata("provider_data").get("mapillary_images"),
+                state.require_metadata("provider_data").get("mapillary_selection"),
             )
             # texturing reads the photos the alignment downloaded, and the class maps its
             # segmentation made, instead of downloading and segmenting them again

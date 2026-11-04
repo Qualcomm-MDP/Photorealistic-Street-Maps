@@ -48,16 +48,41 @@ def inside(img: dict, bbox: BoundingBox) -> bool:
     return bbox.min_lon <= lon <= bbox.max_lon and bbox.min_lat <= lat <= bbox.max_lat
 
 
+def choose_captures(bbox: BoundingBox, records: list[dict], reporter):
+    """The sequences to use (data_ingest.mapillary_sequences.choose_roi) along the OSM
+    streets in the box (pose_alignment.streets_from_bbox), or None when there are none."""
+    from data_ingest.mapillary_sequences import choose_roi
+    from pose_alignment.streets_from_bbox import streets_roi
+
+    try:
+        roi = streets_roi((bbox.min_lon, bbox.min_lat, bbox.max_lon, bbox.max_lat))
+        selection = choose_roi(roi, records)
+    except (Exception, SystemExit) as e:
+        reporter.warning(
+            f"Choosing captures failed ({e}); using every image in the box"
+        )
+        return None
+    if not selection["groups"]:
+        reporter.warning(
+            "No street has a dense enough capture; using every image in the box"
+        )
+        return None
+    return selection
+
+
 def ingest_data(bbox: BoundingBox, state: PipelineState):
     """OSM buildings and Mapillary image metadata for the box.
 
+    The photos are the chosen captures (choose_captures): along each OSM street in the
+    box, the densest run that covers it, then further runs where that one ends, plus rig
+    siblings. Only their frames are downloaded and textured, and with aligned poses
+    (pose_source "colmap") the alignment reconstructs the same runs
+    (provider_data["mapillary_selection"]). Mapillary is asked for the records over the
+    box grown by ALIGNMENT_REACH_M, as the streets' captures run past the box. When no
+    capture is usable, every image in the box is used instead.
+
     Every 360 photo becomes two pinhole views, right and left of travel (data_ingest.pano),
     which texturing cuts out of it.
-
-    With aligned poses (pose_source "colmap"), Mapillary is asked for the fields the pose
-    alignment needs too, over the box grown by ALIGNMENT_REACH_M; those records are kept as
-    provider_data["mapillary_images"], and the alignment picks its captures from them
-    instead of querying Mapillary again. Texturing still gets only the box's images.
     """
     reporter = get_reporter(state)
     osm_client = OSMClient(reporter=reporter)
@@ -65,23 +90,27 @@ def ingest_data(bbox: BoundingBox, state: PipelineState):
     state.require_metadata("progress_monitor").next()
 
     osm_data = osm_client.fetch(bbox, [OSM_MAP_FEATURES.BUILDING])
+    from data_ingest.mapillary_sequences import ALIGNMENT_FIELDS, selection_images
+
     min_quality = state.get_metadata("min_quality", None)
     cumulative_data = {"osm": osm_data}
-    if state.get_metadata("pose_source", "raw") == "colmap":
-        from data_ingest.mapillary_sequences import ALIGNMENT_FIELDS
-
-        fields = list(dict.fromkeys(MAPILLARY_FIELDS + ALIGNMENT_FIELDS))
-        records = mapillary_client.fetch_images(grown(bbox, ALIGNMENT_REACH_M), fields)
-        in_box = [img for img in records if inside(img, bbox)]
-        if not in_box:
-            raise RuntimeError("No images found.")
-        cumulative_data["mapillary_images"] = records
+    fields = list(dict.fromkeys(MAPILLARY_FIELDS + ALIGNMENT_FIELDS))
+    records = mapillary_client.fetch_images(grown(bbox, ALIGNMENT_REACH_M), fields)
+    if not any(inside(img, bbox) for img in records):
+        raise RuntimeError("No images found.")
+    selection = choose_captures(bbox, records, reporter)
+    if selection is not None:
+        used = selection_images(selection)
+        reporter.info(
+            f"  Mapillary: {len(used)} frames of {len(selection['groups'])} chosen runs "
+            f"(of {len(records)} images near the box)"
+        )
+        cumulative_data["mapillary_selection"] = selection
     else:
-        in_box = mapillary_client.fetch_images(bbox, MAPILLARY_FIELDS)
-        if not in_box:
-            raise RuntimeError("No images found.")
+        used = [img for img in records if inside(img, bbox)]
+    cumulative_data["mapillary_images"] = records
     cumulative_data["mapillary"] = pano_views(
-        mapillary_client.to_metadata(in_box, min_quality), in_box
+        mapillary_client.to_metadata(used, min_quality), used
     )
     state.require_metadata("progress_monitor").next()
 

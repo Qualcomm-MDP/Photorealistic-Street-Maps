@@ -87,46 +87,95 @@ def test_fetch_roi_picks_a_run_from_given_records_and_scales_stored_originals(
     assert json.loads(paths.roi_json.read_text())["lines"]
 
 
-def test_ingest_keeps_the_alignments_records_only_when_aligning(monkeypatch):
-    bbox = BoundingBox(LAT0 - 0.001, LAT0 + 0.001, LON0 - 0.001, LON0 + 0.001)
-    records = [
-        _record(0, LON0),
-        _record(1, LON0 + 0.0015),
-    ]  # the second is past the box
+class _State:
+    def __init__(self, meta):
+        self.meta = meta
+
+    def get_metadata(self, key, default=None):
+        return self.meta.get(key, default)
+
+    def require_metadata(self, key):
+        return self.meta[key]
+
+    def set_metadata(self, key, value):
+        self.meta[key] = value
+
+
+class _Progress:
+    def next(self):
+        pass
+
+
+def _line(m0, m1):
+    return [(LON0 + m0 * M_LON, LAT0), (LON0 + m1 * M_LON, LAT0)]
+
+
+def test_chooser_adds_a_run_where_the_best_one_ends():
+    from data_ingest.mapillary_sequences import choose_roi, selection_images
+
+    # a 300 m street: one capture along its first half, another along its second half,
+    # and a third, sparser one along the first half again
+    first = [_record(k, LON0 + 5 * k * M_LON, seq="seqFIRST000") for k in range(30)]
+    second = [
+        _record(100 + k, LON0 + (155 + 5 * k) * M_LON, seq="seqSECOND00")
+        for k in range(30)
+    ]
+    again = [
+        _record(200 + k, LON0 + 6 * k * M_LON, seq="seqAGAIN000") for k in range(24)
+    ]
+    roi = make_roi("test", [_line(0, 300)], 15.0)
+
+    selection = choose_roi(roi, first + second + again, no_rig=True)
+    picks = [g["pick"]["sequence"] for g in selection["groups"]]
+    assert sorted(picks) == ["seqFIRST000", "seqSECOND00"]
+    assert {g["street_line"] for g in selection["groups"]} == {1}
+    assert len(selection_images(selection)) == 60
+    assert (
+        len(
+            choose_roi(roi, first + second + again, no_rig=True, one_run=True)["groups"]
+        )
+        == 1
+    )
+
+
+def test_ingest_textures_only_the_chosen_runs(monkeypatch):
+    from pose_alignment import streets_from_bbox
+
+    bbox = BoundingBox(LAT0 - 0.001, LAT0 + 0.002, LON0 - 0.001, LON0 + 0.003)
+    run = [_record(k, LON0 + 5 * k * M_LON) for k in range(30)]
+    stray = [
+        _record(500 + k, LON0 + 0.0005, LAT0 + 0.0015, seq=f"seqSTRAY{k:03d}")
+        for k in range(3)
+    ]
     asked = {}
 
     def fetch_images(self, box, fields, limit=2000, tile_deg=0.0005):
         asked["box"], asked["fields"] = box, fields
-        return records
+        return run + stray
 
     monkeypatch.setattr(ingest.MapillaryClient, "fetch_images", fetch_images)
     monkeypatch.setattr(
         ingest.OSMClient, "fetch", lambda self, box, features: {"elements": []}
     )
-
-    class State:
-        def __init__(self, meta):
-            self.meta = meta
-
-        def get_metadata(self, key, default=None):
-            return self.meta.get(key, default)
-
-        def require_metadata(self, key):
-            return self.meta[key]
-
-        def set_metadata(self, key, value):
-            self.meta[key] = value
-
-    class Progress:
-        def next(self):
-            pass
-
-    data = ingest.ingest_data(
-        bbox, State({"progress_monitor": Progress(), "pose_source": "colmap"})
+    monkeypatch.setattr(
+        streets_from_bbox,
+        "streets_roi",
+        lambda box: make_roi("box", [_line(0, 145)], 15.0),
     )
-    assert list(data["mapillary"]) == ["1000"]  # texturing: the box only
-    assert len(data["mapillary_images"]) == 2  # the alignment: the grown box
-    assert asked["box"].max_lon > bbox.max_lon + 0.0008 and "make" in asked["fields"]
 
-    data = ingest.ingest_data(bbox, State({"progress_monitor": Progress()}))
-    assert "mapillary_images" not in data and "make" not in asked["fields"]
+    data = ingest.ingest_data(bbox, _State({"progress_monitor": _Progress()}))
+    assert set(data["mapillary"]) == {r["id"] for r in run}  # the strays are not chosen
+    assert data["mapillary_selection"]["groups"][0]["pick"]["sequence"] == "seqAAAAAAAA"
+    assert (
+        asked["box"].max_lon > bbox.max_lon + 0.0008
+        and "captured_at" in asked["fields"]
+    )
+
+    # no street (e.g. Overpass down): every image in the box, as before
+    def no_streets(box):
+        raise RuntimeError("Overpass is down")
+
+    monkeypatch.setattr(streets_from_bbox, "streets_roi", no_streets)
+    with pytest.warns(UserWarning, match="Choosing captures failed"):
+        data = ingest.ingest_data(bbox, _State({"progress_monitor": _Progress()}))
+    assert len(data["mapillary"]) == 33 and "mapillary_selection" not in data

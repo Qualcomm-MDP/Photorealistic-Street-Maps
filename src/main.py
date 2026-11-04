@@ -71,7 +71,19 @@ run_pipeline = build_pipeline()
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", metavar="FILENAME", default=None)
-    parser.add_argument("--no-seg", action="store_true", default=False)
+    parser.add_argument(
+        "--no-seg",
+        action="store_true",
+        default=False,
+        help="Skip obstruction removal in texturing (no segmentation, no inpainting)",
+    )
+    parser.add_argument(
+        "--no-fill",
+        action="store_true",
+        default=False,
+        help="Segment the obstructions (cars, people, poles, ...) but do not paint them over "
+        "(LaMa): each face takes the photo where they hide it least",
+    )
     parser.add_argument(
         "--bbox",
         nargs=4,
@@ -155,6 +167,7 @@ def main():
             "bbox": bbox,
             "progress_monitor": pipeline_progress,
             "remove_obstructions": not args.no_seg,
+            "fill_obstructions": not args.no_fill,
             "output_path": args.output,
             "ask_output_path": ask_save_path,
             "mapillary_dump_path": args.dump_mapillary,

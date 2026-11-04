@@ -254,8 +254,9 @@ def find_runs(
     max_jump=40.0,
     slack=25.0,
 ):
-    """Continuous runs of perspective or 360 images along one drawn line: (run summaries, frame).
-    images: {id: Mapillary record} near the line (line_images, or the fetch stage's records).
+    """Continuous runs of perspective or 360 images along one drawn line: (run summaries,
+    frame, points every 2 m along the line). images: {id: Mapillary record} near the line
+    (line_images, or the fetch stage's records).
 
     Runs are formed from images within corridor + slack of the line and then trimmed to
     start and end inside the corridor: where a vehicle cuts a corner, the frames just
@@ -303,7 +304,7 @@ def find_runs(
                         corridor + 5,
                     )
                 )
-    return runs, frame
+    return runs, frame, samples
 
 
 def spacing_bucket(run):
@@ -348,6 +349,56 @@ def rank_runs(
             r["spacing_m"],
         ),
     )
+
+
+def covered(run, frame, samples, reach):
+    """Which of the line's sample points the run's frames are within reach of."""
+    P = np.array([frame.xy(*image_lonlat(i)) for i in run["run"]])
+    return np.min(np.linalg.norm(samples[:, None] - P[None], axis=2), axis=1) <= reach
+
+
+def choose_runs(
+    ranked,
+    frame,
+    samples,
+    reach,
+    min_images=20,
+    max_spacing=10.0,
+    min_new=0.15,
+    min_new_m=30.0,
+):
+    """Runs that together cover the line: the best ranked run first, then, while some of the
+    line is still uncovered, the run that covers most of the rest (in 25% steps of the line;
+    the ranking breaks ties). A further run needs min_images frames along a straight stretch,
+    a median spacing of at most max_spacing, and to cover at least min_new of the line and
+    min_new_m metres not covered yet, so where one capture ends another takes over."""
+    if not ranked or ranked[0]["straight"] < min_images:
+        return []
+    picks = [ranked[0]]
+    done = covered(ranked[0], frame, samples, reach)
+    step = (
+        float(np.median(np.linalg.norm(np.diff(samples, axis=0), axis=1)))
+        if len(samples) > 1
+        else 2.0
+    )
+    while True:
+        best = None
+        for k, r in enumerate(ranked):
+            if any(r is q for q in picks) or r["straight"] < min_images:
+                continue
+            if r["spacing_m"] > max_spacing:
+                continue
+            new = covered(r, frame, samples, reach) & ~done
+            share = float(new.mean())
+            if share < min_new or new.sum() * step < min_new_m:
+                continue
+            key = (-min(int(share * 4), 3), k)
+            if best is None or key < best[0]:
+                best = (key, r, new)
+        if best is None:
+            return picks
+        picks.append(best[1])
+        done |= best[2]
 
 
 def print_runs(ranked, min_images, limit=10):
@@ -608,44 +659,36 @@ TIMINGS = {
 }  # filled by fetch_roi, read by run_pipeline
 
 
-def fetch_roi(
+def choose_roi(
     roi,
-    token=None,
-    out=None,
+    images=None,
     view=None,
     view_tol=35.0,
     sequence=None,
     min_images=20,
     max_spacing=10.0,
-    max_images=None,
     no_rig=False,
-    resolution="2048",
-    list_only=False,
-    rois_dir=ROIS_DIR,
     pano="auto",
-    pano_fov=90.0,
-    images=None,
-    keep_originals=False,
+    one_run=False,
 ):
-    """Find and download the best run plus rig siblings for every line of the ROI. Returns the
-    ROI folder (None with list_only).
+    """The captures to use for every line of the ROI: a JSON-able selection {"roi", "groups"}.
+    Each group is one chosen run ("pick": its summary, with "run" its records) plus its rig
+    siblings ("siblings": [(summary, records in the pick's capture window)]); "line" numbers
+    the groups, "street_line" is the ROI line it covers. A line gets several groups when one
+    capture does not cover it (choose_runs; one_run: only the best run, as before).
 
     images: Mapillary records (ALIGNMENT_FIELDS) to choose from, e.g. the fetch stage's;
-    without them each line's images are queried (with token, or MAPILLARY_ACCESS_TOKEN).
-    keep_originals: download full-resolution photos into data/mapillary/originals/ (see the
-    module docstring)."""
-    if token and not os.environ.get("MAPILLARY_ACCESS_TOKEN"):
-        os.environ["MAPILLARY_ACCESS_TOKEN"] = token  # MapillaryClient reads it there
-    if images is not None:
+    without them each line's images are queried (MAPILLARY_ACCESS_TOKEN)."""
+    if images is not None and not isinstance(images, dict):
         images = {img["id"]: img for img in images}
-    picks = []
+    groups = []
     for k, line in enumerate(roi["lines"], start=1):
         print(
             f"Line {k}: {len(line)} points, {line_length_m(line):.0f} m, corridor {roi['corridor_m']:.0f} m"
         )
         t0 = time.time()
         near = images if images is not None else line_images(line, roi["corridor_m"])
-        runs, frame = find_runs(near, line, roi["corridor_m"])
+        runs, frame, samples = find_runs(near, line, roi["corridor_m"])
         TIMINGS["search_s"] += time.time() - t0
         ranked = rank_runs(runs, min_images, max_spacing, view, view_tol, pano)
         if view:
@@ -655,34 +698,87 @@ def fetch_roi(
         print_runs(ranked, min_images)
         if sequence:
             ranked = [r for r in ranked if r["sequence"] == sequence] or ranked
-        if not ranked or ranked[0]["straight"] < min_images:
+        picks = choose_runs(
+            ranked, frame, samples, roi["corridor_m"] + 5, min_images, max_spacing
+        )
+        if one_run:
+            picks = picks[:1]
+        if not picks:
             print(
                 f"  no run with {min_images}+ frames along a straight stretch on line {k}; skipping it "
                 "(lower --min-images, widen the corridor or draw another street)"
             )
             continue
-        picks.append((k, ranked[0], runs, frame))
-    if list_only:
-        return None
-    if not picks:
-        raise SystemExit("No line has a usable Mapillary run")
+        if len(picks) > 1:
+            print(
+                f"  {len(picks)} runs together cover {100 * float(np.logical_or.reduce([covered(r, frame, samples, roi['corridor_m'] + 5) for r in picks]).mean()):.0f}% "
+                f"of the line: " + ", ".join(r["sequence"] for r in picks)
+            )
+        taken = {r["sequence"] for r in picks}
+        for pick in picks:
+            siblings = (
+                []
+                if no_rig or pick["pano"]
+                else [
+                    (r, imgs)
+                    for r, imgs in rig_siblings(pick, runs, frame)
+                    if r["sequence"] not in taken
+                ]
+            )
+            groups.append(
+                {
+                    "line": len(groups) + 1,
+                    "street_line": k,
+                    "pick": pick,
+                    "siblings": siblings,
+                }
+            )
+    return {"roi": roi, "groups": groups}
 
+
+def selection_images(selection):
+    """Every Mapillary record a selection downloads (picks and rig siblings)."""
+    out = {}
+    for g in selection["groups"]:
+        for img in g["pick"]["run"]:
+            out[img["id"]] = img
+        for _, imgs in g["siblings"]:
+            for img in imgs:
+                out[img["id"]] = img
+    return list(out.values())
+
+
+def download_selection(
+    selection,
+    out=None,
+    max_images=None,
+    resolution="2048",
+    rois_dir=ROIS_DIR,
+    pano_fov=90.0,
+    keep_originals=False,
+):
+    """Download a selection (choose_roi) into a new ROI folder; returns the folder.
+    keep_originals: download full-resolution photos into data/mapillary/originals/ (see the
+    module docstring)."""
+    if not selection["groups"]:
+        raise SystemExit("No line has a usable Mapillary run")
     out = Path(out) if out else next_roi_dir(rois_dir)
     paths = RoiPaths(out)
     paths.images.mkdir(parents=True, exist_ok=True)
-    paths.roi_json.write_text(json.dumps(roi, indent=1))
+    paths.roi_json.write_text(json.dumps(selection["roi"], indent=1))
     store = ImageStore(paths.originals) if keep_originals else None
     sequences = []
-    for k, pick, runs, frame in picks:
+    for g in selection["groups"]:
+        n, pick = g["line"], g["pick"]
         chosen = pick["run"][:max_images] if max_images else pick["run"]
         pick = {**pick, "run": chosen}
         if pick["pano"]:
-            sequences += fetch_pano(paths, out, k, pick, frame, pano_fov, store)
+            sequences += fetch_pano(paths, out, n, pick, pano_fov, store)
             continue
-        cams = [(pick, chosen)] + ([] if no_rig else rig_siblings(pick, runs, frame))
-        for j, (r, imgs) in enumerate(cams):
-            folder = f"line{k}_cam{j}_{r['sequence'][:8]}"
+        for j, (r, imgs) in enumerate([(pick, chosen)] + list(g["siblings"])):
+            folder = f"line{n}_cam{j}_{r['sequence'][:8]}"
             role = "rig sibling" if j else "primary"
+            frame = LocalFrame(*image_lonlat(imgs[0]))
             view_deg = view_angle(imgs, [frame.xy(*image_lonlat(i)) for i in imgs])
             print(
                 f"\n{folder}: sequence {r['sequence']} ({role}), "
@@ -690,7 +786,8 @@ def fetch_roi(
             )
             header = {
                 "roi": out.name,
-                "line": k,
+                "line": n,
+                "street_line": g["street_line"],
                 "sequence": r["sequence"],
                 "role": role,
                 "camera": r["camera"],
@@ -712,6 +809,7 @@ def fetch_roi(
                         for key in (
                             "sequence",
                             "line",
+                            "street_line",
                             "role",
                             "camera",
                             "view_deg",
@@ -726,28 +824,76 @@ def fetch_roi(
                 }
             )
     paths.sequences_json.write_text(json.dumps(sequences, indent=1))
-    print(f"\nROI folder {out}: {len(sequences)} sequence(s) on {len(picks)} line(s)")
+    print(
+        f"\nROI folder {out}: {len(sequences)} sequence(s) in {len(selection['groups'])} "
+        f"run(s) on {len({g['street_line'] for g in selection['groups']})} line(s)"
+    )
     return out
 
 
-def fetch_pano(paths, out, k, pick, frame, fov_deg, store=None):
+def fetch_roi(
+    roi,
+    token=None,
+    out=None,
+    view=None,
+    view_tol=35.0,
+    sequence=None,
+    min_images=20,
+    max_spacing=10.0,
+    max_images=None,
+    no_rig=False,
+    resolution="2048",
+    list_only=False,
+    rois_dir=ROIS_DIR,
+    pano="auto",
+    pano_fov=90.0,
+    images=None,
+    keep_originals=False,
+    one_run=False,
+):
+    """Choose (choose_roi) and download (download_selection) the captures of every line of
+    the ROI. Returns the ROI folder (None with list_only)."""
+    if token and not os.environ.get("MAPILLARY_ACCESS_TOKEN"):
+        os.environ["MAPILLARY_ACCESS_TOKEN"] = token  # MapillaryClient reads it there
+    selection = choose_roi(
+        roi,
+        images,
+        view,
+        view_tol,
+        sequence,
+        min_images,
+        max_spacing,
+        no_rig,
+        pano,
+        one_run,
+    )
+    if list_only:
+        return None
+    return download_selection(
+        selection, out, max_images, resolution, rois_dir, pano_fov, keep_originals
+    )
+
+
+def fetch_pano(paths, out, n, pick, fov_deg, store=None):
     """Download a 360 run as two crop folders (right = primary, left = rig sibling); their
     sequences.json entries."""
     imgs = pick["run"]
+    frame = LocalFrame(*image_lonlat(imgs[0]))
     view_deg = view_angle(imgs, [frame.xy(*image_lonlat(i)) for i in imgs])
     folders = {
-        side: paths.images / f"line{k}_cam{j}_{pick['sequence'][:8]}"
+        side: paths.images / f"line{n}_cam{j}_{pick['sequence'][:8]}"
         for j, side in enumerate(PANO_SIDES)
     }
     print(
-        f"\nline {k}: 360 sequence {pick['sequence']}, {len(imgs)} frames, {pick['camera']}; image centre looks "
+        f"\nline {n}: 360 sequence {pick['sequence']}, {len(imgs)} frames, {pick['camera']}; image centre looks "
         f"{'?' if view_deg is None else f'{view_deg:+.0f}'} deg from travel; cutting right and left views"
     )
     headers = {}
     for j, side in enumerate(PANO_SIDES):
         headers[side] = {
             "roi": out.name,
-            "line": k,
+            "line": n,
+            "street_line": pick.get("street_line"),
             "sequence": pick["sequence"],
             "role": "rig sibling" if j else "primary",
             "camera": pick["camera"],
