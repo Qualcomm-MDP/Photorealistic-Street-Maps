@@ -23,7 +23,7 @@ Env files are read when the program or container starts; Docker never copies the
 
 | Variable                 | Default                                               | Purpose                                                                                                                                          |
 | ------------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `MAPILLARY_ACCESS_TOKEN` | *(required)*                                          | Mapillary client token, used to fetch street photos. A token saved in the web app's Settings takes priority.                                    |
+| `MAPILLARY_ACCESS_TOKEN` | *(required)* | Mapillary client token, used to fetch street photos. A token saved in Settings overrides it for the web app only; the CLI reads the environment/env file. |
 | `APP_ENV`                | *(empty)*                                             | Which env file to read (see above).                                                                                                              |
 | `SEG_MODEL`              | `facebook/mask2former-swin-large-cityscapes-semantic` | Default Mask2Former checkpoint for the CLI. Any Cityscapes semantic checkpoint works, e.g. `facebook/mask2former-swin-tiny-cityscapes-semantic`. |
 | `SEG_DEVICE`             | auto (`cuda` if available, else `cpu`)                | Force the segmentation device: `cuda`, `mps` or `cpu`.                                                                                           |
