@@ -1,0 +1,85 @@
+.figure {
+  max-width: 34rem;
+  margin: 0 0 var(--ifm-leading);
+}
+
+/* "4096 px" with a dimension line across the top of the atlas. */
+.width {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+  color: var(--ifm-color-emphasis-700);
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.75rem;
+}
+
+.width::before,
+.width::after {
+  content: '';
+  flex: 1;
+  height: 0;
+  border-top: 1px solid var(--ifm-color-emphasis-500);
+}
+
+.atlas {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ifm-color-emphasis-500);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--ifm-background-surface-color);
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.75rem;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  height: 4.5rem;
+  border-bottom: 1px dashed var(--ifm-color-emphasis-400);
+}
+
+.row + .row {
+  height: 3.5rem;
+}
+
+.patch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid var(--ifm-color-emphasis-500);
+  border-bottom: 1px solid var(--ifm-color-emphasis-500);
+  background: var(--ifm-color-emphasis-200);
+  color: var(--ifm-color-emphasis-800);
+}
+
+.rowLabel {
+  position: absolute;
+  right: 0.6rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ifm-color-emphasis-600);
+}
+
+.more {
+  padding: 0.6rem;
+  border-bottom: 1px solid var(--ifm-color-emphasis-500);
+  color: var(--ifm-color-emphasis-600);
+  text-align: center;
+}
+
+/* The real colour (225 of 255), so it's the same grey in light and dark mode. */
+.grey {
+  padding: 0.35rem;
+  background: rgb(225 225 225);
+  color: #333;
+  text-align: center;
+}
+
+.caption {
+  margin-top: 0.5rem;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.875rem;
+}

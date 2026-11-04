@@ -1,0 +1,36 @@
+/**
+ * Site-wide styles. Infima (Docusaurus's CSS framework) variables:
+ * https://docusaurus.io/docs/styling-layout
+ *
+ * Monochrome, like the PSM web app.
+ */
+
+:root {
+  --ifm-color-primary: #1f2328;
+  --ifm-color-primary-dark: #1b1f23;
+  --ifm-color-primary-darker: #191c20;
+  --ifm-color-primary-darkest: #15171a;
+  --ifm-color-primary-light: #3a4048;
+  --ifm-color-primary-lighter: #4a515b;
+  --ifm-color-primary-lightest: #5f6772;
+  --ifm-code-font-size: 92%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #e6e8eb;
+  --ifm-color-primary-dark: #d0d4d9;
+  --ifm-color-primary-darker: #c4c9cf;
+  --ifm-color-primary-darkest: #a6adb5;
+  --ifm-color-primary-light: #f0f1f3;
+  --ifm-color-primary-lighter: #f5f6f7;
+  --ifm-color-primary-lightest: #ffffff;
+  --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.1);
+}
+
+/* With a monochrome palette, links in the text need an underline to stand out. */
+.markdown a,
+.footer__link-item {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
