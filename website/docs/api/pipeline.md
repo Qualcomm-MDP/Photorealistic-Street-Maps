@@ -15,7 +15,7 @@ The pipeline framework (`src/common/pipeline_chain.py`) and the PSM pipeline bui
 class PipelineChain(name: str = 'pipeline')
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/pipeline_chain.py#L75)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/pipeline_chain.py#L75)
 
 ### PipelineChain.describe()
 
@@ -25,7 +25,7 @@ def describe() -> list[dict[str, str]]
 
 Top-level stages in run order, for progress displays.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/pipeline_chain.py#L92)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/pipeline_chain.py#L92)
 
 ### PipelineChain.add_stage()
 
@@ -38,7 +38,7 @@ def add_stage(
 ) -> 'PipelineChain'
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/pipeline_chain.py#L99)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/pipeline_chain.py#L99)
 
 ### PipelineChain.add_fork()
 
@@ -52,7 +52,7 @@ def add_fork(
 ) -> 'PipelineChain'
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/pipeline_chain.py#L110)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/pipeline_chain.py#L110)
 
 ### PipelineChain.run()
 
@@ -65,7 +65,7 @@ def run(
 ) -> PipelineState
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/pipeline_chain.py#L133)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/pipeline_chain.py#L133)
 
 ### PipelineChain.resume()
 
@@ -77,7 +77,7 @@ def resume(
 ) -> PipelineState
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/pipeline_chain.py#L154)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/pipeline_chain.py#L154)
 
 ## PipelineState
 
@@ -90,7 +90,7 @@ class PipelineState(
 )
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/pipeline_chain.py#L38)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/pipeline_chain.py#L38)
 
 ### PipelineState.get_metadata()
 
@@ -98,7 +98,7 @@ class PipelineState(
 def get_metadata(key: str, default: _T) -> _T
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/pipeline_chain.py#L45)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/pipeline_chain.py#L45)
 
 ### PipelineState.require_metadata()
 
@@ -106,7 +106,7 @@ def get_metadata(key: str, default: _T) -> _T
 def require_metadata(key: str) -> Any
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/pipeline_chain.py#L48)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/pipeline_chain.py#L48)
 
 ### PipelineState.set_metadata()
 
@@ -114,7 +114,7 @@ def require_metadata(key: str) -> Any
 def set_metadata(key: str, value: Any) -> None
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/pipeline_chain.py#L56)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/pipeline_chain.py#L56)
 
 ### PipelineState.get_output()
 
@@ -122,7 +122,7 @@ def set_metadata(key: str, value: Any) -> None
 def get_output(stage_name: str) -> Any
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/pipeline_chain.py#L59)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/pipeline_chain.py#L59)
 
 ### PipelineState.set_output()
 
@@ -130,7 +130,7 @@ def get_output(stage_name: str) -> Any
 def set_output(stage_name: str, value: Any) -> None
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/pipeline_chain.py#L64)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/pipeline_chain.py#L64)
 
 ### PipelineState.reset_from()
 
@@ -138,7 +138,7 @@ def set_output(stage_name: str, value: Any) -> None
 def reset_from(stage_names: list[str]) -> None
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/pipeline_chain.py#L70)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/pipeline_chain.py#L70)
 
 ## The PSM pipeline
 
@@ -150,7 +150,7 @@ def reset_from(stage_names: list[str]) -> None
 def build_pipeline() -> PipelineChain
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/pipeline.py#L71)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/pipeline.py#L71)
 
 ### export_mesh()
 
@@ -158,7 +158,7 @@ def build_pipeline() -> PipelineChain
 def export_mesh(value, state)
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/pipeline.py#L20)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/pipeline.py#L20)
 
 ## BoundingBox
 
@@ -166,7 +166,7 @@ def export_mesh(value, state)
 class BoundingBox(min_lat: float, max_lat: float, min_lon: float, max_lon: float)
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/constants.py#L20)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/constants.py#L20)
 
 ### BoundingBox.to_list()
 
@@ -174,7 +174,7 @@ class BoundingBox(min_lat: float, max_lat: float, min_lon: float, max_lon: float
 def to_list()
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/constants.py#L27)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/constants.py#L27)
 
 ### BoundingBox.to_str()
 
@@ -182,7 +182,7 @@ def to_list()
 def to_str()
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/constants.py#L30)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/constants.py#L30)
 
 ### BoundingBox.from_json()
 
@@ -190,7 +190,7 @@ def to_str()
 def from_json(data)
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/constants.py#L33)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/constants.py#L33)
 
 ### BoundingBox.from_list()
 
@@ -198,4 +198,4 @@ def from_json(data)
 def from_list(data)
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/constants.py#L50)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/constants.py#L50)

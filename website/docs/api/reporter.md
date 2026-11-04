@@ -19,7 +19,7 @@ class Reporter
 
 Console reporter used by the CLI and whenever no other one is given.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/reporter.py#L27)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/reporter.py#L27)
 
 #### Reporter.info()
 
@@ -27,7 +27,7 @@ Console reporter used by the CLI and whenever no other one is given.
 def info(message: str) -> None
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/reporter.py#L30)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/reporter.py#L30)
 
 #### Reporter.warning()
 
@@ -35,7 +35,7 @@ def info(message: str) -> None
 def warning(message: str) -> None
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/reporter.py#L34)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/reporter.py#L34)
 
 #### Reporter.error()
 
@@ -43,7 +43,7 @@ def warning(message: str) -> None
 def error(message: str) -> None
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/reporter.py#L37)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/reporter.py#L37)
 
 #### Reporter.progress()
 
@@ -51,7 +51,7 @@ def error(message: str) -> None
 def progress(items: Iterable[T], desc: str, total: int | None = None) -> Iterator[T]
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/reporter.py#L40)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/reporter.py#L40)
 
 ### get_reporter()
 
@@ -61,7 +61,7 @@ def get_reporter(state: Any = None) -> Reporter
 
 The reporter for this pipeline run (from state metadata), or the console.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/reporter.py#L49)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/reporter.py#L49)
 
 ## JobReporter (web app)
 
@@ -76,7 +76,7 @@ class JobReporter(
 )
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/api/joblog.py#L24)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/api/joblog.py#L24)
 
 #### JobReporter.info()
 
@@ -84,7 +84,7 @@ class JobReporter(
 def info(message: str) -> None
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/api/joblog.py#L42)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/api/joblog.py#L42)
 
 #### JobReporter.warning()
 
@@ -92,7 +92,7 @@ def info(message: str) -> None
 def warning(message: str) -> None
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/api/joblog.py#L45)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/api/joblog.py#L45)
 
 #### JobReporter.error()
 
@@ -100,7 +100,7 @@ def warning(message: str) -> None
 def error(message: str) -> None
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/api/joblog.py#L48)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/api/joblog.py#L48)
 
 #### JobReporter.progress()
 
@@ -108,7 +108,7 @@ def error(message: str) -> None
 def progress(items: Iterable[T], desc: str, total: int | None = None) -> Iterator[T]
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/api/joblog.py#L51)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/api/joblog.py#L51)
 
 #### JobReporter.close()
 
@@ -116,7 +116,7 @@ def progress(items: Iterable[T], desc: str, total: int | None = None) -> Iterato
 def close() -> None
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/api/joblog.py#L74)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/api/joblog.py#L74)
 
 ## Keeping secrets out of logs
 
@@ -128,4 +128,4 @@ def redact(text: str) -> str
 
 text with access_token values and known secret env values masked.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/redact.py#L16)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/redact.py#L16)

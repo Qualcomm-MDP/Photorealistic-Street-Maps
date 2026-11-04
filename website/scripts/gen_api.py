@@ -22,7 +22,7 @@ import griffe
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
 OUT = ROOT / "website" / "docs" / "api"
-REPO = "https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps"
+REPO = "https://github.com/Qualcomm-MDP/PSM"
 WRAP_AT = 88  # signatures longer than this get one parameter per line
 
 

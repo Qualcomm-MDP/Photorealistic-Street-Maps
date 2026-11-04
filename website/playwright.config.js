@@ -19,7 +19,7 @@ module.exports = defineConfig({
   projects: [{name: 'chromium', use: {...devices['Desktop Chrome']}}],
   webServer: {
     command: `npm run serve -- --port ${PORT} --no-open`,
-    url: `http://localhost:${PORT}/Photorealistic-Street-Maps/`,
+    url: `http://localhost:${PORT}/PSM/`,
     reuseExistingServer: !process.env.CI,
   },
 });

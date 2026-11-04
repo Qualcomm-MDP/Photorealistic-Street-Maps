@@ -6,7 +6,7 @@
 
 const {test, expect} = require('@playwright/test');
 
-const BASE = '/Photorealistic-Street-Maps/';
+const BASE = '/PSM/';
 
 /** Collect everything that went wrong on a page: script errors, console
  * errors, failed requests and HTTP errors from this site. */

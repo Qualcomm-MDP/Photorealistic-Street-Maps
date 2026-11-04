@@ -11,7 +11,7 @@ The other pipeline stages and the helpers they use.
 
 ## Mesh building
 
-Module `mesh_builder.extrude` · [source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/mesh_builder/extrude.py)
+Module `mesh_builder.extrude` · [source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/mesh_builder/extrude.py)
 
 ### build_mesh()
 
@@ -19,7 +19,7 @@ Module `mesh_builder.extrude` · [source](https://github.com/Qualcomm-MDP/Photor
 def build_mesh(value, state)
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/mesh_builder/extrude.py#L13)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/mesh_builder/extrude.py#L13)
 
 ### ground_under()
 
@@ -29,7 +29,7 @@ def ground_under(corners, terrain) -> tuple[float, float]
 
 Lowest and highest ground (m above terrain datum) under a footprint.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/mesh_builder/extrude.py#L25)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/mesh_builder/extrude.py#L25)
 
 ### extrude_buildings()
 
@@ -42,11 +42,11 @@ def extrude_buildings(
 )
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/mesh_builder/extrude.py#L41)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/mesh_builder/extrude.py#L41)
 
 ## Terrain
 
-Module `terrain.terrain` · [source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/terrain/terrain.py)
+Module `terrain.terrain` · [source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/terrain/terrain.py)
 
 ### Terrain
 
@@ -68,7 +68,7 @@ the lowest point of the grid.
 | `z_datum` | `float` |  |
 | `spacing` | `float` |  |
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/terrain/terrain.py#L31)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/terrain/terrain.py#L31)
 
 #### Terrain.ground()
 
@@ -78,7 +78,7 @@ def ground(x, y) -> np.ndarray
 
 Ground height (m above z_datum) at UTM points x, y.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/terrain/terrain.py#L54)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/terrain/terrain.py#L54)
 
 #### Terrain.to_mesh()
 
@@ -88,7 +88,7 @@ def to_mesh() -> trimesh.Trimesh
 
 Z-up grid mesh of the ground in absolute UTM x, y.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/terrain/terrain.py#L59)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/terrain/terrain.py#L59)
 
 ### decode_terrarium()
 
@@ -98,7 +98,7 @@ def decode_terrarium(rgb: np.ndarray) -> np.ndarray
 
 Terrarium PNG pixels (H, W, 3) -> elevation in metres.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/terrain/terrain.py#L90)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/terrain/terrain.py#L90)
 
 ### terrarium_sampler()
 
@@ -115,7 +115,7 @@ def terrarium_sampler(
 
 Download the Terrarium tiles covering the area; return sample(lon, lat) -> m.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/terrain/terrain.py#L96)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/terrain/terrain.py#L96)
 
 ### build_terrain()
 
@@ -129,7 +129,7 @@ def build_terrain(
 ) -> Terrain
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/terrain/terrain.py#L133)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/terrain/terrain.py#L133)
 
 ### terrain_stage()
 
@@ -139,7 +139,7 @@ def terrain_stage(value, state: PipelineState)
 
 Build the ground model when --terrain is on; pass the fetch output through.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/terrain/terrain.py#L171)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/terrain/terrain.py#L171)
 
 ## Aerial photos (NAIP)
 
@@ -154,7 +154,7 @@ and building lean away from nadir), so one shift for the whole area is found by
 matching footprint outlines to image edges. Buildings stay on the OSM
 footprints; only the roof texture is sampled at the shifted position.
 
-Module `naip.naip` · [source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/naip/naip.py)
+Module `naip.naip` · [source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/naip/naip.py)
 
 ### Ortho
 
@@ -189,7 +189,7 @@ roofs painted out. A roof at UTM (x, y) appears in image at
 | `width_m` | `float` |  |
 | `height_m` | `float` |  |
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/naip/naip.py#L47)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/naip/naip.py#L47)
 
 #### Ortho.to_px()
 
@@ -199,7 +199,7 @@ def to_px(x, y) -> tuple[np.ndarray, np.ndarray]
 
 UTM -> continuous (col, row); pixel edges are at whole numbers.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/naip/naip.py#L73)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/naip/naip.py#L73)
 
 #### Ortho.drape()
 
@@ -209,7 +209,7 @@ def drape(vertices: np.ndarray) -> trimesh.visual.TextureVisuals
 
 Ground texture seen from straight above, for z-up UTM vertices.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/naip/naip.py#L79)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/naip/naip.py#L79)
 
 ### fetch_naip()
 
@@ -227,7 +227,7 @@ def fetch_naip(
 
 Newest NAIP natural-colour image covering the UTM box (may extend it by &lt; 1 px).
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/naip/naip.py#L95)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/naip/naip.py#L95)
 
 ### roof_faces()
 
@@ -237,7 +237,7 @@ def roof_faces(mesh: trimesh.Trimesh) -> np.ndarray
 
 Indices of the up-facing (roof) faces of a build_mesh (z-down) mesh.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/naip/naip.py#L144)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/naip/naip.py#L144)
 
 ### roof_mask()
 
@@ -252,7 +252,7 @@ def roof_mask(
 
 Where the roofs, shifted by (dx, dy) metres, cover the image grid.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/naip/naip.py#L149)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/naip/naip.py#L149)
 
 ### estimate_roof_offset()
 
@@ -272,7 +272,7 @@ Scores every shift up to +-search_m at once with an FFT cross-correlation
 of x-edges with x-edges and y-edges with y-edges. A best shift at the edge
 of the search window is probably spurious, so (0, 0) is returned then.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/naip/naip.py#L186)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/naip/naip.py#L186)
 
 ### remove_roofs()
 
@@ -282,7 +282,7 @@ def remove_roofs(image: np.ndarray, mask: np.ndarray, res: float) -> np.ndarray
 
 Paint the masked roofs (grown by INPAINT_GROW_M) out of the ground photo.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/naip/naip.py#L229)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/naip/naip.py#L229)
 
 ### roof_patches()
 
@@ -297,7 +297,7 @@ def roof_patches(
 
 Atlas patch records (as in tex_projection) cropping each roof face from NAIP.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/naip/naip.py#L237)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/naip/naip.py#L237)
 
 ### build_ortho()
 
@@ -312,7 +312,7 @@ def build_ortho(
 
 NAIP over the terrain grid, roof offset found, roofs painted out of the ground.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/naip/naip.py#L266)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/naip/naip.py#L266)
 
 ### naip_stage()
 
@@ -322,11 +322,11 @@ def naip_stage(value, state: PipelineState)
 
 Fetch and align NAIP when --naip is on; pass the building mesh through.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/naip/naip.py#L287)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/naip/naip.py#L287)
 
 ## Texturing
 
-Module `texturing.tex_projection` · [source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/texturing/tex_projection.py)
+Module `texturing.tex_projection` · [source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/texturing/tex_projection.py)
 
 ### camera_position()
 
@@ -336,7 +336,7 @@ def camera_position(x: float, y: float, terrain=None) -> np.ndarray
 
 Camera centre in projection space: CAMERA_HEIGHT_M above the ground.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/texturing/tex_projection.py#L27)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/texturing/tex_projection.py#L27)
 
 ### apply_textures()
 
@@ -368,7 +368,7 @@ its position instead of above z = 0.
 If aerial (a naip.Ortho) is given, roofs are textured from it instead of
 from street photos.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/texturing/tex_projection.py#L77)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/texturing/tex_projection.py#L77)
 
 ### tex_projection()
 
@@ -376,11 +376,11 @@ from street photos.
 def tex_projection(value, state: PipelineState)
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/texturing/tex_projection.py#L406)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/texturing/tex_projection.py#L406)
 
 ## Obstruction removal
 
-Module `segmentation.obstruction` · [source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/segmentation/obstruction.py)
+Module `segmentation.obstruction` · [source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/segmentation/obstruction.py)
 
 ### build_obstruction_mask()
 
@@ -393,7 +393,7 @@ def build_obstruction_mask(
 ) -> np.ndarray
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/segmentation/obstruction.py#L92)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/segmentation/obstruction.py#L92)
 
 ### synthesize_texture()
 
@@ -405,7 +405,7 @@ def synthesize_texture(
 ) -> np.ndarray
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/segmentation/obstruction.py#L120)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/segmentation/obstruction.py#L120)
 
 ### remove_obstructions()
 
@@ -418,11 +418,11 @@ def remove_obstructions(
 ) -> np.ndarray
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/segmentation/obstruction.py#L141)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/segmentation/obstruction.py#L141)
 
 ## Mesh helpers
 
-Module `common.MeshUtils` · [source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/MeshUtils.py)
+Module `common.MeshUtils` · [source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/MeshUtils.py)
 
 ### generate_plane()
 
@@ -430,7 +430,7 @@ Module `common.MeshUtils` · [source](https://github.com/Qualcomm-MDP/Photoreali
 def generate_plane(height, width)
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/MeshUtils.py#L22)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/MeshUtils.py#L22)
 
 ### initialize_plane()
 
@@ -438,7 +438,7 @@ def generate_plane(height, width)
 def initialize_plane(bounding_box: BoundingBox, Scale: int)
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/MeshUtils.py#L36)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/MeshUtils.py#L36)
 
 ### get_corners()
 
@@ -446,7 +446,7 @@ def initialize_plane(bounding_box: BoundingBox, Scale: int)
 def get_corners(element, bounding_box: BoundingBox)
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/MeshUtils.py#L57)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/MeshUtils.py#L57)
 
 ### get_lines()
 
@@ -454,7 +454,7 @@ def get_corners(element, bounding_box: BoundingBox)
 def get_lines(corners, loop=True)
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/MeshUtils.py#L75)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/MeshUtils.py#L75)
 
 ### get_height()
 
@@ -462,11 +462,11 @@ def get_lines(corners, loop=True)
 def get_height(element)
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/MeshUtils.py#L91)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/MeshUtils.py#L91)
 
 ## Mesh export
 
-Module `common.MeshExport` · [source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/MeshExport.py)
+Module `common.MeshExport` · [source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/MeshExport.py)
 
 ### export_to_glb()
 
@@ -483,11 +483,11 @@ Export a trimesh Scene to GLB format.
 | `mesh` | `trimesh.Scene` | The trimesh Scene to export. |
 | `output_path` | `str` | Path for the output .glb file. |
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/MeshExport.py#L5)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/MeshExport.py#L5)
 
 ## Coordinate conversions
 
-Module `common.conversions.basic` · [source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/basic.py)
+Module `common.conversions.basic` · [source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py)
 
 ### meters_to_feet()
 
@@ -497,7 +497,7 @@ def meters_to_feet(meters: float) -> float
 
 Convert meters to feet
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/basic.py#L10)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L10)
 
 ### feet_to_meters()
 
@@ -507,7 +507,7 @@ def feet_to_meters(feet: float) -> float
 
 Convert feet to meters
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/basic.py#L16)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L16)
 
 ### kilometers_to_miles()
 
@@ -517,7 +517,7 @@ def kilometers_to_miles(km: float) -> float
 
 Convert kilometers to miles
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/basic.py#L22)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L22)
 
 ### miles_to_kilometers()
 
@@ -527,7 +527,7 @@ def miles_to_kilometers(miles: float) -> float
 
 Convert miles to kilometers
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/basic.py#L28)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L28)
 
 ### meters_to_kilometers()
 
@@ -537,7 +537,7 @@ def meters_to_kilometers(meters: float) -> float
 
 Convert meters to kilometers
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/basic.py#L34)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L34)
 
 ### kilometers_to_meters()
 
@@ -547,7 +547,7 @@ def kilometers_to_meters(km: float) -> float
 
 Convert kilometers to meters
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/basic.py#L39)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L39)
 
 ### degrees_to_radians()
 
@@ -557,7 +557,7 @@ def degrees_to_radians(degrees: float) -> float
 
 Convert degrees to radians
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/basic.py#L45)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L45)
 
 ### radians_to_degrees()
 
@@ -567,7 +567,7 @@ def radians_to_degrees(radians: float) -> float
 
 Convert radians to degrees
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/basic.py#L50)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L50)
 
 ### normalize_angle_degrees()
 
@@ -577,7 +577,7 @@ def normalize_angle_degrees(angle: float) -> float
 
 Normalize angle to [0, 360) degrees
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/basic.py#L55)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L55)
 
 ### normalize_angle_radians()
 
@@ -587,7 +587,7 @@ def normalize_angle_radians(angle: float) -> float
 
 Normalize angle to [0, 2pi) radians
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/basic.py#L60)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L60)
 
 ### compass_to_cartesian()
 
@@ -608,7 +608,7 @@ cartesian angle (0° = East, counter-clockwise).
 
 - `float`: Cartesian angle in degrees (0-360)
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/basic.py#L65)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L65)
 
 ### cartesian_to_compass()
 
@@ -628,7 +628,7 @@ Convert cartesian angle to compass bearing.
 
 - `float`: Compass bearing in degrees (0° = North, clockwise)
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/basic.py#L79)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L79)
 
 ### utc_now()
 
@@ -638,7 +638,7 @@ def utc_now() -> datetime
 
 Get current UTC time
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/basic.py#L93)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L93)
 
 ### to_utc()
 
@@ -648,7 +648,7 @@ def to_utc(dt: datetime) -> datetime
 
 Convert datetime to UTC
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/basic.py#L98)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L98)
 
 ### unix_timestamp_to_utc()
 
@@ -658,7 +658,7 @@ def unix_timestamp_to_utc(timestamp: float) -> datetime
 
 Convert Unix timestamp to UTC datetime
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/basic.py#L106)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L106)
 
 ### utc_to_unix_timestamp()
 
@@ -668,7 +668,7 @@ def utc_to_unix_timestamp(dt: datetime) -> float
 
 Convert UTC datetime to Unix timestamp
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/basic.py#L111)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L111)
 
 ### haversine_distance()
 
@@ -698,7 +698,7 @@ Calculate great-circle distance between two points using Haversine formula.
 
 - `float`: Distance in specified unit
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/basic.py#L117)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L117)
 
 ### euclidean_distance_2d()
 
@@ -708,7 +708,7 @@ def euclidean_distance_2d(x1: float, y1: float, x2: float, y2: float) -> float
 
 Calculate 2D Euclidean distance
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/basic.py#L167)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L167)
 
 ### euclidean_distance_3d()
 
@@ -725,9 +725,9 @@ def euclidean_distance_3d(
 
 Calculate 3D Euclidean distance
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/basic.py#L172)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L172)
 
-Module `common.conversions.utm` · [source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/utm.py)
+Module `common.conversions.utm` · [source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/utm.py)
 
 ### camera_center_utm()
 
@@ -735,7 +735,7 @@ Module `common.conversions.utm` · [source](https://github.com/Qualcomm-MDP/Phot
 def camera_center_utm(image_meta, utm_epsg, camera_height_m)
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/utm.py#L9)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/utm.py#L9)
 
 ### convert_mesh_to_utm()
 
@@ -743,11 +743,11 @@ def camera_center_utm(image_meta, utm_epsg, camera_height_m)
 def convert_mesh_to_utm(mesh_path: str, lon_and_lat: Tuple[float, float], utm_epsg: int)
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/conversions/utm.py#L17)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/utm.py#L17)
 
 ## Progress display
 
-Module `common.ProgressMonitor` · [source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/ProgressMonitor.py)
+Module `common.ProgressMonitor` · [source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py)
 
 ### ProgressMonitor
 
@@ -776,7 +776,7 @@ Initialize the progress monitor.
 | --- | --- | --- |
 | `verbose` | `bool` | Whether to print progress updates to console. |
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/ProgressMonitor.py#L4)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L4)
 
 #### ProgressMonitor.set_verbose()
 
@@ -786,7 +786,7 @@ def set_verbose(enable: bool = True) -> None
 
 Enable or disable verbose output.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/ProgressMonitor.py#L29)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L29)
 
 #### ProgressMonitor.add_task()
 
@@ -806,7 +806,7 @@ Add a task to track.
 
 - `int`: Total number of tasks after adding this one.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/ProgressMonitor.py#L33)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L33)
 
 #### ProgressMonitor.reset()
 
@@ -816,7 +816,7 @@ def reset() -> None
 
 Reset progress to the beginning.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/ProgressMonitor.py#L69)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L69)
 
 #### ProgressMonitor.skip_to()
 
@@ -832,7 +832,7 @@ Skip to a specific task index.
 | --- | --- | --- |
 | `index` | `int` | Task index to skip to (0-based). |
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/ProgressMonitor.py#L73)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L73)
 
 #### ProgressMonitor.is_complete()
 
@@ -842,7 +842,7 @@ def is_complete() -> bool
 
 Check if all tasks are complete.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/ProgressMonitor.py#L84)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L84)
 
 #### ProgressMonitor.next()
 
@@ -856,7 +856,7 @@ Mark current task as complete and move to next.
 
 - `bool`: True if all tasks are now complete, False otherwise.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/ProgressMonitor.py#L88)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L88)
 
 #### ProgressMonitor.progress_percentage()
 
@@ -866,4 +866,4 @@ def progress_percentage() -> float
 
 Get progress as a percentage (0-100).
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/ProgressMonitor.py#L106)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L106)

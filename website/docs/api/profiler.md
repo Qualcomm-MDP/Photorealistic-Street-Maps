@@ -20,7 +20,7 @@ class PipelineProfiler(pipeline_name: str)
 | `pipeline_name` | `str` |  |
 | `total_wall_time_s` | `float` |  |
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/profiler.py#L99)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L99)
 
 ### PipelineProfiler.start()
 
@@ -28,7 +28,7 @@ class PipelineProfiler(pipeline_name: str)
 def start() -> None
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/profiler.py#L107)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L107)
 
 ### PipelineProfiler.begin_stage()
 
@@ -36,7 +36,7 @@ def start() -> None
 def begin_stage(name: str) -> StageMetrics
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/profiler.py#L111)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L111)
 
 ### PipelineProfiler.end_stage()
 
@@ -48,7 +48,7 @@ def end_stage(
 ) -> None
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/profiler.py#L117)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L117)
 
 ### PipelineProfiler.finish()
 
@@ -56,7 +56,7 @@ def end_stage(
 def finish() -> None
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/profiler.py#L122)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L122)
 
 ### PipelineProfiler.summary()
 
@@ -64,7 +64,7 @@ def finish() -> None
 def summary() -> dict[str, Any]
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/profiler.py#L129)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L129)
 
 ### PipelineProfiler.save()
 
@@ -72,7 +72,7 @@ def summary() -> dict[str, Any]
 def save(path: str = 'performance.json') -> None
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/profiler.py#L152)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L152)
 
 ## StageMetrics
 
@@ -110,7 +110,7 @@ class StageMetrics(
 | `status` | `str` | `'pending'` |
 | `error` | `str \| None` | `None` |
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/profiler.py#L52)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L52)
 
 ### StageMetrics.set_throughput()
 
@@ -118,4 +118,4 @@ class StageMetrics(
 def set_throughput(label: str, value: float) -> None
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/profiler.py#L95)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L95)

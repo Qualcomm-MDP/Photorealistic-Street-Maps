@@ -55,4 +55,4 @@ Then open <http://localhost:8000>, add your Mapillary token in **Settings**, pic
 
 ## Project Links
 
-- **Repository:** [github.com/Qualcomm-MDP/Photorealistic-Street-Maps](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps)
+- **Repository:** [github.com/Qualcomm-MDP/PSM](https://github.com/Qualcomm-MDP/PSM)

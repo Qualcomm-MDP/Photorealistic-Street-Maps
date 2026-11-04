@@ -23,7 +23,7 @@ class OSMClient(
 )
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/providers/osm.py#L19)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/osm.py#L19)
 
 #### OSMClient.fetch()
 
@@ -34,7 +34,7 @@ def fetch(
 ) -> Dict[str, Any]
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/providers/osm.py#L34)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/osm.py#L34)
 
 #### OSMClient.build_feature_query()
 
@@ -44,7 +44,7 @@ def build_feature_query(feature: OSM_MAP_FEATURES, bbox: BoundingBox) -> List[st
 
 Build Overpass query snippets for a feature.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/providers/osm.py#L94)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/osm.py#L94)
 
 ### OSM_MAP_FEATURES
 
@@ -55,7 +55,7 @@ class OSM_MAP_FEATURES(Enum)
 - `BUILDING = 'building'`
 - `NATURE = 'nature'`
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/providers/osm.py#L14)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/osm.py#L14)
 
 ### OverpassClient
 
@@ -63,7 +63,7 @@ class OSM_MAP_FEATURES(Enum)
 class OverpassClient()
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/providers/overpass.py#L1)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/overpass.py#L1)
 
 #### OverpassClient.fetch()
 
@@ -71,7 +71,7 @@ class OverpassClient()
 def fetch()
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/providers/overpass.py#L5)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/overpass.py#L5)
 
 ## Mapillary
 
@@ -81,7 +81,7 @@ def fetch()
 class MapillaryClient(reporter: Reporter | None = None)
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/providers/mapillary.py#L26)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/mapillary.py#L26)
 
 #### MapillaryClient.get_token()
 
@@ -89,7 +89,7 @@ class MapillaryClient(reporter: Reporter | None = None)
 def get_token()
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/providers/mapillary.py#L32)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/mapillary.py#L32)
 
 #### MapillaryClient.fetch()
 
@@ -108,7 +108,7 @@ If min_quality is set, images whose quality_score is below it are
 skipped (images with no score are kept). quality_score must then be
 in fields.
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/providers/mapillary.py#L83)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/mapillary.py#L83)
 
 ## Fetch stage
 
@@ -118,4 +118,4 @@ in fields.
 def ingest_data(bbox: BoundingBox, state: PipelineState)
 ```
 
-[source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/data_ingest/ingest.py#L7)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/data_ingest/ingest.py#L7)

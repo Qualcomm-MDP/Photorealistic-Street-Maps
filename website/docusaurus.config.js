@@ -4,7 +4,7 @@
 
 import {themes as prismThemes} from 'prism-react-renderer';
 
-const repo = 'https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps';
+const repo = 'https://github.com/Qualcomm-MDP/PSM';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -16,11 +16,11 @@ const config = {
     v4: true,
   },
 
-  // GitHub Pages: https://qualcomm-mdp.github.io/Photorealistic-Street-Maps/
+  // GitHub Pages: https://qualcomm-mdp.github.io/PSM/
   url: 'https://qualcomm-mdp.github.io',
-  baseUrl: '/Photorealistic-Street-Maps/',
+  baseUrl: '/PSM/',
   organizationName: 'Qualcomm-MDP',
-  projectName: 'Photorealistic-Street-Maps',
+  projectName: 'PSM',
   trailingSlash: false,
 
   onBrokenLinks: 'throw',

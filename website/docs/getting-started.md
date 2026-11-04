@@ -19,8 +19,8 @@ Sign in at [mapillary.com](https://www.mapillary.com/), open your dashboard, go 
 ## Web app in Docker (recommended)
 
 ```bash
-git clone https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps.git
-cd Photorealistic-Street-Maps
+git clone https://github.com/Qualcomm-MDP/PSM.git
+cd PSM
 docker compose up --build api
 ```
 
@@ -62,8 +62,8 @@ APP_ENV=development docker compose run --rm pipeline --bbox W S E N --output out
 ## From source (Poetry)
 
 ```bash
-git clone https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps.git
-cd Photorealistic-Street-Maps
+git clone https://github.com/Qualcomm-MDP/PSM.git
+cd PSM
 poetry install
 ```
 
@@ -137,7 +137,7 @@ The `.glb` opens in:
 ## Project structure
 
 ```
-Photorealistic-Street-Maps/
+PSM/
 ├── src/
 │   ├── main.py                  # Command-line entry point
 │   ├── pipeline.py              # The pipeline: stages, export (shared by CLI and web)

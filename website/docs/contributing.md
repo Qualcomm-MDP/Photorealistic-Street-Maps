@@ -5,8 +5,8 @@ Contributions are welcome! This page covers setting up a development environment
 ## Development setup
 
 ```bash
-git clone https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps.git
-cd Photorealistic-Street-Maps
+git clone https://github.com/Qualcomm-MDP/PSM.git
+cd PSM
 poetry install
 poetry run pre-commit install
 ```
@@ -101,7 +101,7 @@ This site is built with [Docusaurus](https://docusaurus.io/) and lives in `websi
 ```bash
 cd website
 npm ci              # install
-npm start           # live preview at http://localhost:3000/Photorealistic-Street-Maps/
+npm start           # live preview at http://localhost:3000/PSM/
 npm run build       # production build into website/build (fails on broken links)
 npx playwright install chromium   # once, for the tests below
 npm run test:site   # opens every page of the build and fails on errors or missing chunks
