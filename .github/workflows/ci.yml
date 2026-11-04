@@ -1,8 +1,10 @@
 name: Run Tests
 
+# Pull requests are tested through pull_request; push only covers main (e.g.
+# after a merge), so a PR's checks don't run twice.
 on:
   push:
-    branches: ["**"]
+    branches: ["main"]
   pull_request:
     branches: ["**"]
 
@@ -10,10 +12,25 @@ permissions:
   contents: read
 
 jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
+  tests:
+    name: Tests (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Let every platform finish, so one failure doesn't hide the others.
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64
+            os: ubuntu-latest
+          - name: Linux ARM64
+            os: ubuntu-24.04-arm
+          - name: Windows x86_64
+            os: windows-latest
+    defaults:
+      run:
+        shell: bash
 
-    steps:
+    steps: &test-steps
       - name: Checkout Repository
         uses: actions/checkout@v4
 
@@ -34,7 +51,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+          key: venv-${{ runner.os }}-${{ runner.arch }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
 
       - name: Install Dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
@@ -45,3 +62,65 @@ jobs:
 
       - name: Run Tests
         run: poetry run pytest tests/
+
+  # Its own job so build-and-test doesn't wait on it: free macOS runners are
+  # scarce and the job can sit queued for many minutes. It still runs on every
+  # PR and shows its result. Intel Macs aren't tested: PyTorch has no Intel
+  # macOS builds after 2.2.2.
+  tests-macos:
+    name: Tests (macOS Apple Silicon)
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash
+    steps: *test-steps
+
+  docker:
+    name: Docker CPU image (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux/amd64
+            os: ubuntu-latest
+          - name: linux/arm64
+            os: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Built natively on each architecture, as `docker compose build` does on
+      # an Intel/AMD machine or an Apple Silicon Mac.
+      - name: Build CPU image
+        run: docker build --build-arg TORCH_VARIANT=cpu -t posm:cpu .
+
+      - name: Smoke test
+        run: |
+          docker run --rm --entrypoint python posm:cpu -c "
+          import platform, torch, trimesh, trimesh.creation as tc
+          from shapely.geometry import Polygon
+          from pipeline import build_pipeline
+          engine = next(name for name, ok in tc._engines if ok)
+          assert engine == 'earcut', engine
+          footprint = Polygon([(0, 0), (10, 0), (10, 6), (4, 6), (4, 10), (0, 10)])
+          mesh = trimesh.creation.extrude_polygon(footprint, 8)
+          assert mesh.is_watertight and abs(mesh.volume - 8 * 76) < 1e-6
+          stages = [s['name'] for s in build_pipeline().describe()]
+          print(platform.machine(), 'torch', torch.__version__, 'engine', engine, 'stages', stages)
+          "
+
+  # The branch rule on main requires a check called "build-and-test". It passes
+  # only when the Linux and Windows tests and both Docker builds passed, so the
+  # rule doesn't need updating when platforms are added or renamed. macOS
+  # (tests-macos) isn't included, so a long wait for a Mac doesn't block PRs.
+  build-and-test:
+    if: always()
+    needs: [tests, docker]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All platforms passed
+        run: |
+          echo "tests: ${{ needs.tests.result }}, docker: ${{ needs.docker.result }}"
+          [ "${{ needs.tests.result }}" = success ] && [ "${{ needs.docker.result }}" = success ]

@@ -1,27 +1,15 @@
-from dotenv import load_dotenv
-from common import ProgressMonitor, PipelineChain, export_to_glb
+from common import ProgressMonitor
 from common.profiler import PipelineProfiler
 from common.constants import BoundingBox
 from common.providers import OSMClient, OSM_MAP_FEATURES
-from common.MeshUtils import _get_utm_transformer
+from common.env import load_app_env
 
 from mesh_builder.extrude import extrude_buildings
-from data_ingest.ingest import ingest_data
-from mesh_builder.extrude import build_mesh
-from texturing.tex_projection import tex_projection
-from tkinter import Tk, filedialog
+from pipeline import build_pipeline
 
 import argparse
-import os
-import numpy as np
-import trimesh
 
-_env = os.environ.get("APP_ENV", "").lower()
-_env_file = {
-    "development": ".env.development",
-    "production": ".env.production",
-}.get(_env, ".env")
-load_dotenv(_env_file)
+load_app_env()
 
 
 def progress():
@@ -58,6 +46,9 @@ pipeline_progress.add_task("Export mesh file")
 
 
 def ask_save_path(default_name: str = "combined.glb") -> str | None:
+    # Imported lazily so headless runs (e.g. Docker with --output) never need Tk.
+    from tkinter import Tk, filedialog
+
     root = Tk()
     root.withdraw()
     root.attributes("-topmost", True)
@@ -73,48 +64,64 @@ def ask_save_path(default_name: str = "combined.glb") -> str | None:
     return path or None
 
 
-def export_mesh(value, state):
-    bbox = state.require_metadata("bbox")
-    center_lon = (bbox.min_lon + bbox.max_lon) / 2
-    center_lat = (bbox.min_lat + bbox.max_lat) / 2
-    transformer = _get_utm_transformer(center_lon, center_lat)
-    ox, oy = transformer.transform(center_lon, center_lat)
-
-    value.vertices -= np.array([ox, oy, 0.0])
-    value.vertices[:, 2] *= -1
-    center = value.bounding_box.centroid
-    value.apply_translation(-center)
-    rotation = trimesh.transformations.rotation_matrix(
-        angle=np.radians(-90.0),
-        direction=[1.0, 0.0, 0.0],
-        point=[0.0, 0.0, 0.0],
-    )
-    value.apply_transform(rotation)
-
-    path = ask_save_path()
-    if path is not None:
-        export_to_glb(value, path or "combined.glb")
-
-    state.require_metadata("progress_monitor").next()
-
-
-run_pipeline = PipelineChain()
-run_pipeline.add_stage("fetch", ingest_data)
-run_pipeline.add_stage("build_mesh", build_mesh)
-run_pipeline.add_stage("texturing", tex_projection)
-run_pipeline.add_stage("export", export_mesh)
+run_pipeline = build_pipeline()
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", metavar="FILENAME", default=None)
     parser.add_argument("--no-seg", action="store_true", default=False)
+    parser.add_argument(
+        "--bbox",
+        nargs=4,
+        type=float,
+        metavar=("WEST", "SOUTH", "EAST", "NORTH"),
+        default=None,
+        help="Bounding box in degrees. Prompts interactively if omitted.",
+    )
+    parser.add_argument(
+        "--output",
+        metavar="PATH",
+        default=None,
+        help="Where to write the .glb. Opens a save dialog if omitted.",
+    )
+    parser.add_argument(
+        "--dump-mapillary",
+        metavar="PATH",
+        default=None,
+        help="Write the raw Mapillary metadata to this JSON file for debugging.",
+    )
+    parser.add_argument(
+        "--terrain",
+        action="store_true",
+        default=False,
+        help="Place buildings and cameras on real ground heights (Terrarium "
+        "elevation tiles) and add the ground to the .glb. Off by default.",
+    )
+    parser.add_argument(
+        "--naip",
+        action="store_true",
+        default=False,
+        help="Texture the ground and roofs with NAIP aerial photos (USGS, "
+        "~0.6 m/px). Turns on --terrain. Off by default.",
+    )
+    parser.add_argument(
+        "--min-quality",
+        metavar="SCORE",
+        type=float,
+        default=None,
+        help="Skip Mapillary images whose quality_score (0-1) is below SCORE, "
+        "e.g. 0.6. Off by default.",
+    )
     args = parser.parse_args()
 
-    min_lon = float(input("WEST (Minimum Longitude): "))
-    min_lat = float(input("SOUTH (Minimum Latitude): "))
-    max_lon = float(input("EAST (Minimum Longitude): "))
-    max_lat = float(input("NORTH (Minimum Latitude): "))
+    if args.bbox is not None:
+        min_lon, min_lat, max_lon, max_lat = args.bbox
+    else:
+        min_lon = float(input("WEST (Minimum Longitude): "))
+        min_lat = float(input("SOUTH (Minimum Latitude): "))
+        max_lon = float(input("EAST (Maximum Longitude): "))
+        max_lat = float(input("NORTH (Maximum Latitude): "))
 
     bbox = BoundingBox(min_lat, max_lat, min_lon, max_lon)
 
@@ -129,6 +136,12 @@ def main():
             "bbox": bbox,
             "progress_monitor": pipeline_progress,
             "remove_obstructions": not args.no_seg,
+            "output_path": args.output,
+            "ask_output_path": ask_save_path,
+            "mapillary_dump_path": args.dump_mapillary,
+            "use_terrain": args.terrain or args.naip,
+            "use_naip": args.naip,
+            "min_quality": args.min_quality,
         },
         profiler=profiler,
     )
