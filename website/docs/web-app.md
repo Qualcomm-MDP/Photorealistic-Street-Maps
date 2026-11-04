@@ -54,7 +54,7 @@ The gear icon in the header opens Settings.
 
 - The status shows whether a token is set and where it comes from: **Saved here**, or **From .env** (the env file for your `APP_ENV`, e.g. `.env.development`), with its last four characters.
 - The token shows as dots; **Show** reveals it.
-- Press **Change**, paste the new token, then **Save token**. POSM asks you to confirm before it replaces the current one. New jobs use it straight away.
+- Press **Change**, paste the new token, then **Save token**. PSM asks you to confirm before it replaces the current one. New jobs use it straight away.
 - **Validate Token** checks a token with Mapillary.
 - **Remove saved token** (or **Use the .env token instead**) removes the one saved here, after confirming.
 
@@ -67,7 +67,7 @@ Both files are readable by your user only. See [Configuration](configuration.md)
 
 ### Defaults for new jobs
 
-Obstruction removal, segmentation model and device. They fill the Options panel each time POSM opens.
+Obstruction removal, segmentation model and device. They fill the Options panel each time PSM opens.
 
 Without a token, a notice next to **Generate model** links to Settings, and pressing Generate opens Settings instead of starting a job that would fail.
 
@@ -76,7 +76,7 @@ Without a token, a notice next to **Generate model** links to Settings, and pres
 The server listens on `127.0.0.1` (this computer only) by default. It has no login, and Settings can show the Mapillary token, so only open it to your network if you trust everyone on it:
 
 ```bash
-POSM_HOST=0.0.0.0 docker compose up api
+PSM_HOST=0.0.0.0 docker compose up api
 ```
 
 ## Light and dark mode

@@ -1,6 +1,6 @@
 # System Architecture
 
-POSM is one pipeline with two front ends. The pipeline itself (`src/pipeline.py`) is a chain of stages built on a small `PipelineChain` framework. The command line (`src/main.py`) and the web app (`src/api/`) both run that same chain; they differ only in how they collect the options and where the output goes.
+PSM is one pipeline with two front ends. The pipeline itself (`src/pipeline.py`) is a chain of stages built on a small `PipelineChain` framework. The command line (`src/main.py`) and the web app (`src/api/`) both run that same chain; they differ only in how they collect the options and where the output goes.
 
 ## Overview
 

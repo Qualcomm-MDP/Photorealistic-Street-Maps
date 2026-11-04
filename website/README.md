@@ -1,4 +1,4 @@
-# POSM documentation
+# PSM documentation
 
 The documentation site, built with [Docusaurus](https://docusaurus.io/). Needs Node.js 20 or newer.
 

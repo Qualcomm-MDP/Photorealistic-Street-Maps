@@ -1,6 +1,6 @@
 # Configuration
 
-POSM is configured with environment variables, usually from an env file. The web app can also save the Mapillary token and job defaults itself (see [Web App](web-app.md#settings)).
+PSM is configured with environment variables, usually from an env file. The web app can also save the Mapillary token and job defaults itself (see [Web App](web-app.md#settings)).
 
 ## Env files
 
@@ -27,9 +27,9 @@ Env files are read when the program or container starts; Docker never copies the
 | `APP_ENV`                | *(empty)*                                             | Which env file to read (see above).                                                                                                              |
 | `SEG_MODEL`              | `facebook/mask2former-swin-large-cityscapes-semantic` | Default Mask2Former checkpoint for the CLI. Any Cityscapes semantic checkpoint works, e.g. `facebook/mask2former-swin-tiny-cityscapes-semantic`. |
 | `SEG_DEVICE`             | auto (`cuda` if available, else `cpu`)                | Force the segmentation device: `cuda`, `mps` or `cpu`.                                                                                           |
-| `POSM_DATA_DIR`          | `output/jobs`                                         | Web app: where jobs and `settings.json` are kept.                                                                                                |
-| `POSM_ENV_DIR`           | the working directory                                 | Where the env file is read from, and created by Settings. Docker Compose sets it to the mounted project folder.                                 |
-| `POSM_HOST`              | `127.0.0.1`                                           | Docker Compose only: the address the web app's port is published on. `0.0.0.0` opens it to your network.                                       |
+| `PSM_DATA_DIR`          | `output/jobs`                                         | Web app: where jobs and `settings.json` are kept.                                                                                                |
+| `PSM_ENV_DIR`           | the working directory                                 | Where the env file is read from, and created by Settings. Docker Compose sets it to the mounted project folder.                                 |
+| `PSM_HOST`              | `127.0.0.1`                                           | Docker Compose only: the address the web app's port is published on. `0.0.0.0` opens it to your network.                                       |
 
 In the Docker images, model weights are downloaded to `/cache` (`HF_HOME` and `TORCH_HOME`), which Docker Compose keeps in the `model-cache` volume.
 

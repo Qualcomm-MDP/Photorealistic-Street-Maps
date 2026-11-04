@@ -1,12 +1,12 @@
 # Getting Started
 
-There are three ways to run POSM. Pick one:
+There are three ways to run PSM. Pick one:
 
 | Way                                                 | Best for               | You need                                                                             |
 | --------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------ |
 | [Web app in Docker](#web-app-in-docker-recommended) | Most people            | [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine) |
 | [Command line in Docker](#command-line-in-docker)   | Scripts and batch runs | Docker                                                                               |
-| [From source](#from-source-poetry)                  | Developing POSM        | Python 3.11–3.13, [Poetry](https://python-poetry.org/docs/), Git                     |
+| [From source](#from-source-poetry)                  | Developing PSM        | Python 3.11–3.13, [Poetry](https://python-poetry.org/docs/), Git                     |
 
 All of them need a **Mapillary access token** (free).
 
@@ -26,7 +26,7 @@ docker compose up --build api
 
 Open <http://localhost:8000>. On first use:
 
-1. Click the **gear icon** (Settings), paste your Mapillary token, and press **Save token**. If no `.env` file exists yet, POSM creates one with the token.
+1. Click the **gear icon** (Settings), paste your Mapillary token, and press **Save token**. If no `.env` file exists yet, PSM creates one with the token.
 2. Pick an area: search for an address, or press **Draw area** and drag a box on the map.
 3. Press **Generate model**. The timeline and the pipeline log follow the job live, and the model appears in the 3D preview when it's done.
 
@@ -129,7 +129,7 @@ Bigger areas mean more buildings and many more street photos, so runs get long. 
 
 The `.glb` opens in:
 
-- the **POSM web app** (3D preview, with a larger view)
+- the **PSM web app** (3D preview, with a larger view)
 - **[Blender](https://www.blender.org/)** (File → Import → glTF 2.0)
 - **[glTF Viewer](https://gltf-viewer.donmccurdy.com/)** (web, drag and drop)
 - **Windows 3D Viewer** and **macOS Quick Look**

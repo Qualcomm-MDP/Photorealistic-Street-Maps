@@ -1,16 +1,16 @@
 ---
 slug: /
-title: POSM
+title: PSM
 sidebar_label: Home
 ---
 
-# Photorealistic Open Street Map (POSM)
+# Photorealistic Street Maps (PSM)
 
 **An open-source pipeline for generating photorealistic 3D street-level maps from GPS coordinates alone.**
 
-## What is POSM?
+## What is PSM?
 
-POSM takes a geographic bounding box and produces a textured 3D model (`.glb`) of the buildings in it. It uses open data only: building footprints from OpenStreetMap, street-level photos from Mapillary, and, optionally, ground heights from Terrarium elevation tiles and USDA NAIP aerial photos. No proprietary datasets, LiDAR hardware, or paid APIs are needed.
+PSM takes a geographic bounding box and produces a textured 3D model (`.glb`) of the buildings in it. It uses open data only: building footprints from OpenStreetMap, street-level photos from Mapillary, and, optionally, ground heights from Terrarium elevation tiles and USDA NAIP aerial photos. No proprietary datasets, LiDAR hardware, or paid APIs are needed.
 
 You can run it from a **web app** (pick an area on a map, watch the job, preview and download the model) or from the **command line**.
 
@@ -41,7 +41,7 @@ The quickest way is the web app in Docker:
 docker compose up --build api
 ```
 
-Then open <http://localhost:8000>, add your Mapillary token in **Settings**, pick an area and press **Generate model**. See [Getting Started](getting-started.md) for the other ways to install and run POSM.
+Then open <http://localhost:8000>, add your Mapillary token in **Settings**, pick an area and press **Generate model**. See [Getting Started](getting-started.md) for the other ways to install and run PSM.
 
 ## Who Benefits
 

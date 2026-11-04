@@ -7,7 +7,7 @@ sidebar_position: 1
 
 # Pipeline & State
 
-The pipeline framework (`src/common/pipeline_chain.py`) and the POSM pipeline built on it (`src/pipeline.py`). See [Architecture](../architecture.md#pipeline-framework) for how they fit together.
+The pipeline framework (`src/common/pipeline_chain.py`) and the PSM pipeline built on it (`src/pipeline.py`). See [Architecture](../architecture.md#pipeline-framework) for how they fit together.
 
 ## PipelineChain
 
@@ -140,7 +140,7 @@ def reset_from(stage_names: list[str]) -> None
 
 [source](https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps/blob/main/src/common/pipeline_chain.py#L70)
 
-## The POSM pipeline
+## The PSM pipeline
 
 `build_pipeline()` defines the stages shared by the command line and the web app; `export_mesh()` is its last stage.
 

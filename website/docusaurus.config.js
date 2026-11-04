@@ -1,5 +1,5 @@
 // @ts-check
-// Docusaurus config for the POSM documentation site.
+// Docusaurus config for the PSM documentation site.
 // See: https://docusaurus.io/docs/api/docusaurus-config
 
 import {themes as prismThemes} from 'prism-react-renderer';
@@ -8,7 +8,7 @@ const repo = 'https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: 'POSM',
+  title: 'PSM',
   tagline: 'Photorealistic 3D street maps from open data',
   favicon: 'img/favicon.svg',
 
@@ -68,7 +68,7 @@ const config = {
         respectPrefersColorScheme: true,
       },
       navbar: {
-        title: 'POSM',
+        title: 'PSM',
         items: [
           {type: 'docSidebar', sidebarId: 'docs', position: 'left', label: 'Docs'},
           {to: '/api/pipeline', label: 'API', position: 'left'},

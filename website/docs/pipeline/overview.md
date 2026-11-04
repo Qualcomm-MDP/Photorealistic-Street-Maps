@@ -1,6 +1,6 @@
 # Pipeline Overview
 
-The POSM pipeline turns a geographic bounding box into a textured 3D model. It's a chain of six stages, defined in `build_pipeline()` in `src/pipeline.py` and shared by the command line and the web app.
+The PSM pipeline turns a geographic bounding box into a textured 3D model. It's a chain of six stages, defined in `build_pipeline()` in `src/pipeline.py` and shared by the command line and the web app.
 
 ## Stages
 

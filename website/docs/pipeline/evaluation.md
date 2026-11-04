@@ -1,6 +1,6 @@
 # Evaluation
 
-POSM is evaluated on speed and resource use, measured by the built-in profiler, and on output quality, assessed with user surveys.
+PSM is evaluated on speed and resource use, measured by the built-in profiler, and on output quality, assessed with user surveys.
 
 ## Pipeline profiler
 
@@ -87,7 +87,7 @@ Texturing dominated the runtime in all three, and segmentation added about 2 min
 
 :::info[User survey]
 
-Quality is assessed by asking 20 randomly chosen University of Michigan students to rate POSM buildings against photographs of the real ones. This evaluation is in progress.
+Quality is assessed by asking 20 randomly chosen University of Michigan students to rate PSM buildings against photographs of the real ones. This evaluation is in progress.
 
 :::
 

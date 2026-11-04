@@ -48,14 +48,14 @@ PAGES = [
     Page(
         "pipeline.md",
         "Pipeline & State",
-        "The pipeline framework (`src/common/pipeline_chain.py`) and the POSM "
+        "The pipeline framework (`src/common/pipeline_chain.py`) and the PSM "
         "pipeline built on it (`src/pipeline.py`). See "
         "[Architecture](../architecture.md#pipeline-framework) for how they fit together.",
         [
             Section("PipelineChain", objects=["common.pipeline_chain.PipelineChain"]),
             Section("PipelineState", objects=["common.pipeline_chain.PipelineState"]),
             Section(
-                "The POSM pipeline",
+                "The PSM pipeline",
                 "`build_pipeline()` defines the stages shared by the command line "
                 "and the web app; `export_mesh()` is its last stage.",
                 ["pipeline.build_pipeline", "pipeline.export_mesh"],
