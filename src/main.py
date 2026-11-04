@@ -105,6 +105,14 @@ def main():
         help="Texture the ground and roofs with NAIP aerial photos (USGS, "
         "~0.6 m/px). Turns on --terrain. Off by default.",
     )
+    parser.add_argument(
+        "--min-quality",
+        metavar="SCORE",
+        type=float,
+        default=None,
+        help="Skip Mapillary images whose quality_score (0-1) is below SCORE, "
+        "e.g. 0.6. Off by default.",
+    )
     args = parser.parse_args()
 
     if args.bbox is not None:
@@ -133,6 +141,7 @@ def main():
             "mapillary_dump_path": args.dump_mapillary,
             "use_terrain": args.terrain or args.naip,
             "use_naip": args.naip,
+            "min_quality": args.min_quality,
         },
         profiler=profiler,
     )
