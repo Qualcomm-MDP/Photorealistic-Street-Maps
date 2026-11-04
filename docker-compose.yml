@@ -2,7 +2,7 @@
 #   docker compose up --build api
 # Web app with an NVIDIA GPU (Linux, or Windows with WSL2, plus NVIDIA Container Toolkit):
 #   docker compose --profile gpu up --build api-gpu
-# Only this machine can reach it; add POSM_HOST=0.0.0.0 to allow other devices.
+# Only this machine can reach it; add PSM_HOST=0.0.0.0 to allow other devices.
 #
 # Command-line pipeline:
 #   docker compose run --rm pipeline --bbox W S E N --output output/map.glb
@@ -52,9 +52,9 @@ x-api: &api
   command: []
   # The API has no login, so it's only reachable from this machine by default.
   # To open it to your network (anyone who can reach it can run jobs and see
-  # results), start it with POSM_HOST=0.0.0.0.
+  # results), start it with PSM_HOST=0.0.0.0.
   ports:
-    - "${POSM_HOST:-127.0.0.1}:8000:8000"
+    - "${PSM_HOST:-127.0.0.1}:8000:8000"
   restart: unless-stopped
 
 services:
@@ -71,7 +71,7 @@ services:
     <<: [*cpu, *api]
     environment: &api-environment
       APP_ENV: ${APP_ENV:-}
-      POSM_ENV_DIR: /app/project
+      PSM_ENV_DIR: /app/project
     volumes: &api-volumes
       - ./output:/app/output
       - model-cache:/cache

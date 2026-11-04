@@ -11,10 +11,7 @@ MAPILLARY_URL = "https://graph.mapillary.com/images"
 
 # overpass-api.de rejects the default python-requests User-Agent with 406 Not
 # Acceptable, so identify the app explicitly.
-USER_AGENT = (
-    "photorealistic-street-maps/0.1 "
-    "(+https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps)"
-)
+USER_AGENT = "photorealistic-street-maps/0.1 (+https://github.com/Qualcomm-MDP/PSM)"
 
 
 @dataclass(frozen=True)

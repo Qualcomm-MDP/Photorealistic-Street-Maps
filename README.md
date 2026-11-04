@@ -1,4 +1,4 @@
-[![pre-commit.ci status](https://results.pre-commit.ci/badge/github/Qualcomm-MDP/Photorealistic-Street-Maps/main.svg)](https://results.pre-commit.ci/latest/github/Qualcomm-MDP/Photorealistic-Street-Maps/main)
+[![pre-commit.ci status](https://results.pre-commit.ci/badge/github/Qualcomm-MDP/PSM/main.svg)](https://results.pre-commit.ci/latest/github/Qualcomm-MDP/PSM/main)
 
 # Photorealistic Street Maps
 

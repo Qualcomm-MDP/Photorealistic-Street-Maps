@@ -1202,12 +1202,12 @@ $("tokenSave").addEventListener("click", () => {
   }
   const m = state.settings.mapillary;
   // Without an env file yet, saving creates it (e.g. .env) with this token.
-  const where = m.env_file_exists ? "" : ` POSM will create ${envFile()} with it.`;
+  const where = m.env_file_exists ? "" : ` PSM will create ${envFile()} with it.`;
   tokenMessage("");
   tokenUi.confirm = {
     text: m.set
       ? `Replace the current token (ends ${m.hint || "…"}) with this one? Jobs started after this use the new token.${where}`
-      : `Save this token? POSM uses it to download street photos for every job.${where}`,
+      : `Save this token? PSM uses it to download street photos for every job.${where}`,
     yes: m.set ? "Replace token" : "Save token",
     no: m.set ? "Keep current" : "Not yet",
     run: async () => {
@@ -1231,7 +1231,7 @@ $("tokenClear").addEventListener("click", () => {
   tokenMessage("");
   tokenUi.confirm = {
     text: m.env_available
-      ? `Remove the token saved here? POSM goes back to the token in ${envFile()}.`
+      ? `Remove the token saved here? PSM goes back to the token in ${envFile()}.`
       : "Remove the saved token? You won't be able to generate models until you add one again.",
     yes: "Remove token",
     no: "Keep it",
@@ -1320,7 +1320,7 @@ $("go").addEventListener("click", async () => {
   const err = $("formError");
   err.hidden = true;
   if (state.settings && !hasToken()) {
-    openSettings("Add your Mapillary token to generate a model. POSM uses it to download the street photos.");
+    openSettings("Add your Mapillary token to generate a model. PSM uses it to download the street photos.");
     return;
   }
   const go = $("go");
@@ -1378,7 +1378,7 @@ themeBtn.addEventListener("click", () => {
   }
   root.dataset.theme = next;
   try {
-    localStorage.setItem("posm-theme", next);
+    localStorage.setItem("psm-theme", next);
   } catch {
     /* private mode: the choice just isn't remembered */
   }
@@ -1405,7 +1405,7 @@ renderGallery();
     state.stages = pipeline.stages;
     state.system = system;
   } catch (e) {
-    $("formError").textContent = `Can't reach the POSM server: ${e.message}`;
+    $("formError").textContent = `Can't reach the PSM server: ${e.message}`;
     $("formError").hidden = false;
     $("go").disabled = true;
     return;

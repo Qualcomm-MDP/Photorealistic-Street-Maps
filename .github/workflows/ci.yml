@@ -46,12 +46,16 @@ jobs:
           virtualenvs-create: true
           virtualenvs-in-project: true
 
+      # A virtualenv records its absolute path (e.g. in each script's first
+      # line), so it only works in the folder it was built in. That folder is
+      # named after the repo, so the repo name is part of the key: after a
+      # rename, CI builds a fresh environment instead of restoring a broken one.
       - name: Load cached venv
         id: cached-poetry-dependencies
         uses: actions/cache@v4
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ runner.arch }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+          key: venv-${{ github.event.repository.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
 
       - name: Install Dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
@@ -94,11 +98,11 @@ jobs:
       # Built natively on each architecture, as `docker compose build` does on
       # an Intel/AMD machine or an Apple Silicon Mac.
       - name: Build CPU image
-        run: docker build --build-arg TORCH_VARIANT=cpu -t posm:cpu .
+        run: docker build --build-arg TORCH_VARIANT=cpu -t psm:cpu .
 
       - name: Smoke test
         run: |
-          docker run --rm --entrypoint python posm:cpu -c "
+          docker run --rm --entrypoint python psm:cpu -c "
           import platform, torch, trimesh, trimesh.creation as tc
           from shapely.geometry import Polygon
           from pipeline import build_pipeline
