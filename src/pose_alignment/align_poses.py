@@ -39,6 +39,7 @@ from pathlib import Path
 import numpy as np
 from scipy.spatial.transform import Rotation
 
+from common.reporter import get_reporter
 from data_ingest.image_store import ImageStore
 from segmentation.model import LabelCache
 
@@ -48,7 +49,8 @@ from .streets_from_bbox import distance_to_polyline
 POSE_SOURCES = ("raw", "computed", "colmap")
 
 
-def _use_computed(mapillary):
+def _use_computed(mapillary, reporter=None):
+    reporter = reporter or get_reporter()
     n = 0
     for meta in mapillary.values():
         if meta.get("computed_latitude") is not None:
@@ -57,12 +59,12 @@ def _use_computed(mapillary):
                 meta["computed_longitude"],
             )
             n += 1
-    print(
+    reporter.info(
         f"  align_poses: Mapillary computed positions for {n} of {len(mapillary)} images"
     )
 
 
-def _run_alignment(bbox, roi_dir=None, images=None, selection=None):
+def _run_alignment(bbox, roi_dir=None, images=None, selection=None, reporter=None):
     """Run the alignment pipeline (or finish an earlier run in roi_dir); returns its RoiPaths.
     selection: the captures the fetch stage chose (ingest.py), which are reconstructed;
     without it they are chosen here from images, the fetch stage's Mapillary records (or
@@ -74,6 +76,8 @@ def _run_alignment(bbox, roi_dir=None, images=None, selection=None):
     from .geo_common import module_command, next_roi_dir
     from .run_pipeline import stage_done
     from .streets_from_bbox import streets_roi
+
+    reporter = reporter or get_reporter()
 
     if roi_dir is None:
         paths = RoiPaths(next_roi_dir())
@@ -105,7 +109,23 @@ def _run_alignment(bbox, roi_dir=None, images=None, selection=None):
             raise RuntimeError(
                 "COLMAP not found: install it, or set COLMAP_BIN in .env to its executable"
             )
-        if subprocess.run(cmd, env=env).returncode:
+        # its output, line by line, into this run's log (the web app shows it as it comes)
+        env["PYTHONUNBUFFERED"] = "1"
+        proc = subprocess.Popen(
+            cmd,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            errors="replace",
+        )
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            # progress bars redraw with \r: keep only their latest state
+            line = line.rstrip("\n").split("\r")[-1].rstrip()
+            if line:
+                reporter.info(line)
+        if proc.wait():
             raise RuntimeError(
                 f"the alignment pipeline stopped; see the output above ({paths.root})"
             )
@@ -163,8 +183,11 @@ def _off_street_legs(paths, cameras, max_off_street_m, extend_m=50.0):
     return {leg: d for leg, d in worst.items() if d > max_off_street_m}
 
 
-def _apply_alignment(paths, mapillary, aligned_only=False, max_off_street_m=15.0):
+def _apply_alignment(
+    paths, mapillary, aligned_only=False, max_off_street_m=15.0, reporter=None
+):
     """Put the reliable aligned poses into the Mapillary metadata; returns the summary."""
+    reporter = reporter or get_reporter()
     images, counts = (
         {},
         {"overridden": 0, "added": 0, "kept_mapillary": 0, "aspect_mismatch": 0},
@@ -173,7 +196,7 @@ def _apply_alignment(paths, mapillary, aligned_only=False, max_off_street_m=15.0
     aligned_panos = set()  # 360 photos whose views the alignment placed
     off_street = _off_street_legs(paths, cameras, max_off_street_m)
     for leg, d in off_street.items():
-        print(
+        reporter.info(
             f"  align_poses: {leg} rejected: its aligned cameras end up {d:.0f} m from the street"
         )
     for img_id, (folder, cam) in cameras.items():
@@ -280,7 +303,9 @@ def _apply_alignment(paths, mapillary, aligned_only=False, max_off_street_m=15.0
             images[img_id]["source"] = "dropped (--aligned-only)"
         counts["kept_mapillary"] = 0
     elif aligned_only:
-        print("  align_poses: no reliable aligned image, so --aligned-only is ignored")
+        reporter.info(
+            "  align_poses: no reliable aligned image, so --aligned-only is ignored"
+        )
 
     summary = {
         "pose_source": "colmap",
@@ -294,7 +319,7 @@ def _apply_alignment(paths, mapillary, aligned_only=False, max_off_street_m=15.0
     (paths.root / "pose_overrides.json").write_text(
         json.dumps({**summary, "images": images}, indent=1)
     )
-    print(
+    reporter.info(
         f"  align_poses: {counts['overridden']} images got aligned poses, {counts['added']} aligned images "
         f"added, {counts['kept_mapillary']} kept Mapillary poses"
         + (
@@ -320,10 +345,11 @@ POSE_KEYS = (
 
 
 def align_poses(value, state):
+    reporter = get_reporter(state)
     source = state.get_metadata("pose_source", "raw")
     mapillary = state.require_metadata("provider_data")["mapillary"]
     if source in ("computed", "colmap"):
-        _use_computed(mapillary)
+        _use_computed(mapillary, reporter)
     if source == "colmap":
         try:
             paths = _run_alignment(
@@ -331,6 +357,7 @@ def align_poses(value, state):
                 state.get_metadata("alignment_dir", None),
                 state.require_metadata("provider_data").get("mapillary_images"),
                 state.require_metadata("provider_data").get("mapillary_selection"),
+                reporter,
             )
             # texturing reads the photos the alignment downloaded, and the class maps its
             # segmentation made, instead of downloading and segmenting them again
@@ -339,12 +366,15 @@ def align_poses(value, state):
             state.set_metadata(
                 "pose_alignment",
                 _apply_alignment(
-                    paths, mapillary, state.get_metadata("aligned_only", False)
+                    paths,
+                    mapillary,
+                    state.get_metadata("aligned_only", False),
+                    reporter=reporter,
                 ),
             )
         except (Exception, SystemExit) as e:
-            print(
-                f"  align_poses: alignment failed ({e}); every image keeps Mapillary's computed pose"
+            reporter.warning(
+                f"align_poses: alignment failed ({e}); every image keeps Mapillary's computed pose"
             )
 
     for meta in mapillary.values():
@@ -367,5 +397,7 @@ def align_poses(value, state):
         if mapillary.pop(i, None)
     ]
     if excluded:
-        print(f"  align_poses: {len(excluded)} held-out images removed from texturing")
+        reporter.info(
+            f"  align_poses: {len(excluded)} held-out images removed from texturing"
+        )
     return value

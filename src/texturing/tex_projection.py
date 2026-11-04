@@ -30,10 +30,15 @@ UNTEXTURED_GREY = 225
 MASK_SCALE = 8
 
 
-def camera_position(x: float, y: float, terrain=None) -> np.ndarray:
-    """Camera centre in projection space: CAMERA_HEIGHT_M above the ground."""
+def camera_position(
+    x: float, y: float, terrain=None, height_m: float | None = None
+) -> np.ndarray:
+    """Camera centre in projection space: height_m (a measured camera height, e.g. the
+    pose alignment's; default CAMERA_HEIGHT_M) above the ground (the terrain's, or 0)."""
     ground_z = float(terrain.ground(x, y)) if terrain is not None else 0.0
-    return np.array([x, y, ground_z + CAMERA_HEIGHT_M])
+    return np.array(
+        [x, y, ground_z + (CAMERA_HEIGHT_M if height_m is None else height_m)]
+    )
 
 
 def _build_K(focal_px: float, w: int, h: int) -> np.ndarray:
@@ -305,11 +310,9 @@ def _apply_textures(
                 "K": _build_K(meta["focal_length_pixels"], w, h),
                 "R": _build_R(meta),
                 "mask": small_mask if remove_obs and not fill_obstructions else None,
-                "Cw": (
-                    np.array([x, y, meta["camera_height_m"]])
-                    if meta.get("camera_height_m") is not None
-                    else camera_position(x, y, terrain)
-                ),
+                # an aligned camera's height is above the road under it, so on terrain
+                # it goes on top of the ground there, like the default height
+                "Cw": camera_position(x, y, terrain, meta.get("camera_height_m")),
             }
         )
 

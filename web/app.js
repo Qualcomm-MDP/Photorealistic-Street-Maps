@@ -878,6 +878,13 @@ function jobStageNote(job, text) {
   $("jobStageEmpty").hidden = !text;
 }
 
+// Jobs from before the option existed used Mapillary's raw GPS.
+const POSE_LABELS = {
+  colmap: "Aligned to OpenStreetMap",
+  computed: "Mapillary computed",
+  raw: "Mapillary raw GPS",
+};
+
 function jobFactsHtml(job) {
   const { w, h } = boxSize(job.bbox);
   const o = job.options || {};
@@ -887,13 +894,21 @@ function jobFactsHtml(job) {
     ["Area", `<span class="mono">${Math.round(w)} × ${Math.round(h)} m · ${((w * h) / 1e6).toFixed(2)} km²</span>`],
     ["Created", esc(when(job.created_at))],
     ["Duration", esc(duration(job))],
-    ["Obstructions", o.remove_obstructions ? `Removed · ${esc(o.seg_model)} model` : "Kept"],
+    ["Camera poses", esc(POSE_LABELS[o.poses] || POSE_LABELS.raw) + (o.aligned_only ? " · aligned photos only" : "")],
+    [
+      "Obstructions",
+      o.remove_obstructions
+        ? `${o.fill_obstructions === false ? "Masked, not filled" : "Removed"} · ${esc(o.seg_model)} model`
+        : "Kept",
+    ],
     ["Device", esc(o.device || "auto")],
   ];
   // Jobs from before these options existed don't have them.
   if ("terrain" in o) rows.push(["Terrain", o.terrain ? "On" : "Off"]);
   if ("naip" in o) rows.push(["Aerial photos", o.naip ? "NAIP ground and roofs" : "Off"]);
   if (job.result?.photos != null) rows.push(["Photos", `<span class="mono">${job.result.photos}</span>`]);
+  if (job.result?.aligned_photos != null)
+    rows.push(["Aligned photos", `<span class="mono">${job.result.aligned_photos}</span>`]);
   if (job.error) rows.push(["Error", `<span class="bad">${esc(job.error)}</span>`]);
   return rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
 }
@@ -1094,11 +1109,22 @@ function setDeviceButtons(id, value) {
 
 // Put the saved defaults into the Options panel (on load, and after saving).
 function applyDefaults(d) {
+  $("poses").value = d.poses || "colmap";
+  $("fill").checked = d.fill_obstructions !== false;
   $("seg").checked = d.remove_obstructions;
   $("model").value = d.seg_model;
   device = d.device === "cuda" && !state.system.cuda ? "auto" : d.device;
   setDeviceButtons("device", device);
+  syncOptionRows();
 }
+
+// "Aligned photos only" applies to aligned poses; "Fill obstructions" to removing them.
+function syncOptionRows() {
+  $("alignedOnlyRow").hidden = $("poses").value !== "colmap";
+  $("fill").disabled = !$("seg").checked;
+}
+$("poses").addEventListener("change", syncOptionRows);
+$("seg").addEventListener("change", syncOptionRows);
 
 function tokenMessage(text, kind = "") {
   const msg = $("tokenMsg");
@@ -1132,6 +1158,8 @@ async function openSettings(intro = "") {
   $("settingsIntro").textContent = intro;
   $("settingsIntro").hidden = !intro;
   if (d) {
+    $("defPoses").value = d.poses || "colmap";
+    $("defFill").checked = d.fill_obstructions !== false;
     $("defSeg").checked = d.remove_obstructions;
     $("defModel").value = d.seg_model;
     defDevice = d.device;
@@ -1300,7 +1328,13 @@ $("settingsForm").addEventListener("submit", async (e) => {
     state.settings = await api("/api/settings", {
       method: "PUT",
       body: JSON.stringify({
-        defaults: { remove_obstructions: $("defSeg").checked, seg_model: $("defModel").value, device: defDevice },
+        defaults: {
+          poses: $("defPoses").value,
+          remove_obstructions: $("defSeg").checked,
+          fill_obstructions: $("defFill").checked,
+          seg_model: $("defModel").value,
+          device: defDevice,
+        },
       }),
     });
     applyDefaults(state.settings.defaults);
@@ -1331,7 +1365,10 @@ $("go").addEventListener("click", async () => {
       body: JSON.stringify({
         bbox: box,
         name: state.placeName || "Custom area",
+        poses: $("poses").value,
+        aligned_only: $("poses").value === "colmap" && $("alignedOnly").checked,
         remove_obstructions: $("seg").checked,
+        fill_obstructions: $("fill").checked,
         seg_model: $("model").value,
         device,
         terrain: $("terrain").checked,

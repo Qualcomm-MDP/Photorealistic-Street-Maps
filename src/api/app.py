@@ -60,7 +60,9 @@ class BBox(BaseModel):
 
 
 class JobDefaults(BaseModel):
+    poses: Literal["raw", "computed", "colmap"] | None = None
     remove_obstructions: bool | None = None
+    fill_obstructions: bool | None = None
     seg_model: Literal["large", "tiny"] | None = None
     device: Literal["auto", "cpu", "cuda"] | None = None
 
@@ -92,6 +94,11 @@ class TokenTest(BaseModel):
 class JobRequest(BaseModel):
     bbox: BBox
     name: str = Field(default="Custom area", max_length=120)
+    # Camera poses for texturing (the CLI's --poses): "colmap" reconstructs the chosen
+    # captures and aligns them to OSM; "computed"/"raw" are Mapillary's own
+    poses: Literal["raw", "computed", "colmap"] = "colmap"
+    # With "colmap": texture only from photos the alignment placed (--aligned-only)
+    aligned_only: bool = False
     remove_obstructions: bool = True
     # False: segment the obstructions but do not paint them over (the CLI's --no-fill)
     fill_obstructions: bool = True
@@ -262,6 +269,8 @@ def create_app(
             name=req.name.strip() or "Custom area",
             bbox=req.bbox.model_dump(),
             options={
+                "poses": req.poses,
+                "aligned_only": req.aligned_only,
                 "remove_obstructions": req.remove_obstructions,
                 "fill_obstructions": req.fill_obstructions,
                 "seg_model": req.seg_model,

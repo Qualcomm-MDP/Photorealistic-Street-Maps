@@ -102,13 +102,41 @@
 
       <section class="card" aria-labelledby="optTitle">
         <div class="card-head"><h2 id="optTitle">Options</h2></div>
+        <div class="field">
+          <label for="poses">Camera poses</label>
+          <select id="poses">
+            <option value="colmap">Aligned to OpenStreetMap · most accurate, slower (needs COLMAP)</option>
+            <option value="computed">Mapillary computed · fast</option>
+            <option value="raw">Mapillary raw GPS · fastest, least accurate</option>
+          </select>
+        </div>
+        <div class="opt-row" id="alignedOnlyRow">
+          <div class="text">
+            <strong id="alignedOnlyLabel">Aligned photos only</strong>
+            <span id="alignedOnlyHint">Texture only from photos the alignment placed on the map</span>
+          </div>
+          <label class="switch" for="alignedOnly">
+            <input id="alignedOnly" type="checkbox" aria-labelledby="alignedOnlyLabel" aria-describedby="alignedOnlyHint">
+            <span class="track"></span><span class="knob"></span>
+          </label>
+        </div>
         <div class="opt-row">
           <div class="text">
             <strong id="segLabel">Remove obstructions</strong>
-            <span id="segHint">Erase cars, poles and people from facade photos</span>
+            <span id="segHint">Find cars, poles and people in the facade photos</span>
           </div>
           <label class="switch" for="seg">
             <input id="seg" type="checkbox" checked aria-labelledby="segLabel" aria-describedby="segHint">
+            <span class="track"></span><span class="knob"></span>
+          </label>
+        </div>
+        <div class="opt-row">
+          <div class="text">
+            <strong id="fillLabel">Fill obstructions</strong>
+            <span id="fillHint">Paint over them (LaMa; slow without a GPU). Off: keep the photos as taken, and each facade takes the photo they hide least</span>
+          </div>
+          <label class="switch" for="fill">
+            <input id="fill" type="checkbox" checked aria-labelledby="fillLabel" aria-describedby="fillHint">
             <span class="track"></span><span class="knob"></span>
           </label>
         </div>
@@ -349,13 +377,31 @@
     <section class="set-section" aria-labelledby="defaultsTitle">
       <div class="set-head"><h3 id="defaultsTitle">Defaults for new jobs</h3></div>
       <p class="set-hint">Used for the Options panel each time PSM opens. You can still change them for a single job.</p>
+      <div class="field">
+        <label for="defPoses">Camera poses</label>
+        <select id="defPoses">
+          <option value="colmap">Aligned to OpenStreetMap · most accurate, slower (needs COLMAP)</option>
+          <option value="computed">Mapillary computed · fast</option>
+          <option value="raw">Mapillary raw GPS · fastest, least accurate</option>
+        </select>
+      </div>
       <div class="opt-row">
         <div class="text">
           <strong id="defSegLabel">Remove obstructions</strong>
-          <span id="defSegHint">Erase cars, poles and people from facade photos</span>
+          <span id="defSegHint">Find cars, poles and people in the facade photos</span>
         </div>
         <label class="switch" for="defSeg">
           <input id="defSeg" type="checkbox" aria-labelledby="defSegLabel" aria-describedby="defSegHint">
+          <span class="track"></span><span class="knob"></span>
+        </label>
+      </div>
+      <div class="opt-row">
+        <div class="text">
+          <strong id="defFillLabel">Fill obstructions</strong>
+          <span id="defFillHint">Paint over them (LaMa), or keep the photos as taken</span>
+        </div>
+        <label class="switch" for="defFill">
+          <input id="defFill" type="checkbox" aria-labelledby="defFillLabel" aria-describedby="defFillHint">
           <span class="track"></span><span class="knob"></span>
         </label>
       </div>

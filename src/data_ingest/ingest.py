@@ -1,4 +1,7 @@
+import contextlib
+import io
 import math
+import sys
 
 from common import PipelineState
 from common.constants import BoundingBox
@@ -48,6 +51,24 @@ def inside(img: dict, bbox: BoundingBox) -> bool:
     return bbox.min_lon <= lon <= bbox.max_lon and bbox.min_lat <= lat <= bbox.max_lat
 
 
+class _ReporterLines(io.TextIOBase):
+    """A text stream whose lines go to a Reporter (the chooser and the street lookup print
+    their report; the web app shows it in the job's log)."""
+
+    def __init__(self, reporter):
+        self.reporter, self.buf, self.out = reporter, "", sys.stdout
+
+    def write(self, s: str) -> int:
+        self.buf += s
+        *lines, self.buf = self.buf.split("\n")
+        # the console reporter prints: to the real stdout, not back into this stream
+        with contextlib.redirect_stdout(self.out):
+            for line in lines:
+                if line.strip():
+                    self.reporter.info(line)
+        return len(s)
+
+
 def choose_captures(bbox: BoundingBox, records: list[dict], reporter):
     """The sequences to use (data_ingest.mapillary_sequences.choose_roi) along the OSM
     streets in the box (pose_alignment.streets_from_bbox), or None when there are none."""
@@ -55,8 +76,9 @@ def choose_captures(bbox: BoundingBox, records: list[dict], reporter):
     from pose_alignment.streets_from_bbox import streets_roi
 
     try:
-        roi = streets_roi((bbox.min_lon, bbox.min_lat, bbox.max_lon, bbox.max_lat))
-        selection = choose_roi(roi, records)
+        with contextlib.redirect_stdout(_ReporterLines(reporter)):
+            roi = streets_roi((bbox.min_lon, bbox.min_lat, bbox.max_lon, bbox.max_lat))
+            selection = choose_roi(roi, records)
     except (Exception, SystemExit) as e:
         reporter.warning(
             f"Choosing captures failed ({e}); using every image in the box"
