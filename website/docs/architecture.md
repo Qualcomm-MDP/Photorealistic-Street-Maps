@@ -71,14 +71,16 @@ pipeline.add_stage("texturing", tex_projection, label="Texture", ...)
 pipeline.add_stage("export", export_mesh, label="Export", detail="Write .glb")
 ```
 
-Stages don't have to form a single line. A **fork** (`add_fork`) sends one stage's output to several branches: each branch gets the same input, and they run one after another (not in parallel). An optional merge function combines their outputs into the value the next stage receives; without one, the next stage gets a dict of the branch outputs keyed by branch name. Each branch's output is also kept in `state.stage_outputs` under its name.
+Stages still run strictly one at a time, but one stage's output can be the input of more than one stage. That's what a **fork** (`add_fork`) is for: it holds several branches, and each branch receives the output of the stage before the fork. The branches run in turn, in the order they were added, and each gets that same input, not the previous branch's result. Then an optional merge function combines their outputs into the value the next stage receives; without one, the next stage gets a dict of the branch outputs keyed by branch name. Each branch's output is also kept in `state.stage_outputs` under its name.
 
 ```mermaid
-flowchart LR
-    A["stage"] --> B1["branch a"]
-    A --> B2["branch b"]
-    B1 --> M["merge (optional)"]
-    B2 --> M
+flowchart TD
+    A["stage"] -->|"its output"| F
+    subgraph F["fork: branches run one at a time, in order, each on the same input"]
+        direction TB
+        B1["1. branch a"] -.->|"then"| B2["2. branch b"]
+    end
+    F -->|"outputs of a and b"| M["merge (optional)"]
     M --> N["next stage"]
 ```
 
