@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>POSM</title>
+  <title>PSM</title>
   <script>
     // Apply the saved theme before first paint so the page doesn't flash.
     (() => {
       let saved = null;
-      try { saved = localStorage.getItem("posm-theme"); } catch {}
+      try { saved = localStorage.getItem("psm-theme"); } catch {}
       const root = document.documentElement;
       if (saved === "light" || saved === "dark") root.dataset.theme = saved;
       const dark = saved ? saved === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
@@ -34,7 +34,7 @@
 <body>
 <header class="top">
   <div class="wrap">
-    <div class="brand">POSM</div>
+    <div class="brand">PSM</div>
     <nav class="tabs" aria-label="Main">
       <a href="#generate" aria-current="page">Generate</a>
       <a href="#imagery">Imagery</a>
@@ -87,7 +87,7 @@
         </button>
         <p class="form-error" id="formError" role="alert" hidden></p>
         <p class="notice" id="tokenNotice" hidden>
-          POSM needs a Mapillary token to download street photos.
+          PSM needs a Mapillary token to download street photos.
           <button class="link" type="button" id="tokenNoticeBtn">Add it in Settings</button>
         </p>
 
@@ -241,7 +241,7 @@
     <p class="empty" id="jobsEmpty" hidden>No jobs yet.</p>
   </section>
 
-  <footer>POSM · Map data © OpenStreetMap contributors · Street imagery from Mapillary</footer>
+  <footer>PSM · Map data © OpenStreetMap contributors · Street imagery from Mapillary</footer>
 </main>
 
 <dialog class="modal" id="mapModal" aria-labelledby="mapModalTitle">
@@ -318,7 +318,7 @@
         <span id="tokenStatus"></span>
       </div>
       <p class="set-hint">
-        POSM downloads street photos from Mapillary with this token. Get a free one under
+        PSM downloads street photos from Mapillary with this token. Get a free one under
         <a href="https://www.mapillary.com/dashboard/developers" target="_blank" rel="noopener">Developers in your Mapillary dashboard</a>
         (register an app, then copy its client token).
       </p>
@@ -348,7 +348,7 @@
 
     <section class="set-section" aria-labelledby="defaultsTitle">
       <div class="set-head"><h3 id="defaultsTitle">Defaults for new jobs</h3></div>
-      <p class="set-hint">Used for the Options panel each time POSM opens. You can still change them for a single job.</p>
+      <p class="set-hint">Used for the Options panel each time PSM opens. You can still change them for a single job.</p>
       <div class="opt-row">
         <div class="text">
           <strong id="defSegLabel">Remove obstructions</strong>
@@ -379,7 +379,7 @@
     <p class="form-error" id="settingsError" role="alert" hidden></p>
   </form>
   <div class="modal-foot">
-    <span class="set-foot">Saved on this computer with your POSM data.</span>
+    <span class="set-foot">Saved on this computer with your PSM data.</span>
     <button class="btn" type="button" data-close>Cancel</button>
     <button class="btn primary" type="submit" form="settingsForm" id="settingsSave">Save</button>
   </div>

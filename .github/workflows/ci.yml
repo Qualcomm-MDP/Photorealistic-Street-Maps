@@ -98,11 +98,11 @@ jobs:
       # Built natively on each architecture, as `docker compose build` does on
       # an Intel/AMD machine or an Apple Silicon Mac.
       - name: Build CPU image
-        run: docker build --build-arg TORCH_VARIANT=cpu -t posm:cpu .
+        run: docker build --build-arg TORCH_VARIANT=cpu -t psm:cpu .
 
       - name: Smoke test
         run: |
-          docker run --rm --entrypoint python posm:cpu -c "
+          docker run --rm --entrypoint python psm:cpu -c "
           import platform, torch, trimesh, trimesh.creation as tc
           from shapely.geometry import Polygon
           from pipeline import build_pipeline

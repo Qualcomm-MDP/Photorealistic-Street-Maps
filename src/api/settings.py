@@ -144,7 +144,7 @@ def _create_env_file(path: Path, token: str) -> None:
     # user only, since it holds the token.
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w") as f:
-        f.write(f"# Created by POSM's Settings.\n{TOKEN_ENV}={token}\n")
+        f.write(f"# Created by PSM's Settings.\n{TOKEN_ENV}={token}\n")
 
 
 def _hint(token: str | None) -> str | None:

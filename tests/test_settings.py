@@ -25,7 +25,7 @@ def clean_env(monkeypatch, tmp_path):
     monkeypatch.delenv("APP_ENV", raising=False)
     # Env files live in the test's folder, never the repo. An (empty) .env
     # exists unless a test removes it to try the "no env file" case.
-    monkeypatch.setenv("POSM_ENV_DIR", str(tmp_path))
+    monkeypatch.setenv("PSM_ENV_DIR", str(tmp_path))
     (tmp_path / ".env").write_text("")
 
 
@@ -297,7 +297,7 @@ def test_an_existing_env_file_is_left_alone(tmp_path):
 def test_token_goes_to_settings_when_the_env_file_cannot_be_created(
     tmp_path, monkeypatch
 ):
-    monkeypatch.setenv("POSM_ENV_DIR", str(tmp_path / "missing-folder"))
+    monkeypatch.setenv("PSM_ENV_DIR", str(tmp_path / "missing-folder"))
 
     resp = make_client(tmp_path).put("/api/settings", json={"mapillary_token": TOKEN})
 

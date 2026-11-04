@@ -102,7 +102,7 @@ def test_job_runs_and_serves_model_and_images(tmp_path):
     model = client.get(f"/api/jobs/{job['id']}/model.glb?download=true")
     assert model.status_code == 200
     assert model.content == b"glTF-binary"
-    assert "posm-test-block" in model.headers["content-disposition"]
+    assert "psm-test-block" in model.headers["content-disposition"]
 
     images = client.get(f"/api/jobs/{job['id']}/images").json()["images"]
     assert images[0]["original"] == f"/api/jobs/{job['id']}/images/img1_original.jpg"
@@ -331,7 +331,7 @@ def test_job_log_is_saved_and_served(tmp_path):
     assert "Fetched 2 OSM elements" in lines
     assert lines[-1].startswith("Done in")
     download = client.get(f"/api/jobs/{job_id}/log?download=true")
-    assert f"posm-{job_id}-pipeline.log" in download.headers["content-disposition"]
+    assert f"psm-{job_id}-pipeline.log" in download.headers["content-disposition"]
 
 
 def test_failed_job_log_contains_traceback(tmp_path):

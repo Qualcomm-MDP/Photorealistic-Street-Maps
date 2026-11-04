@@ -123,12 +123,12 @@ def create_app(
     serve_web: bool = True,
 ) -> FastAPI:
     load_app_env()
-    data_dir = Path(data_dir or os.environ.get("POSM_DATA_DIR") or DEFAULT_DATA_DIR)
+    data_dir = Path(data_dir or os.environ.get("PSM_DATA_DIR") or DEFAULT_DATA_DIR)
     # Saved next to the jobs, so it lives in the same (mounted) data folder.
     settings = Settings(data_dir / "settings.json")
     hub = JobHub()
     jobs = JobManager(data_dir, pipeline_factory, publish=hub.publish)
-    app = FastAPI(title="POSM", docs_url="/api/docs", openapi_url="/api/openapi.json")
+    app = FastAPI(title="PSM", docs_url="/api/docs", openapi_url="/api/openapi.json")
     app.state.jobs = jobs
     app.state.settings = settings
 
@@ -169,7 +169,7 @@ def create_app(
     @app.get("/api/settings/mapillary/token")
     def get_mapillary_token() -> JSONResponse:
         # Only for the Settings dialog to show it. The API is reachable from
-        # this machine only unless POSM_HOST opens it up (docker-compose.yml).
+        # this machine only unless PSM_HOST opens it up (docker-compose.yml).
         return JSONResponse(
             {"token": settings.token()}, headers={"Cache-Control": "no-store"}
         )
@@ -283,7 +283,7 @@ def create_app(
         return FileResponse(
             path,
             media_type="model/gltf-binary",
-            filename=f"posm-{slug}-{job.id}.glb" if download else None,
+            filename=f"psm-{slug}-{job.id}.glb" if download else None,
         )
 
     @app.get("/api/jobs/{job_id}/log", response_model=None)
@@ -297,7 +297,7 @@ def create_app(
             return PlainTextResponse("")
         if download:
             return FileResponse(
-                path, media_type="text/plain", filename=f"posm-{job.id}-pipeline.log"
+                path, media_type="text/plain", filename=f"psm-{job.id}-pipeline.log"
             )
         return PlainTextResponse(path.read_text(encoding="utf-8", errors="replace"))
 

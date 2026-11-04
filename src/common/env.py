@@ -12,9 +12,9 @@ def app_env_file() -> str:
 
 
 def app_env_path() -> Path:
-    """Where that env file lives: POSM_ENV_DIR (the project folder, when the
+    """Where that env file lives: PSM_ENV_DIR (the project folder, when the
     web app runs in Docker), else the working directory."""
-    return Path(os.environ.get("POSM_ENV_DIR") or ".") / app_env_file()
+    return Path(os.environ.get("PSM_ENV_DIR") or ".") / app_env_file()
 
 
 def load_app_env() -> None:
