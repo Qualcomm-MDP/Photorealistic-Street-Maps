@@ -18,6 +18,17 @@ Per leg and sequence model:
      Mapillary skipped is not a cut), pieces under 8 cameras join a neighbour, and each 3D point
      goes with the piece whose cameras observe it most. stats.json reports each cut's aligned
      length next to the GPS distance (a yardstick only) and the model's neighbouring speed.
+     Rig cameras (reconstruct.py's rigs: one model for all cameras of a leg) are placed together:
+     the reference camera's fit uses the building points of every rig camera, levelled with its
+     own gravity and placed from its own GPS path, and the other cameras get that transform
+     instead of a fit of their own (roi_11's right-side camera, fitted alone, locked onto the
+     wrong buildings 18-26 m off while the left cameras of the same model fitted to 0.9 m).
+     Linked legs (reconstruct.py's leg overlap: a leg runs on into the next one's first frames):
+     after every leg is fitted on its own, the fits of legs sharing frames are refined together,
+     each still on its own building points, plus the condition that the shared cameras land in the
+     same place from both legs (LINK_SIGMA). That lines the legs up end to end and carries their
+     scales across (a leg whose walls leave it free along the street is held by its neighbours).
+     All legs are placed in one ENU frame (the route's first point).
   6. Reliable when the building points end within --max-error (2 m) of the footprints (median),
      at most 20% of the cameras end inside buildings, and no camera lies behind an earlier one
      along the leg (a folded reconstruction; stats.json lists them as cameras_out_of_order).
@@ -32,6 +43,7 @@ import argparse
 import json
 import math
 import shutil
+import time
 from pathlib import Path
 
 import matplotlib
@@ -52,6 +64,18 @@ O = {"min_track": 3, "min_height": 2.5, "max_height": 40.0, "class_fraction": 0.
      # building points on both sides of the street (scale observable) / on one side only
      "scale_range_both": (0.8, 1.4), "scale_range_one": (0.8, 1.4),
      "scale_sigma_both": 0.3, "scale_sigma_one": 0.1, "refine_scale": 1.25}
+
+
+_LABELS = {}
+
+
+def labels(model, mask_dir, value):
+    """label_points, kept per model, masks and value: a rig's cameras are labelled again for the
+    reference camera's pooled fit, and linked legs are placed twice."""
+    key = (str(model), str(mask_dir), value, (Path(model) / "points3D.txt").stat().st_mtime_ns)
+    if key not in _LABELS:
+        _LABELS[key] = label_points(model, mask_dir, value, O["class_fraction"])
+    return _LABELS[key]
 
 
 def level_with_gravity(names, C, R, gc):
@@ -180,25 +204,50 @@ def fit_to_footprints(bpts, Lc, gps, A, B, wmap, both_sides):
     return params, params0
 
 
-def align_camera(p, leg, cam, buildings, out_dir, max_error):
+def rig_building_points(p, cam, origin, basis, s_gps):
+    """A rig camera's usable building points (as align_camera's) in another camera's levelled
+    plan frame (the same model world frame): (N, 2)."""
+    model = p.reconstruction / cam["model"]
+    _, C, _ = load_cameras(model)
+    xyz, _, track = load_points(model)
+    L, Lc = (xyz - origin) @ basis.T, (C - origin) @ basis.T
+    masks = p.masks / cam["folder"]
+    road, _ = labels(model, masks, MASK_ROAD)
+    near = np.min(np.linalg.norm(L[:, None, :2] - Lc[None, ::3, :2], axis=2), axis=1) * s_gps < 25
+    ground_z = (float(np.median(L[road & near, 2])) if (road & near).sum() >= 30 else
+                float(np.median(Lc[:, 2])) - O["default_camera_height"] / s_gps)
+    building, _ = labels(model, masks, MASK_BUILDING)
+    h_m = (L[:, 2] - ground_z) * s_gps
+    sel = np.flatnonzero(building & (track >= O["min_track"]) & (h_m > O["min_height"]) & (h_m < O["max_height"]))
+    _, first = np.unique(np.floor(L[sel, :2] / (O["point_grid"] / s_gps)).astype(np.int64), axis=0, return_index=True)
+    return L[sel[np.sort(first)], :2]
+
+
+def align_camera(p, leg, cam, buildings, out_dir, max_error, shared=None, pool=(), enu=None):
+    """shared: a rig's placement from its reference camera ({origin, basis, enu, fits, fits0}; this
+    camera's model is in the same world frame), used instead of levelling and fitting this camera
+    on its own. pool: the rig's other cameras, whose building points join this camera's in the fit.
+    enu: the plan frame (default: this camera's first frame)."""
     folder = cam["folder"]
     meta = p.frames(folder)
     gc = json.loads(p.calibration_json(folder).read_text())
     model = p.reconstruction / cam["model"]
     names, C, R = load_cameras(model)
     origin, basis, g_spread, g_out = level_with_gravity(names, C, R, gc)
+    if shared:
+        origin, basis = shared["origin"], shared["basis"]
     xyz, rgb, track = load_points(model)
     L = (xyz - origin) @ basis.T
     Lc = (C - origin) @ basis.T
 
     # GPS (Mapillary's positions) as the starting placement and the leg's metric scale
-    enu = LocalFrame(meta[names[0]]["lon"], meta[names[0]]["lat"])
+    enu = shared["enu"] if shared else enu or LocalFrame(meta[names[0]]["lon"], meta[names[0]]["lat"])
     gps = np.array([enu.xy(meta[n]["lon"], meta[n]["lat"]) for n in names])
     s_gps = similarity_2d(Lc[:, :2], gps)[0]
 
     # ground plane from the road points near the path
     masks = p.masks / folder
-    road, _ = label_points(model, masks, MASK_ROAD, O["class_fraction"])
+    road, _ = labels(model, masks, MASK_ROAD)
     near = np.min(np.linalg.norm(L[:, None, :2] - Lc[None, ::3, :2], axis=2), axis=1) * s_gps < 25
     cam_z = float(np.median(Lc[:, 2]))
     if (road & near).sum() >= 30:
@@ -209,7 +258,7 @@ def align_camera(p, leg, cam, buildings, out_dir, max_error):
         ground_src = f"default camera height {O['default_camera_height']} m"
     cam_height = (cam_z - ground_z) * s_gps
 
-    building, _ = label_points(model, masks, MASK_BUILDING, O["class_fraction"])
+    building, _ = labels(model, masks, MASK_BUILDING)
     h_m = (L[:, 2] - ground_z) * s_gps
     usable = building & (track >= O["min_track"]) & (h_m > O["min_height"]) & (h_m < O["max_height"])
 
@@ -243,15 +292,21 @@ def align_camera(p, leg, cam, buildings, out_dir, max_error):
     if len(sel) < 30:
         return {"aligned": False, "reason": f"only {len(sel)} usable building points"}
     bpts, b_piece = L[sel, :2], pt_piece[sel]
-    right_share = float(np.mean(side_of_path(bpts, [Lc[:, :2]])))
+    pooled = np.vstack([rig_building_points(p, c, origin, basis, s_gps) for c in pool]) if pool else np.zeros((0, 2))
+    right_share = float(np.mean(side_of_path(np.vstack([bpts, pooled]), [Lc[:, :2]])))
     both_sides = min(right_share, 1 - right_share) >= 0.2
 
     fits, fits0, piece_stats = [], [], []
+    p.results.mkdir(parents=True, exist_ok=True)
     for k, pc in enumerate(pieces):
+        if shared:  # a rig camera: the reference camera's placement
+            fits.append(np.asarray(shared["fits"][min(k, len(shared["fits"]) - 1)]))
+            fits0.append(np.asarray(shared["fits0"][min(k, len(shared["fits0"]) - 1)]))
+            continue
         mine = b_piece == k
         if mine.sum() < 30:  # too few points of its own: fit with the whole leg's points
             mine = np.ones(len(bpts), bool)
-        prm, prm0 = fit_to_footprints(bpts[mine], Lc[pc, :2], gps[pc], A, B, wmap, both_sides)
+        prm, prm0 = fit_to_footprints(np.vstack([bpts[mine], pooled]), Lc[pc, :2], gps[pc], A, B, wmap, both_sides)
         fits.append(prm)
         fits0.append(prm0)
 
@@ -318,6 +373,9 @@ def align_camera(p, leg, cam, buildings, out_dir, max_error):
              "scale_vs_mapillary": float(np.average([st["scale_vs_mapillary"] for st in piece_stats], weights=n_w)),
              "heading_change_deg": float(np.average([st["heading_change_deg"] for st in piece_stats], weights=n_w)),
              "cameras_inside_buildings": int(inside.sum()), "cameras_out_of_order": backward,
+             "rig_fit": (f"placed with the rig reference {cam['rig']}" if shared and cam.get("rig") not in (None, folder) else
+                         f"fitted with the building points of {len(pool)} other rig cameras ({len(pooled)} points)"
+                         if pool else None),
              "aligned": True, "reliable": bool(reliable)}
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "stats.json").write_text(json.dumps(stats, indent=1))
@@ -359,10 +417,161 @@ def align_camera(p, leg, cam, buildings, out_dir, max_error):
     fig.tight_layout()
     fig.savefig(out_dir / "plan.png", dpi=110)
     plt.close(fig)
-    return {**stats, "cameras_out": cams_out}
+    fitdata = None
+    if not shared and len(pieces) == 1:  # what link_legs needs to refit this camera with its neighbours
+        fitdata = {"bpts": np.vstack([bpts, pooled]), "Lc": Lc[:, :2], "gps": gps, "A": A, "B": B, "names": names,
+                   "params0": fits0[0], "scale_sigma": O["scale_sigma_both"] if both_sides else O["scale_sigma_one"]}
+    return {**stats, "cameras_out": cams_out,
+            "_shared": {"origin": origin, "basis": basis, "enu": enu, "fits": fits, "fits0": fits0},
+            "_fitdata": fitdata}
 
 
-def align_roi(roi_dir, max_error=2.0, tag=None):
+LINK_SIGMA = 0.3  # m: how closely two linked legs must place the cameras they share
+LINK_SHAPE_M = 1.0  # two legs' shared cameras further apart than this after the best similarity: not linked
+LINK_WORSE_M, LINK_WORSE_X = 0.5, 1.5  # a link making a leg's wall fit worse by more than both of these is undone
+
+
+def wall_terms(params, bpts, A, B):
+    """The wall residual set-up of fit_to_footprints' refinement at params: (points, wall start,
+    wall normal, robust weights) of the building points within match_dist of a wall."""
+    wdir = (B - A) / np.linalg.norm(B - A, axis=1)[:, None]
+    wnrm = np.stack([-wdir[:, 1], wdir[:, 0]], axis=1)
+    d = segment_distances(apply_2d(params, bpts), A, B)
+    k = np.argmin(d, axis=1)
+    m = d[np.arange(len(bpts)), k] < O["match_dist"]
+    S, Ad, Nd = bpts[m], A[k[m]], wnrm[k[m]]
+    sw = 1.0 / np.sqrt(1.0 + (np.abs(np.sum((apply_2d(params, S) - Ad) * Nd, axis=1)) / O["wall_scale"]) ** 2)
+    return S, Ad, Nd, sw
+
+
+def link_legs(legs, results):
+    """Refine the fits of linked legs together (see the module docstring): every camera fitted on
+    its own in two consecutive legs that share frames (reconstruct.py's leg overlap) gets one
+    term holding the shared cameras together, LINK_SIGMA, weighted to count as much as the
+    smaller leg's wall points. Returns ({leg id: {folder: params}} to place again, report)."""
+    ents, report = {}, []
+    for leg in legs:
+        for folder, (entry, _, sh, fd) in results[leg["id"]].items():
+            if fd is not None and entry.get("aligned"):
+                ents[(leg["id"], folder)] = {"fd": fd, "x0": np.asarray(sh["fits"][0], float)}
+    links = []
+    for a, b in zip(legs, legs[1:]):
+        if not a.get("link_next") or a["line"] != b["line"]:
+            continue
+        for folder in sorted({k[1] for k in ents if k[0] == a["id"]} & {k[1] for k in ents if k[0] == b["id"]}):
+            fa, fb = ents[(a["id"], folder)]["fd"], ents[(b["id"], folder)]["fd"]
+            common = sorted(set(fa["names"]) & set(fb["names"]))
+            if len(common) >= 3:
+                ia, ib = [fa["names"].index(n) for n in common], [fb["names"].index(n) for n in common]
+                # the shared stretch must have the same shape in both legs (else one of them broke there)
+                s_, ang, t = similarity_2d(fb["Lc"][ib], fa["Lc"][ia])
+                Rm = np.array([[math.cos(ang), -math.sin(ang)], [math.sin(ang), math.cos(ang)]])
+                m_per_unit = math.exp(ents[(a["id"], folder)]["x0"][1])
+                shape = float(np.median(np.linalg.norm(s_ * fb["Lc"][ib] @ Rm.T + t - fa["Lc"][ia], axis=1))) * m_per_unit
+                if shape > LINK_SHAPE_M:
+                    print(f"link {a['id']}-{b['id']} {folder}: not linked, the shared cameras differ in shape by {shape:.1f} m")
+                    report.append({"legs": [a["id"], b["id"]], "folder": folder, "linked": False,
+                                   "reason": f"shared cameras differ in shape by {shape:.1f} m"})
+                    continue
+                links.append(((a["id"], folder), (b["id"], folder), ia, ib, common))
+    if not links:
+        return {}, report
+    while links:
+        x0, x, keys, sl = solve_links(ents, links)
+        worse = [k for k in keys if walls_median(ents, x, sl, k) > max(walls_median(ents, x0, sl, k) + LINK_WORSE_M,
+                                                                       LINK_WORSE_X * walls_median(ents, x0, sl, k))]
+        if not worse:
+            break
+        drop = [l for l in links if l[0] in worse or l[1] in worse]
+        for l in drop:
+            print(f"link {l[0][0]}-{l[1][0]} {l[0][1]}: undone, it made the wall fit of "
+                  + ", ".join(f"{k[0]} {walls_median(ents, x0, sl, k):.2f} -> {walls_median(ents, x, sl, k):.2f} m" for k in worse
+                              if k in l[:2]))
+            report.append({"legs": [l[0][0], l[1][0]], "folder": l[0][1], "linked": False,
+                           "reason": "made a leg's wall fit worse"})
+        links = [l for l in links if l not in drop]
+    if not links:
+        return {}, report
+    return finish_links(ents, links, x0, x, keys, sl, report)
+
+
+def walls_median(ents, x, sl, k):
+    fd = ents[k]["fd"]
+    return float(np.median(np.minimum(segment_distances(apply_2d(x[sl[k]], fd["bpts"]), fd["A"], fd["B"]).min(axis=1), 50)))
+
+
+def solve_links(ents, links):
+    keys = sorted({k for l in links for k in l[:2]})
+    sl = {k: slice(4 * i, 4 * i + 4) for i, k in enumerate(keys)}
+    x0 = np.concatenate([ents[k]["x0"] for k in keys])
+    lower, upper = [], []
+    for k in keys:
+        a, ls, tx, ty = ents[k]["x0"]
+        lower += [a - math.radians(5), ls - math.log(O["refine_scale"]), tx - 15, ty - 15]
+        upper += [a + math.radians(5), ls + math.log(O["refine_scale"]), tx + 15, ty + 15]
+    lower, upper = np.array(lower), np.array(upper)
+
+    def link_gap(x, l):
+        ka, kb, ia, ib, _ = l
+        Pa = apply_2d(x[sl[ka]], ents[ka]["fd"]["Lc"][ia])
+        Pb = apply_2d(x[sl[kb]], ents[kb]["fd"]["Lc"][ib])
+        return Pa, Pb
+
+    def path_len(P):
+        return float(np.linalg.norm(np.diff(P, axis=0), axis=1).sum())
+
+    x = x0.copy()
+    for _ in range(8):
+        terms = {k: wall_terms(x[sl[k]], ents[k]["fd"]["bpts"], ents[k]["fd"]["A"], ents[k]["fd"]["B"]) for k in keys}
+        wl = [math.sqrt(max(min(len(terms[l[0]][0]), len(terms[l[1]][0])), 1) / len(l[4])) for l in links]
+
+        def residuals(xx):
+            r = []
+            for k in keys:
+                S, Ad, Nd, sw = terms[k]
+                fd, prm, n = ents[k]["fd"], xx[sl[k]], max(len(S), 1)
+                r.append(sw * np.sum((apply_2d(prm, S) - Ad) * Nd, axis=1) / O["wall_scale"])
+                r.append(math.sqrt(n) * (apply_2d(prm, fd["Lc"]).mean(axis=0) - fd["gps"].mean(axis=0)) / O["gps_sigma"])
+                r.append([math.sqrt(n) * (prm[1] - fd["params0"][1]) / fd["scale_sigma"]])
+            for l, w in zip(links, wl):
+                Pa, Pb = link_gap(xx, l)
+                r.append(w * ((Pa - Pb) / LINK_SIGMA).ravel())
+            return np.concatenate([np.ravel(v) for v in r])
+
+        x = least_squares(residuals, np.clip(x, lower, upper), bounds=(lower, upper),
+                          x_scale=np.tile([0.01, 0.01, 1, 1], len(keys))).x
+    return x0, x, keys, sl
+
+
+def finish_links(ents, links, x0, x, keys, sl, report):
+    def link_gap(xx, l):
+        ka, kb, ia, ib, _ = l
+        return apply_2d(xx[sl[ka]], ents[ka]["fd"]["Lc"][ia]), apply_2d(xx[sl[kb]], ents[kb]["fd"]["Lc"][ib])
+
+    def path_len(P):
+        return float(np.linalg.norm(np.diff(P, axis=0), axis=1).sum())
+
+    for l in links:
+        g0, g1 = [np.linalg.norm(np.subtract(*link_gap(v, l)), axis=1) for v in (x0, x)]
+        (a0, b0), (a1, b1) = link_gap(x0, l), link_gap(x, l)
+        report.append({"legs": [l[0][0], l[1][0]], "folder": l[0][1], "linked": True, "shared_frames": len(l[4]),
+                       "shared_cameras_apart_m": {"before": float(np.median(g0)), "after": float(np.median(g1))},
+                       "scale_ratio": {"before": path_len(a0) / max(path_len(b0), 1e-9),
+                                       "after": path_len(a1) / max(path_len(b1), 1e-9)}})
+        r = report[-1]
+        print(f"link {l[0][0]}-{l[1][0]} {l[0][1]}: {len(l[4])} shared frames {r['shared_cameras_apart_m']['before']:.2f} -> "
+              f"{r['shared_cameras_apart_m']['after']:.2f} m apart, scale ratio {r['scale_ratio']['before']:.3f} -> "
+              f"{r['scale_ratio']['after']:.3f}")
+    for k in keys:
+        print(f"  {k[0]}/{k[1]}: wall fit {walls_median(ents, x0, sl, k):.2f} -> {walls_median(ents, x, sl, k):.2f} m")
+    changed = {}
+    for k in keys:
+        changed.setdefault(k[0], {})[k[1]] = x[sl[k]]
+    return changed, report
+
+
+def align_roi(roi_dir, max_error=2.0, tag=None, link=True):
+    t_start, secs = time.time(), {}
     p = RoiPaths(roi_dir, tag)
     if not p.legs_json.exists():
         raise SystemExit(f"{p.legs_json} not found: run reconstruct.py first")
@@ -391,23 +600,44 @@ def align_roi(roi_dir, max_error=2.0, tag=None):
     buildings = fetch_buildings((min(lons) - pad / ref.kx, min(lats) - pad / ref.ky,
                                  max(lons) + pad / ref.kx, max(lats) + pad / ref.ky), cache=cache)
     print(f"OSM: {len(buildings)} building outlines")
+    secs["osm_buildings"] = time.time() - t_start
 
-    legs_out, per_folder, n_frames = [], {}, 0
-    for leg in doc["legs"]:
-        for cam in leg["cameras"]:
-            n_frames += cam["frames"]
+    def align_leg(leg, override=None):
+        """Every camera of a leg: {folder: (entry, cameras_out, _shared, _fitdata)}. override: {folder:
+        params} placing those cameras (link_legs' refined fits) instead of fitting them."""
+        override = override or {}
+        # a rig's reference camera first (its fit places the rig's other cameras); output in leg order
+        refs = {c["rig"] for c in leg["cameras"] if c.get("rig") and c.get("model")}
+        shared, out = {}, {}
+        for cam in sorted(leg["cameras"], key=lambda c: c["folder"] not in refs):
             entry = {"leg": leg["id"], "folder": cam["folder"], "frames": cam["frames"],
                      "cameras": [{"folder": cam["folder"], "registered": cam.get("registered", 0)}], "aligned": False}
             if not cam.get("model"):
                 entry["reason"] = "no reconstruction"
-                legs_out.append(entry)
+                out[cam["folder"]] = (entry, [], None, None)
                 print(f"{leg['id']}/{cam['folder']}: no reconstruction")
                 continue
-            res = align_camera(p, leg, cam, buildings, p.alignment / f"{leg['id']}_{cam['folder']}", max_error)
+            rig = cam.get("rig")
+            out_dir = p.alignment / f"{leg['id']}_{cam['folder']}"
+            prev = results.get(leg["id"], {}).get(cam["folder"])
+            if cam["folder"] in override and prev and prev[2]:
+                sh = {**prev[2], "fits": [override[cam["folder"]]]}
+                res = align_camera(p, leg, cam, buildings, out_dir, max_error, shared=sh)
+                res["linked"] = True
+            elif rig and rig == cam["folder"]:
+                pool = [c for c in leg["cameras"] if c.get("rig") == rig and c is not cam and c.get("model")]
+                res = align_camera(p, leg, cam, buildings, out_dir, max_error, pool=pool, enu=ref)
+            else:
+                res = align_camera(p, leg, cam, buildings, out_dir, max_error,
+                                   shared=shared.get(rig) if rig else None, enu=ref)
+            if rig and rig == cam["folder"] and res.get("aligned"):
+                shared[rig] = res["_shared"]
+            sh, fd = res.pop("_shared", None), res.pop("_fitdata", None)
+            if prev and cam["folder"] in override:
+                fd = prev[3]  # keep the first pass's fit data for the record
             cams_out = res.pop("cameras_out", [])
             entry.update(res)
-            legs_out.append(entry)
-            per_folder.setdefault(cam["folder"], []).extend(cams_out)
+            out[cam["folder"]] = (entry, cams_out, sh, fd)
             if res.get("aligned"):
                 ptf = res["points_to_footprint_median_m"]
                 print(f"{leg['id']}/{cam['folder']}: {res['registered']}/{cam['frames']} cameras, "
@@ -417,24 +647,62 @@ def align_roi(roi_dir, max_error=2.0, tag=None):
                       f"gravity spread {res['gravity']['spread_median_deg']:.1f} deg"
                       + (f", {len(res['cameras_out_of_order'])} cameras behind earlier ones "
                          f"({', '.join(n[6:10] for n in res['cameras_out_of_order'])})" if res['cameras_out_of_order'] else "")
+                      + (" (placed with the linked legs)" if res.get("linked") else "")
                       + f" -> {'reliable' if res['reliable'] else 'UNRELIABLE'}")
             else:
                 print(f"{leg['id']}/{cam['folder']}: not aligned ({res.get('reason')})")
+        return out
+
+    results = {}
+    t0 = time.time()
+    for leg in doc["legs"]:
+        t1 = time.time()
+        results[leg["id"]] = align_leg(leg)
+        secs[f"fit {leg['id']}"] = time.time() - t1
+    secs["fit_legs"] = time.time() - t0
+    link_report = []
+    if link and len(doc["legs"]) > 1:
+        t0 = time.time()
+        changed, link_report = link_legs(doc["legs"], results)
+        secs["link_legs"] = time.time() - t0
+        t0 = time.time()
+        for leg in doc["legs"]:
+            if changed.get(leg["id"]):
+                print(f"{leg['id']}: placing again with the linked fit")
+                results[leg["id"]] = align_leg(leg, changed[leg["id"]])
+        secs["place_linked_legs"] = time.time() - t0
+
+    legs_out, per_folder, n_frames = [], {}, 0
+    for leg in doc["legs"]:
+        for c in leg["cameras"]:
+            entry, cams_out, _, _ = results[leg["id"]][c["folder"]]
+            legs_out.append(entry)
+            n_frames += c["frames"]
+            # frames two legs share belong to the later leg (it starts with them)
+            have = per_folder.setdefault(c["folder"], {})
+            for co in cams_out:
+                have[co["file"]] = co
+    per_folder = {f: [d[k] for k in sorted(d)] for f, d in per_folder.items()}
     for folder, cams in per_folder.items():
         (p.alignment / f"{folder}.json").write_text(json.dumps({"folder": folder, "cameras": cams}, indent=1))
     aligned = [e for e in legs_out if e.get("aligned")]
     summary = {"pipeline": "Alignment_Pipeline", "reconstruction": {k: doc.get(k) for k in
                                                                        ("features", "mapper", "refine_intrinsics",
                                                                         "gravity_priors", "mask_moving")},
-               "frames": n_frames, "frames_aligned": sum(e["registered"] for e in aligned),
+               "frames": n_frames, "leg_links": link_report, "frames_aligned": sum(e["registered"] for e in aligned),
                "frames_reliable": sum(e["registered"] for e in aligned if e["reliable"]), "legs": legs_out}
-    p.summary_json.write_text(json.dumps(summary, indent=1))
+    t0 = time.time()
     plot_overview(p, aligned, per_folder, buildings)
     from plot_fit import plot_leg  # the sparse cloud on the footprints, plan and 3D
     for e in aligned:
         d = p.alignment / f"{e['leg']}_{e['folder']}"
         if (d / "transform.json").exists():
             plot_leg(p, d, buildings)
+    secs["figures"] = time.time() - t0
+    secs["total"] = time.time() - t_start
+    summary["seconds"] = {k: round(v, 1) for k, v in secs.items()}
+    p.summary_json.write_text(json.dumps(summary, indent=1))
+    print("align time: " + ", ".join(f"{k} {v:.0f} s" for k, v in secs.items() if not k.startswith("fit leg")))
     print(f"{summary['frames_aligned']}/{n_frames} frames aligned, {summary['frames_reliable']} reliable; "
           f"wrote {p.summary_json}")
     return summary
@@ -472,11 +740,13 @@ def plot_overview(p, aligned, per_folder, buildings):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("roi_dir", type=Path)
+    parser.add_argument("--no-link", action="store_true",
+                        help="Fit each leg on its own (by default legs sharing frames are refined together)")
     parser.add_argument("--max-error", type=float, default=2.0, help="Reliable if the median point-to-footprint "
                         "distance is at most this (m)")
     parser.add_argument("--tag", help="Separate run (see reconstruct.py --tag)")
     args = parser.parse_args()
-    align_roi(args.roi_dir, args.max_error, args.tag)
+    align_roi(args.roi_dir, args.max_error, args.tag, link=not args.no_link)
 
 
 if __name__ == "__main__":

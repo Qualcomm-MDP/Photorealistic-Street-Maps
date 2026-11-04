@@ -133,7 +133,10 @@ def plot_leg(p, folder_dir, buildings):
         used = [c.get("mapper_used") for l in doc["legs"] if l["id"] == stats["leg"] for c in l["cameras"]
                 if c["folder"] == folder]
         mapper = (used and used[0]) or doc.get("mapper", "global")
-    fig.suptitle(f"{p.name} {stats['leg']}/{folder}: GeoCalib + ALIKED + "
+    pano = p.pano(folder)
+    calib = (f"360 {pano['side']} crop" if pano else
+             "Mapillary calibration" if p.calibration_source == "mapillary" else "GeoCalib")
+    fig.suptitle(f"{p.name} {stats['leg']}/{folder}: {calib} + ALIKED + "
                  f"{'GLOMAP' if mapper == 'global' else 'COLMAP incremental'}, "
                  f"scale x{stats['scale_vs_mapillary']:.2f} vs GPS placement, camera height {stats['camera_height_m']:.2f} m, "
                  f"{'reliable' if stats['reliable'] else 'UNRELIABLE'}", fontsize=11, x=0.01, ha="left")

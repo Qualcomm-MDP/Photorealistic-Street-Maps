@@ -16,6 +16,11 @@ overlays (data/masks/<sequence folder>/previews/) for checking by eye.
 
 Frames that already have a mask are skipped unless --force.
 
+The checkpoint's image processor resizes every frame to 384 x 384 before the model (aspect not
+kept); the mask is scaled back to the frame. --batch N segments N frames per model call (default 4:
+12% faster than one at a time, the same masks to 1 pixel in 10^7 on 120 roi_13 frames); --half runs
+the model in 16-bit floats (no faster on an M-series GPU, 0.05% of pixels different; off).
+
 Usage:
   python segmentation_layer.py rois/mapillary_roi_1
   python segmentation_layer.py rois/mapillary_roi_1 --previews
@@ -61,16 +66,20 @@ def missing_masks(paths):
     return out
 
 
-def segment_roi(roi_dir, model_name=DEFAULT_MODEL, device=None, previews=False, force=False):
-    """Write a mask for every frame of the ROI; returns the masks folder."""
+def segment_roi(roi_dir, model_name=DEFAULT_MODEL, device=None, previews=False, force=False, batch=4, half=False,
+                out_root=None, limit=None):
+    """Write a mask for every frame of the ROI (into out_root instead of data/masks, and only the first
+    `limit` frames per sequence, for tests); returns the masks folder."""
     import torch
     from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
 
     paths = RoiPaths(roi_dir)
+    if out_root:
+        paths.masks = Path(out_root)
     sequences = paths.sequences()
     todo = {}
     for seq in sequences:
-        frames = sorted((paths.images / seq["folder"]).glob("frame_*.jpg"))
+        frames = sorted((paths.images / seq["folder"]).glob("frame_*.jpg"))[:limit]
         todo[seq["folder"]] = [p for p in frames
                                if force or not (paths.masks / seq["folder"] / f"{p.stem}.png").exists()]
     total = sum(len(v) for v in todo.values())
@@ -81,6 +90,8 @@ def segment_roi(roi_dir, model_name=DEFAULT_MODEL, device=None, previews=False, 
         print(f"Model {model_name} on {device}")
         processor = AutoImageProcessor.from_pretrained(model_name)
         model = Mask2FormerForUniversalSegmentation.from_pretrained(model_name).to(device).eval()
+        if half:
+            model = model.half()
         names = {int(k): v for k, v in model.config.id2label.items()}
         lut = np.full(256, MASK_OTHER, np.uint8)
         for value, classes in CLASS_GROUPS.items():
@@ -97,29 +108,33 @@ def segment_roi(roi_dir, model_name=DEFAULT_MODEL, device=None, previews=False, 
             out.mkdir(parents=True, exist_ok=True)
             if previews:
                 (out / "previews").mkdir(exist_ok=True)
-            for p in frames:
-                img = cv2.imread(str(p))
+            for k0 in range(0, len(frames), batch):
+                chunk = frames[k0:k0 + batch]
+                imgs = [cv2.imread(str(p)) for p in chunk]
                 # BGR -> RGB as a contiguous copy: with torchvision installed, transformers converts
                 # images with torch.from_numpy, which rejects the reversed (negative-stride) view
-                rgb = np.ascontiguousarray(img[:, :, ::-1])
-                inputs = processor(images=rgb, return_tensors="pt").to(device)
+                rgbs = [np.ascontiguousarray(img[:, :, ::-1]) for img in imgs]
+                inputs = processor(images=rgbs, return_tensors="pt").to(device)
+                if half:
+                    inputs["pixel_values"] = inputs["pixel_values"].half()
                 with torch.no_grad():
                     outputs = model(**inputs)
-                seg = processor.post_process_semantic_segmentation(outputs, target_sizes=[img.shape[:2]])[0]
-                mask = lut[seg.cpu().numpy().astype(np.uint8)]
-                cv2.imwrite(str(out / f"{p.stem}.png"), mask)
-                if previews:
-                    colour = np.zeros_like(img)
-                    for value, bgr in PREVIEW_COLOURS.items():
-                        colour[mask == value] = bgr
-                    overlay = np.where(mask[..., None] == MASK_OTHER, img, (0.45 * img + 0.55 * colour).astype(np.uint8))
-                    w = min(1280, img.shape[1])
-                    cv2.imwrite(str(out / "previews" / f"{p.stem}.jpg"),
-                                cv2.resize(overlay, (w, round(w * img.shape[0] / img.shape[1]))),
-                                [cv2.IMWRITE_JPEG_QUALITY, 85])
-                done += 1
-                if done % 25 == 0 or done == total:
-                    print(f"  {done}/{total} frames ({(time.time() - t0) / done:.2f} s/frame)")
+                segs = processor.post_process_semantic_segmentation(outputs, target_sizes=[img.shape[:2] for img in imgs])
+                for p, img, seg in zip(chunk, imgs, segs):
+                    mask = lut[seg.cpu().numpy().astype(np.uint8)]
+                    cv2.imwrite(str(out / f"{p.stem}.png"), mask)
+                    if previews:
+                        colour = np.zeros_like(img)
+                        for value, bgr in PREVIEW_COLOURS.items():
+                            colour[mask == value] = bgr
+                        overlay = np.where(mask[..., None] == MASK_OTHER, img, (0.45 * img + 0.55 * colour).astype(np.uint8))
+                        w = min(1280, img.shape[1])
+                        cv2.imwrite(str(out / "previews" / f"{p.stem}.jpg"),
+                                    cv2.resize(overlay, (w, round(w * img.shape[0] / img.shape[1]))),
+                                    [cv2.IMWRITE_JPEG_QUALITY, 85])
+                    done += 1
+                    if done % 25 == 0 or done == total:
+                        print(f"  {done}/{total} frames ({(time.time() - t0) / done:.2f} s/frame)")
 
     # Pixel shares, as a quick sanity check (few building pixels = little to align to).
     for seq in sequences:
@@ -140,8 +155,12 @@ def main():
     parser.add_argument("--device", help="mps, cuda or cpu (default: best available)")
     parser.add_argument("--previews", action="store_true", help="Also save colour overlays for checking by eye")
     parser.add_argument("--force", action="store_true", help="Re-segment frames that already have masks")
+    parser.add_argument("--batch", type=int, default=4, help="Frames per model call")
+    parser.add_argument("--half", action="store_true", help="Run the model in 16-bit floats")
+    parser.add_argument("--out", type=Path, help="Write the masks here instead of data/masks (tests)")
+    parser.add_argument("--limit", type=int, help="Only the first N frames of each sequence (tests)")
     args = parser.parse_args()
-    segment_roi(args.roi_dir, args.model, args.device, args.previews, args.force)
+    segment_roi(args.roi_dir, args.model, args.device, args.previews, args.force, args.batch, args.half, args.out, args.limit)
 
 
 if __name__ == "__main__":

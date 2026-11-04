@@ -16,7 +16,7 @@ reliable leg typically sit 0.5–1 m (median) from the OSM footprint edges.
 | 1 | gui | `route_gui.py` | the drawn route (`routes/*.json`) |
 | 2 | mapillary | `mapillary_layer.py` | `data/mapillary/`: frames and `cameras.json` per sequence, `roi.json`, `sequences.json` |
 | 3 | segmentation | `segmentation_layer.py` | `data/masks/`: building/road/sky-and-moving mask per frame |
-| 4 | calibrate | `calibrate.py` | `data/calibration/<sequence>.json`: focal, distortion, per-frame gravity |
+| 4 | calibrate | `calibrate.py` | `data/calibration/<sequence>.json`: focal, distortion, per-frame gravity (`data/calibration_mapillary/` with `--calibration mapillary`) |
 | 5 | reconstruct | `reconstruct.py` | `data/reconstruction/`: COLMAP model per leg and sequence, `legs.json` |
 | 6 | align | `align.py` | `data/alignment/`: aligned cameras per sequence, `summary.json`; figures in `results/` |
 
@@ -44,6 +44,54 @@ export MAPILLARY_TOKEN='MLY|...'                                 # for the mapil
   walls but landed 19–45 m apart at their junctions; one leg aligned all 84 frames at
   1.00 m.
 - **`--max-frames`** (default 60), **`--max-turn`** (35°): where legs are split otherwise.
+- **Linked legs.** Legs are reconstructed one by one, but tied together in two ways:
+  - **Overlap (`--leg-overlap`, default 8 frames):** each leg runs on into the next leg's first 8
+    frames, including the frames through a turn of up to 30 frames. Two consecutive legs then
+    share those frames.
+  - **One focal length per camera (`--no-shared-focal` turns it off):** after the first pass, each
+    camera's focal is set to the median of its legs' refined focals, weighted by frames. Every leg
+    is then solved again on its own features and matches, with the focal held there and only the
+    distortion refined. This adds one mapper run per leg, not new feature matching. Solved alone,
+    a leg's focal drifts and stretches it along the street.
+  - **Joint placement (align; `--no-link` turns it off):** each leg is first fitted to OSM on its
+    own. The fits of linked legs are then refined together, so the cameras they share land in the
+    same place from both legs. That lines the legs up end to end and carries their scale across.
+    A leg whose walls leave it free to slide along the street is held by its neighbours.
+- **Rigs (default; `--solo-cameras` turns it off):** the cameras of a multi-camera rig are
+  solved together. This is always on for a 360 camera's left and right views, which form an
+  exact rig.
+  - **Which cameras:** the siblings that take their frames at the same moments as the primary
+    camera (within 20 ms, for at least 30% of their frames).
+  - **What it does:** each rig frame gets one pose, and each camera a fixed pose in the rig, so the
+    forward and rear cameras keep the side cameras from drifting into curves.
+  - **Results on roi_11** (2017 Roush, five cameras): the side cameras' bow went from 2–40 m to
+    0.1 m, and reliable frames rose from 168 to 238 of about 500.
+  - **Mounting angles:** start from Mapillary's rotations and are solved in a first pass. The
+    second pass holds them, with every camera at the reference camera's position. A side camera
+    shares no points with the others, so its offset in the rig can't be determined, and a free
+    offset slid it and its facades 2–12 m.
+  - **Placement on the map:** align places the rig with one transform, fitted with all the
+    cameras' building points. A camera facing buildings missing from OSM (roi_11's right side)
+    then still lands where the rest of the rig puts it.
+  - **Cameras out of sync:** cameras that fire at other moments (roi_6's motorcycle cameras, 200 ms
+    apart in two of its legs) are solved alone, as before.
+- **Speed:**
+  - Keypoints for every leg camera are extracted and matched in one GPU process, each frame
+    once. Before, each leg camera started its own process, and overlap frames were extracted twice.
+  - The shared-focal pass skips a leg camera whose own focal is already within 1% of the shared
+    value.
+  - **Matching look-ahead and RANSAC tries.** Each frame is matched with its next 6 frames, with
+    RANSAC capped at 2000 tries per pair in COLMAP's match checking, when frames are close
+    together (nearest-neighbour matching, under 6 m apart). Frames further apart (LightGlue) keep
+    10 frames and 10,000 tries. `--match-overlap` and `--ransac-trials` override both.
+    - roi_13: about 1.5 min faster with the same results.
+    - roi_19, frames 7.6 m apart: the shorter look-ahead made every leg 0.2–0.45 m worse, so
+      widely spaced frames keep the longer one.
+  - Segmentation runs 4 frames per model call: 12% faster, same masks.
+- **`--gap-factor`** (default 3): side and rear cameras keep only their longest run of frames
+  with no jump bigger than 3× their usual spacing (and at least 6 m). Across a bigger jump they
+  share almost no view, and a few false matches can join the two sides in the wrong place (the
+  rear camera of roi_11 leg01). Forward cameras are never cut. `0` turns this off.
 - **`--split-weak`**: drop weakly anchored frames and fit each side of the gap separately
   (off by default; see the reconstruct stage).
 - **`--matcher`**: `auto` (default) picks nearest-neighbour matching for frames under 6 m
@@ -67,13 +115,35 @@ not reach parallel streets (15 m works for most roads). **Use this route** saves
 ## 2. Fetch the imagery (`mapillary_layer.py`)
 
 Mapillary is searched in small tiles along each line (a large query returns only a sample).
-360° images and images outside the corridor are dropped. Each sequence (one capture session
-of one camera) is split into continuous runs, and the best run is picked:
+Images outside the corridor are dropped. Each sequence (one capture session of one camera)
+is split into continuous runs, and the best run is picked:
 
 1. enough frames along its longest straight stretch;
 2. frames dense enough to reconstruct: median spacing at most 10 m (`--max-spacing`);
 3. the largest share of the drawn line (in 25% steps);
-4. the densest spacing, then the most frames.
+4. a perspective camera before a 360 one;
+5. the densest spacing, then the most frames.
+
+**360° sequences.** A 360 run competes with the perspective runs. It wins when it covers
+more of the line, so a perspective run with the same coverage still comes first.
+`--pano prefer` takes a 360 run whenever it has enough dense frames; `--pano off` ignores 360
+runs.
+
+A picked 360 run is downloaded at full resolution. Each frame is cut into two square pinhole
+views, one facing right of travel and one facing left (`--pano-fov`, default 90°, at most
+2048 px). The two views are saved as a two-camera rig:
+
+- `line<L>_cam0_<id>`: the right view, the primary;
+- `line<L>_cam1_<id>`: the left view.
+
+The views point in a fixed direction in the 360 image, ±90° from travel by the run's median
+compass. Each view's `cameras.json` carries a `pano` header (side, yaw, field of view, source
+size). Its compass and rotation are turned to the view's direction.
+
+Every later stage handles the views like any rig camera, with one difference: the focal length
+is exact and there is no distortion. Calibrate takes that focal and GeoCalib estimates only
+gravity. Reconstruct keeps the camera fixed, so the focal cannot drift and stretch the model
+along the street.
 
 Rig siblings (vehicles with several cameras upload one sequence per camera) are added.
 Frames are saved as `data/mapillary/line<L>_cam<k>_<id>/frame_0001.jpg …` with
@@ -90,15 +160,38 @@ an Apple-silicon GPU. `--previews` saves colour overlays.
 
 GeoCalib (ECCV 2024) estimates the camera from single images:
 
-- **Calibration:** about 20 frames spread over each sequence; the median focal length and
+- **Calibration:** 10 frames spread over each sequence (`--sample`); the median focal length and
   distortion become the sequence's camera.
-- **Gravity:** every frame, with the focal fixed to that median, for its roll, pitch and up
-  direction. It agrees with the reconstructions to about 0.5–1°.
+- **Gravity:** roll, pitch and up direction per frame, with the focal fixed to that median.
+  GeoCalib runs on every fifth frame (`--gravity-every`) and the last. Each estimate starts
+  from the previous one and gets at most 10 optimiser steps. The frames in between are
+  interpolated, unless the two estimates either side differ by more than 4°
+  (`--gravity-refill`), in which case those frames are estimated too.
+  `--gravity-every 1` estimates every frame from scratch, the old behaviour.
+  Tested against the COLMAP models' rotations (roi_6, 19, 24 and 27): 3–5× faster, and the
+  median error grew by 0.04–0.15°, from 0.44–0.48° on cars and 1.27° on a motorcycle.
 
-Mapillary's own calibration is not used: it is sometimes far off (roi_15's iPhone reports
-1.34 of the image width against about 0.8), and starting phones from it did not help.
+Mapillary's own calibration is not used by default: it is sometimes far off (roi_15's iPhone
+reports 1.34 of the image width against about 0.8), and starting phones from it did not help.
 The reconstruct stage warns when Mapillary's focal differs from GeoCalib's by more than 10%.
 About 0.8 s per frame; the result is reused by later runs.
+
+**When GeoCalib fails:** very wide lenses are beyond GeoCalib's lens model. roi_21's 2017 Roush
+rig has six identical cameras, and GeoCalib gave them focals from 0.42 to 0.65, against
+Mapillary's 0.48. The stage prints
+`GeoCalib calibration looks unreliable for this camera; try --calibration mapillary` when either:
+
+- GeoCalib's optimiser did not converge on most of the sampled frames, or
+- cameras of one rig (same make, model and image size) got focals more than 15% apart.
+
+`--calibration mapillary` then takes the focal and both distortion terms from Mapillary and
+writes them to `data/calibration_mapillary/`. GeoCalib still estimates gravity per frame, with
+Mapillary's focal fixed. The reconstruct stage records which calibration it used, and the align
+stage follows it. Use a `--tag` to keep both runs:
+
+```
+python run_pipeline.py --roi-dir rois/mapillary_roi_21 --calibration mapillary --tag mly
+```
 
 ## 5. Reconstruct (`reconstruct.py`)
 
@@ -255,6 +348,7 @@ rois/
       mapillary/    roi.json  sequences.json  line1_cam0_<id>/{frame_0001.jpg ..., cameras.json}
       masks/        classes.json  line1_cam0_<id>/frame_0001.png ...
       calibration/  line1_cam0_<id>.json
+      calibration_mapillary/  the same with Mapillary's focal and distortion (--calibration mapillary)
       reconstruction/  legs.json  leg01/line1_cam0_<id>/{sparse/0/txt, colmap.log, ...}
       alignment/    line1_cam0_<id>.json  summary.json  osm_buildings.json  leg01_line1_cam0_<id>/
       reconstruction_<tag>/  alignment_<tag>/      tagged runs

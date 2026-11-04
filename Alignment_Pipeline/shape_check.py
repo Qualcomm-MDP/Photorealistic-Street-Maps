@@ -23,6 +23,10 @@ from align import level_with_gravity
 from common import LocalFrame, RoiPaths, load_cameras, similarity_2d
 
 
+# legs.json "refined" (older runs: True/False) -> label
+REFINED = {"all": " refined", True: " refined", "distortion": " focal fixed", "none": " fixed", False: " fixed"}
+
+
 def bow_of(P):
     c = P.mean(0)
     u = np.linalg.svd(P - c)[2][0]
@@ -68,7 +72,7 @@ def main():
             print(f"{leg['id']}/{cam['folder']}: {r['cameras']} cams over {r['length_m']:.0f} m, bow {r['bow_m']:.1f} m "
                   f"(GPS {r['gps_bow_m']:.1f} m), gravity {r['gravity_deg']:.1f} deg, scale end/start "
                   f"{r['scale_end_start']:.2f}, calibration {cam.get('calibration', {}).get('source')} "
-                  f"{cam.get('calibration', {}).get('model')}{' refined' if cam.get('calibration', {}).get('refined') else ''}")
+                  f"{cam.get('calibration', {}).get('model')}{REFINED.get(cam.get('calibration', {}).get('refined'), '')}")
     w = np.array([r["cameras"] for r in rows], float)
     m = lambda k: float(np.average([r[k] for r in rows], weights=w))  # noqa: E731
     print(f"MEAN ({args.tag or 'base'}): bow {m('bow_m'):.1f} m (GPS {m('gps_bow_m'):.1f}), gravity {m('gravity_deg'):.1f} deg, "

@@ -9,6 +9,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -178,6 +179,7 @@ class RoiPaths:
                           (frame_0001.jpg ... and cameras.json)
         masks/            segmentation masks, one folder per sequence
         calibration/      GeoCalib's calibration and per-frame gravity, <sequence folder>.json
+        calibration_mapillary/  the same with Mapillary's focal and distortion (--calibration mapillary)
         reconstruction/   COLMAP work folders and models per leg and sequence, legs.json
         alignment/        aligned cameras per sequence (<sequence folder>.json), summary.json
                           and per-leg fit data
@@ -185,9 +187,10 @@ class RoiPaths:
 
     tag="t" points the reconstruction, alignment and results at a separate run
     (data/reconstruction_t, data/alignment_t, results/t), so it never overwrites the main one;
-    the calibration is shared."""
+    the calibration is shared. calibration="geocalib" or "mapillary" picks the calibration folder;
+    left out, it is the one the run's reconstruction used (legs.json), else GeoCalib's."""
 
-    def __init__(self, roi_dir, tag=None):
+    def __init__(self, roi_dir, tag=None, calibration=None):
         root = Path(roi_dir).resolve()
         # Accept a subfolder too (e.g. .../mapillary_roi_1/data or its data/mapillary).
         for _ in range(2):
@@ -199,7 +202,6 @@ class RoiPaths:
         self.data = root / "data"
         self.images = self.data / "mapillary"
         self.masks = self.data / "masks"
-        self.calibration = self.data / "calibration"
         suffix = f"_{tag}" if tag else ""
         self.reconstruction = self.data / f"reconstruction{suffix}"
         self.alignment = self.data / f"alignment{suffix}"
@@ -208,9 +210,14 @@ class RoiPaths:
         self.sequences_json = self.images / "sequences.json"
         self.legs_json = self.reconstruction / "legs.json"
         self.summary_json = self.alignment / "summary.json"
+        if calibration is None and self.legs_json.exists():
+            calibration = json.loads(self.legs_json.read_text()).get("calibration")
+        self.calibration_source = calibration or "geocalib"
+        self.calibration = self.data / ("calibration" if self.calibration_source == "geocalib" else
+                                        f"calibration_{self.calibration_source}")
 
     def calibration_json(self, folder):
-        """GeoCalib's calibration of one sequence (shared by every tagged run)."""
+        """The calibration of one sequence (shared by every tagged run)."""
         return self.calibration / f"{folder}.json"
 
     def sequences(self):
@@ -218,9 +225,23 @@ class RoiPaths:
             raise SystemExit(f"{self.sequences_json} not found: run the mapillary stage first")
         return json.loads(self.sequences_json.read_text())
 
+    def pano(self, folder):
+        """A 360 crop's "pano" header (side, yaw_deg, fov_deg, ...; mapillary_layer.download_pano), or None
+        for a perspective camera's sequence."""
+        return json.loads((self.images / folder / "cameras.json").read_text()).get("pano")
+
     def frames(self, folder):
         """Per-frame Mapillary data of one sequence folder, by file name."""
         return {f["file"]: f for f in json.loads((self.images / folder / "cameras.json").read_text())["frames"]}
+
+
+def mapillary_calibration(p, folder):
+    """(make, the sequence's most common Mapillary [focal, k1, k2]) or (make, None). Focal as a
+    fraction of the long side; k1, k2 radial on normalised coordinates (COLMAP's RADIAL)."""
+    frames = list(p.frames(folder).values())
+    make = next((f.get("make") for f in frames if f.get("make")), "") or ""
+    cands = Counter(tuple(f["camera_parameters"]) for f in frames if len(f.get("camera_parameters") or []) == 3)
+    return make, (list(cands.most_common(1)[0][0]) if cands else None)
 
 
 def next_roi_dir(rois_dir=ROIS_DIR):
