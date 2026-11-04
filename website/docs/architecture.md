@@ -71,7 +71,18 @@ pipeline.add_stage("texturing", tex_projection, label="Texture", ...)
 pipeline.add_stage("export", export_mesh, label="Export", detail="Write .glb")
 ```
 
-The framework also supports forks (parallel branches that merge), resuming from a named stage, an `on_stage` callback (which the web app uses to update the timeline) and optional profiling.
+Stages don't have to form a single line. A **fork** (`add_fork`) sends one stage's output to several branches: each branch gets the same input, and they run one after another (not in parallel). An optional merge function combines their outputs into the value the next stage receives; without one, the next stage gets a dict of the branch outputs keyed by branch name. Each branch's output is also kept in `state.stage_outputs` under its name.
+
+```mermaid
+flowchart LR
+    A["stage"] --> B1["branch a"]
+    A --> B2["branch b"]
+    B1 --> M["merge (optional)"]
+    B2 --> M
+    M --> N["next stage"]
+```
+
+The framework can also resume a run from a named stage, call an `on_stage` callback as each stage starts, finishes or fails (the web app uses it to update the timeline), and profile each stage.
 
 ## Reporting output
 
