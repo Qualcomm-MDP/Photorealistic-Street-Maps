@@ -57,12 +57,17 @@ dev = [
   "httpx>=0.27,<1",
   "pre-commit>=4.3,<5",
   "pytest>=9.0.2,<10",
-  "ruff>=0.15.5,<0.16",
+  "ruff>=0.17.3,<0.18",
 ]
 
 [tool.poetry]
 package-mode = false
 packages = [ { include = "photorealistic_street_maps", from = "src" } ]
+
+[tool.ruff]
+# ruff 0.17 turned on ~400 rules by default (0.15: ~60). Keep the checks this
+# project has always used until the team decides to adopt more.
+lint.select = [ "E4", "E7", "E9", "F" ]
 
 [tool.pyright]
 extraPaths = [ "src" ]
