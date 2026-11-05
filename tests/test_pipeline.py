@@ -180,3 +180,16 @@ def test_profiler_marks_skipped_stages_and_logs_through_the_reporter(tmp_path):
     data = json.loads(path.read_text())
     assert [s["name"] for s in data["stages"]] == ["work", "optional"]
     assert any("saved" in line for line in lines)
+
+
+def test_profiler_total_stops_at_finish():
+    import time
+
+    from common.profiler import PipelineProfiler
+
+    profiler = PipelineProfiler("timed")
+    PipelineChain("timed").add_stage("work", lambda v, s: v).run(1, profiler=profiler)
+    total = profiler.total_wall_time_s
+    time.sleep(0.05)
+    assert profiler.total_wall_time_s == total
+    assert profiler.public_summary()["finished"] is True

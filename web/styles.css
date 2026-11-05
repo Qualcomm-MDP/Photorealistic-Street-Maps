@@ -399,14 +399,47 @@ dialog.settings-modal { width: min(560px, calc(100% - 32px)); height: auto; max-
 .job-facts dd { margin: 0; overflow-wrap: anywhere; }
 .job-facts .mono { font: 12.5px/1.6 var(--font-mono); font-variant-numeric: tabular-nums; }
 .job-facts .bad { color: var(--bad); }
-.job-profile { margin-top: 16px; }
-.job-profile-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-.job-profile-head h3 { margin: 0; font-size: 13px; }
-.job-profile-table { width: 100%; border-collapse: collapse; font: 12.5px/1.5 var(--font-mono); }
-.job-profile-table th { text-align: left; font: 500 11px/1.8 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 2px 8px 2px 0; }
-.job-profile-table td { padding: 2px 8px 2px 0; }
-.job-profile-table .num { text-align: right; font-variant-numeric: tabular-nums; }
-.job-profile-total { margin: 8px 0 0; color: var(--muted); font: 12.5px/1.5 var(--font-mono); }
+/* Profile (jobs run with "Profile this run"): headline figures, two bar charts
+   (time and memory per stage, one hue each), and the full table. */
+.job-profile { display: flex; flex-direction: column; gap: 14px; border-top: 1px solid var(--line); padding-top: 18px; }
+.prof-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.prof-head h3 { margin: 0 0 2px; font: 600 15px/1.2 var(--font-display); }
+.prof-note { color: var(--muted); font-size: 12.5px; }
+.prof-empty { margin: 0; color: var(--muted); font-size: 13px; }
+.prof-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.prof-tile { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
+.prof-tile-label { color: var(--muted); font-size: 12px; }
+.prof-tile-value { font: 600 20px/1.25 var(--font-display); overflow-wrap: anywhere; }
+.prof-tile-sub { color: var(--muted); font-size: 12px; }
+.prof-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px 24px; }
+.prof-chart { margin: 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.prof-chart figcaption { display: flex; flex-direction: column; gap: 1px; margin-bottom: 4px; font-size: 13px; }
+.prof-chart figcaption span { color: var(--muted); font-size: 12px; }
+/* One row per stage: name, the bar on a shared baseline, the value at the tip. */
+.prof-row { display: grid; grid-template-columns: minmax(84px, 8.5rem) minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 26px; padding: 1px 4px; border-radius: 4px; }
+.prof-row:hover, .prof-row:focus-visible { background: var(--surface); }
+.prof-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.prof-name { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prof-track { display: block; height: 12px; border-left: 1px solid var(--line); }
+.prof-bar { display: block; height: 100%; max-width: 100%; background: var(--accent); border-radius: 0 4px 4px 0; transition: width .3s ease; }
+.prof-row:hover .prof-bar { opacity: .8; }
+.prof-bar.err { background: var(--bad); }
+/* The running stage: same hue, lighter, with a slow pulse; its label says "running" too. */
+.prof-bar.live { opacity: .45; animation: prof-pulse 1.4s ease-in-out infinite; }
+@keyframes prof-pulse { 50% { opacity: .25; } }
+.prof-val { font: 12px/1.4 var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.prof-val.muted { color: var(--muted); }
+.prof-details summary { cursor: pointer; font-size: 13px; font-weight: 500; }
+.prof-table-wrap { overflow-x: auto; margin-top: 8px; }
+.prof-table { width: 100%; min-width: 620px; border-collapse: collapse; font: 12.5px/1.5 var(--font-mono); }
+.prof-table th { text-align: left; font: 500 11px/1.8 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 4px 10px 4px 0; border-bottom: 1px solid var(--line); }
+.prof-table td { padding: 4px 10px 4px 0; border-bottom: 1px solid var(--line); }
+.prof-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.prof-tip { position: absolute; z-index: 5; pointer-events: none; max-width: 260px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--raised); color: var(--fg); box-shadow: 0 6px 20px rgb(0 0 0 / .14); font-size: 12px; line-height: 1.5; }
+.prof-tip strong { display: block; margin-bottom: 2px; font-size: 12.5px; }
+.prof-tip b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.prof-tip .bad { color: var(--bad); }
+@media (prefers-reduced-motion: reduce) { .prof-bar.live { animation: none; } .prof-bar { transition: none; } }
 .job-photos { display: flex; flex-direction: column; gap: 12px; }
 .job-photos-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .job-photos-head h3 { margin: 0; font: 600 15px/1.2 var(--font-display); }

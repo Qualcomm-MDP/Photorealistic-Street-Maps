@@ -105,6 +105,7 @@ class PipelineProfiler:
     _started_at: str = field(default="", init=False)
     _finished_at: str = field(default="", init=False)
     _wall_start: float = field(default=0.0, init=False)
+    _wall_end: float = field(default=0.0, init=False)
 
     def start(self) -> None:
         self._wall_start = time.perf_counter()
@@ -122,11 +123,13 @@ class PipelineProfiler:
         metrics._stop(status=status, error=error)
 
     def finish(self) -> None:
+        self._wall_end = time.perf_counter()
         self._finished_at = datetime.now(timezone.utc).isoformat()
 
     @property
     def total_wall_time_s(self) -> float:
-        return time.perf_counter() - self._wall_start
+        """The run's wall time: up to finish(), or so far while it's still running."""
+        return (self._wall_end or time.perf_counter()) - self._wall_start
 
     def summary(self) -> dict[str, Any]:
         return {
@@ -151,26 +154,48 @@ class PipelineProfiler:
             ],
         }
 
-    def public_summary(self) -> dict[str, Any]:
-        """The columns the web job page shows (full detail stays in the JSON file)."""
-        return {
-            "total_wall_time_s": round(self.total_wall_time_s, 3),
-            "stages": [
+    def public_summary(self, running: str | None = None) -> dict[str, Any]:
+        """What the web app's profile view shows (full detail stays in the JSON file).
+        running: the stage that has started but not finished; it is listed with
+        status "running" and its time so far."""
+        stages = []
+        for s in self._stages:
+            live = s.name == running and s.status == "pending"
+            stages.append(
                 {
                     "name": s.name,
-                    "wall_time_s": round(s.wall_time_s, 3),
+                    "status": "running" if live else s.status,
+                    "wall_time_s": round(
+                        time.perf_counter() - s._wall_start if live else s.wall_time_s,
+                        3,
+                    ),
                     "cpu_time_s": round(s.cpu_time_s, 3),
                     "peak_memory_mb": round(s.peak_memory_mb, 1),
-                    "status": s.status,
+                    "memory_delta_mb": round(s.memory_delta_mb, 1),
+                    "gpu_delta_allocated_mb": s.gpu_delta_allocated_mb,
+                    "error": s.error,
                 }
-                for s in self._stages
-            ],
+            )
+        gpu = _gpu_system_info()
+        return {
+            "finished": bool(self._finished_at),
+            "started_at": self._started_at,
+            "finished_at": self._finished_at or None,
+            "total_wall_time_s": round(self.total_wall_time_s, 3),
+            "cpu_count": os.cpu_count(),
+            "gpu": gpu["name"] if gpu["available"] else None,
+            "stages": stages,
         }
 
-    def save(self, path: str = "performance.json", reporter=None) -> dict[str, Any]:
+    def write(self, path: str) -> dict[str, Any]:
+        """Write the full report to path without logging it (e.g. after each stage)."""
         data = self.summary()
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
+        return data
+
+    def save(self, path: str = "performance.json", reporter=None) -> dict[str, Any]:
+        data = self.write(path)
         reporter = reporter or get_reporter()
         reporter.info(f"Performance report saved -> {path}")
         self._print_table(reporter)

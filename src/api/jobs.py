@@ -52,6 +52,9 @@ class Job:
     started_at: str | None = None
     finished_at: str | None = None
     result: dict[str, Any] = field(default_factory=dict)
+    # With the "profile" option: per-stage time and memory, updated after each stage
+    # while the job runs (profiler.public_summary), so the page can show it live.
+    profile: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -220,8 +223,18 @@ class JobManager:
         labels = {s["name"]: s["label"] for s in self.stages}
 
         def on_stage(name: str, event: str) -> None:
+            if profiler is not None:
+                job.profile = profiler.public_summary(
+                    running=name if event == "start" else None
+                )
+                if event != "start":  # the download is current too, mid-run
+                    profiler.write(str(job_dir / "profile.json"))
             if job.stages.get(name) == "skipped":
-                return  # the stage runs but does nothing for this job
+                # The stage runs but does nothing for this job; only the profile changed.
+                if profiler is not None:
+                    with self._lock:
+                        self._save(job)
+                return
             if event == "start":
                 log.info(f"── {labels.get(name, name)} ──")
             state = {"start": "running", "done": "done", "error": "error"}[event]
@@ -262,15 +275,23 @@ class JobManager:
                 skip_stages=skip_stages,
             )
         except Exception as exc:
+            outcome: dict[str, Any] = {
+                "status": "failed",
+                "error": _describe_error(exc),
+            }
             if profiler is not None:
-                _write_profile(profiler, job_dir, log)
+                profiler.finish()  # run() only finishes it when every stage succeeds
+                outcome["profile"] = _write_profile(profiler, job_dir, log)
             log.error(traceback.format_exc())
-            return {"status": "failed", "error": _describe_error(exc)}
+            return outcome
 
         result = _summarize(state, job_dir)
+        outcome = {"status": "done", "result": result}
         if profiler is not None:
-            result["profile"] = _write_profile(profiler, job_dir, log)
-        return {"status": "done", "result": result}
+            result["profile"] = outcome["profile"] = _write_profile(
+                profiler, job_dir, log
+            )
+        return outcome
 
 
 def _write_profile(

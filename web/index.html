@@ -153,7 +153,7 @@
         <div class="opt-row">
           <div class="text">
             <strong id="profileLabel">Profile this run</strong>
-            <span id="profileHint">Save per-stage time and memory when the job finishes</span>
+            <span id="profileHint">Record each stage's time and memory; watch it live in the job's details</span>
           </div>
           <label class="switch" for="profile">
             <input id="profile" type="checkbox" aria-labelledby="profileLabel" aria-describedby="profileHint">
@@ -195,6 +195,7 @@
         <div class="progress-head">
           <div class="status" id="status"><strong id="progLabel">Ready to generate</strong><span id="progPct">0%</span></div>
           <span class="live-status" id="liveStatus" hidden></span>
+          <button class="btn small" id="viewProfile" type="button" hidden>View profile</button>
         </div>
         <div class="stepper" id="stepper">
           <span class="track" aria-hidden="true"></span>
@@ -295,9 +296,9 @@
       </div>
       <div class="job-side" id="jobSide">
         <dl class="job-facts" id="jobFacts"></dl>
-        <div id="jobProfile" hidden></div>
       </div>
     </div>
+    <section class="job-profile" id="jobProfile" aria-labelledby="jobProfileTitle" hidden></section>
     <section class="job-photos" aria-labelledby="jobPhotosTitle">
       <div class="job-photos-head">
         <h3 id="jobPhotosTitle">Street photos</h3>
