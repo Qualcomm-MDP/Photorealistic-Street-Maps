@@ -18,7 +18,7 @@ Reference for PSM's Python code and the web app's HTTP API. For how the pieces f
 | [Reporter](reporter.md) | How pipeline code reports output: `Reporter`, the web app's `JobReporter`, and keeping secrets out of logs. |
 | [Profiler](profiler.md) | `PipelineProfiler` and `StageMetrics`, behind `--profile`. |
 
-These pages are generated from the docstrings in `src/`. To update them after changing a docstring, run `poetry run npm run api --prefix website` from the repo root and commit the result. The published site is always generated fresh, so it's never out of date.
+These pages are generated from the docstrings in `src/`. To update them after changing a docstring, run `poetry run npm run api --prefix docs` from the repo root and commit the result. The published site is always generated fresh, so it's never out of date.
 
 ## Web app
 

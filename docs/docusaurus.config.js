@@ -51,7 +51,7 @@ const config = {
           // The docs are the whole site, served from its root.
           routeBasePath: '/',
           sidebarPath: './sidebars.js',
-          editUrl: `${repo}/tree/main/website/`,
+          editUrl: `${repo}/tree/main/docs/`,
         },
         blog: false,
         theme: {

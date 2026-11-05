@@ -32,6 +32,8 @@ Open [http://localhost:8000](http://localhost:8000). On first use:
 2. Pick an area: search for an address, or press **Draw area** and drag a box on the map.
 3. Press **Generate model**. The timeline and the pipeline log follow the job live, and the model appears in the 3D preview when it's done.
 
+![The PSM web app with an area selected on the map and a finished model in the 3D preview](/img/screenshots/app-overview.webp)
+
 See [Web App](web-app.md) for everything the UI can do.
 
 The image runs natively on Intel/AMD and ARM machines, including Apple Silicon Macs. Model weights download on the first job and are kept in a Docker volume.
@@ -153,7 +155,7 @@ The `.glb` opens in:
       {name: 'common', folder: true, note: 'Pipeline framework, reporter, providers, geometry helpers'},
     ]},
     {name: 'web', folder: true, note: 'Web app frontend (HTML, CSS, JavaScript)'},
-    {name: 'website', folder: true, note: 'This documentation site (Docusaurus)'},
+    {name: 'docs', folder: true, note: 'This documentation site (Docusaurus)'},
     {name: 'tests', folder: true, note: 'Pytest suite'},
     {name: 'Dockerfile', note: 'CPU and CUDA images'},
     {name: 'docker-compose.yml', note: 'pipeline / api services, CPU and GPU'},

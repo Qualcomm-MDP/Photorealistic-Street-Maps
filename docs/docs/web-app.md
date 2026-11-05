@@ -11,6 +11,8 @@ The web app runs the same pipeline as the command line, with a map to pick the a
 
 The size of the area is shown under the coordinates. Each side can be at most 2.5 km.
 
+![The Area panel: address search, the OSM map with the selected area drawn on it, Generate model, and the area's coordinates and size](/img/screenshots/pick-area.webp)
+
 ## Options
 
 | Option                  | What it does                                                                                                                                                                             |
@@ -23,6 +25,8 @@ The size of the area is shown under the coordinates. Each side can be at most 2.
 
 The starting values come from the defaults in [Settings](#settings).
 
+![The Options panel: camera poses, Aligned photos only, Remove obstructions, segmentation model, device, Terrain and Aerial photos](/img/screenshots/options.webp)
+
 ## Running a job
 
 Press **Generate model**. While a job runs:
@@ -33,22 +37,36 @@ Press **Generate model**. While a job runs:
 
 Jobs run one at a time. Finished jobs survive a page reload or a server restart; a job that was still running when the server stopped is marked as failed.
 
+![A job running: the 3D preview greyed out with its current stage, the timeline with the stages done so far and the skipped ones, and the live pipeline log](/img/screenshots/job-running.webp)
+
 When the job finishes, the model loads into the **3D preview** (drag to orbit, scroll to zoom). **.glb** downloads it, and **Larger view** opens a bigger viewer. The **Street imagery** section shows the first 12 photos of the job, before and after obstruction removal.
+
+![The finished model in the 3D preview, with the completed timeline and the pipeline log below](/img/screenshots/preview.webp)
+
+![The Street imagery section: the job's street photos, with the Original and Cleaned toggle](/img/screenshots/street-imagery.webp)
 
 ## Recent jobs
 
 Every job is listed with its area, status, building count and duration. Click a row to open its details:
+
+![The Recent jobs table: each job's area, bounding box, status, building count and duration](/img/screenshots/recent-jobs.webp)
+
 
 - the model, with stats and a download button
 - the job's settings (area, options, device) and its error, if it failed
 - the full pipeline log
 - the street photos
 
+
+![A job's details: the model, its stats and download, the job's settings, the pipeline log and its photos](/img/screenshots/job-details.webp)
+
 Jobs are saved under `output/jobs/<job id>/` (in Docker, the `output` folder in your project) with `job.json`, `pipeline.log`, `model.glb` and the photo previews.
 
 ## Settings
 
 The gear icon in the header opens Settings.
+
+![The Settings dialog: the Mapillary token's status and masked value with Change and Validate Token, and the defaults for new jobs](/img/screenshots/settings.webp)
 
 ### Mapillary access token
 
@@ -82,3 +100,5 @@ PSM_HOST=0.0.0.0 docker compose up api
 ## Light and dark mode
 
 The sun/moon button switches themes; the choice is remembered in the browser. By default the app follows the system setting.
+
+![The web app in dark mode](/img/screenshots/app-overview-dark.webp)
