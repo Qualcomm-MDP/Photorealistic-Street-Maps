@@ -60,9 +60,11 @@ class BBox(BaseModel):
 
 
 class JobDefaults(BaseModel):
+    poses: Literal["raw", "computed", "colmap"] | None = None
     remove_obstructions: bool | None = None
+    fill_obstructions: bool | None = None
     seg_model: Literal["large", "tiny"] | None = None
-    device: Literal["auto", "cpu", "cuda"] | None = None
+    device: Literal["auto", "cpu", "gpu", "cuda"] | None = None
 
 
 class SettingsUpdate(BaseModel):
@@ -92,9 +94,17 @@ class TokenTest(BaseModel):
 class JobRequest(BaseModel):
     bbox: BBox
     name: str = Field(default="Custom area", max_length=120)
+    # Camera poses for texturing (the CLI's --poses): "colmap" reconstructs the chosen
+    # captures and aligns them to OSM; "computed"/"raw" are Mapillary's own
+    poses: Literal["raw", "computed", "colmap"] = "colmap"
+    # With "colmap": texture only from photos the alignment placed (--aligned-only)
+    aligned_only: bool = False
     remove_obstructions: bool = True
+    # False: segment the obstructions but do not paint them over (the CLI's --no-fill)
+    fill_obstructions: bool = True
     seg_model: Literal["large", "tiny"] = "large"
-    device: Literal["auto", "cpu", "cuda"] = "auto"
+    # auto and gpu: the best GPU here (NVIDIA, else Apple), else the CPU; cuda: NVIDIA only
+    device: Literal["auto", "cpu", "gpu", "cuda"] = "auto"
     # Same as the CLI's --terrain and --naip; aerial photos need the terrain.
     terrain: bool = False
     naip: bool = False
@@ -115,6 +125,20 @@ def _cuda_available() -> bool:
         return bool(torch.cuda.is_available())
     except Exception:
         return False
+
+
+def _gpu_kind() -> str | None:
+    """The GPU the pipeline would use here: "cuda" (NVIDIA), "mps" (Apple), or None."""
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            return "cuda"
+        if torch.backends.mps.is_available():
+            return "mps"
+    except Exception:
+        pass
+    return None
 
 
 def create_app(
@@ -146,6 +170,7 @@ def create_app(
     def system() -> dict[str, Any]:
         return {
             "cuda": _cuda_available(),
+            "gpu": _gpu_kind(),
             "seg_models": list(SEG_MODELS),
             "max_side_m": MAX_SIDE_M,
         }
@@ -256,11 +281,16 @@ def create_app(
     def create_job(req: JobRequest) -> dict[str, Any]:
         if req.device == "cuda" and not _cuda_available():
             raise HTTPException(422, "No CUDA GPU is available on this server.")
+        if req.device == "gpu" and _gpu_kind() is None:
+            raise HTTPException(422, "No GPU is available on this server.")
         job = jobs.submit(
             name=req.name.strip() or "Custom area",
             bbox=req.bbox.model_dump(),
             options={
+                "poses": req.poses,
+                "aligned_only": req.aligned_only,
                 "remove_obstructions": req.remove_obstructions,
+                "fill_obstructions": req.fill_obstructions,
                 "seg_model": req.seg_model,
                 "device": req.device,
                 "terrain": req.terrain or req.naip,
@@ -285,6 +315,15 @@ def create_app(
             media_type="model/gltf-binary",
             filename=f"psm-{slug}-{job.id}.glb" if download else None,
         )
+
+    @app.get("/api/jobs/{job_id}/overlays.json")
+    def get_overlays(job_id: str) -> FileResponse:
+        """The model's cameras and the alignment's point cloud (common/overlays.py)."""
+        job = _job_or_404(job_id)
+        path = jobs.job_dir(job.id) / "model.overlays.json"
+        if job.status != "done" or not path.exists():
+            raise HTTPException(404, "This job has no overlays.")
+        return FileResponse(path, media_type="application/json")
 
     @app.get("/api/jobs/{job_id}/log", response_model=None)
     def get_log(

@@ -90,6 +90,15 @@ def test_camera_sits_above_the_ground_at_its_position(sloped_terrain):
     assert on_hill[2] == pytest.approx(SLOPE * 20.0 + CAMERA_HEIGHT_M)
 
 
+def test_measured_camera_height_sits_on_the_terrain(sloped_terrain):
+    # an aligned camera's height (pose_alignment) is above the road under it
+    x, y = sloped_terrain.xs[10], sloped_terrain.ys[10]
+    assert camera_position(x, y, None, 2.3)[2] == pytest.approx(2.3)
+    assert camera_position(x, y, sloped_terrain, 2.3)[2] == pytest.approx(
+        SLOPE * 20.0 + 2.3
+    )
+
+
 def _state(**metadata):
     return PipelineState(initial_input=None, current_value=None, metadata=metadata)
 

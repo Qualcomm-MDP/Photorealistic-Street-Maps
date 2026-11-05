@@ -6,6 +6,7 @@ from common.env import load_app_env
 
 from mesh_builder.extrude import extrude_buildings
 from pipeline import build_pipeline
+from pose_alignment.align_poses import POSE_SOURCES
 
 import argparse
 
@@ -70,7 +71,26 @@ run_pipeline = build_pipeline()
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", metavar="FILENAME", default=None)
-    parser.add_argument("--no-seg", action="store_true", default=False)
+    parser.add_argument(
+        "--no-seg",
+        action="store_true",
+        default=False,
+        help="Skip obstruction removal in texturing (no segmentation, no inpainting)",
+    )
+    parser.add_argument(
+        "--texture",
+        choices=["blend", "best"],
+        default="blend",
+        help="blend (default): each wall texel averages every photo that sees it, weighted "
+        "by view angle, distance and obstructions; best: each face from its single best photo",
+    )
+    parser.add_argument(
+        "--no-fill",
+        action="store_true",
+        default=False,
+        help="Segment the obstructions (cars, people, poles, ...) but do not paint them over "
+        "(LaMa): each face takes the photo where they hide it least",
+    )
     parser.add_argument(
         "--bbox",
         nargs=4,
@@ -113,6 +133,24 @@ def main():
         help="Skip Mapillary images whose quality_score (0-1) is below SCORE, "
         "e.g. 0.6. Off by default.",
     )
+    parser.add_argument(
+        "--poses",
+        choices=POSE_SOURCES,
+        default="raw",
+        help="Camera poses for texturing: Mapillary raw GPS (default), Mapillary computed, "
+        "or COLMAP aligned to OSM (see src/pose_alignment/align_poses.py)",
+    )
+    parser.add_argument(
+        "--aligned-only",
+        action="store_true",
+        help="With --poses colmap, texture only from images with an aligned pose",
+    )
+    parser.add_argument(
+        "--alignment-dir",
+        metavar="DIR",
+        default=None,
+        help="With --poses colmap, reuse this ROI folder (outputs/alignment/mapillary_roi_N)",
+    )
     args = parser.parse_args()
 
     if args.bbox is not None:
@@ -136,12 +174,17 @@ def main():
             "bbox": bbox,
             "progress_monitor": pipeline_progress,
             "remove_obstructions": not args.no_seg,
+            "fill_obstructions": not args.no_fill,
+            "texture_mode": args.texture,
             "output_path": args.output,
             "ask_output_path": ask_save_path,
             "mapillary_dump_path": args.dump_mapillary,
             "use_terrain": args.terrain or args.naip,
             "use_naip": args.naip,
             "min_quality": args.min_quality,
+            "pose_source": args.poses,
+            "aligned_only": args.aligned_only,
+            "alignment_dir": args.alignment_dir,
         },
         profiler=profiler,
     )

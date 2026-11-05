@@ -46,7 +46,9 @@ def test_no_token_anywhere(tmp_path):
         "env_file_exists": True,
     }
     assert settings["defaults"] == {
+        "poses": "colmap",
         "remove_obstructions": True,
+        "fill_obstructions": True,
         "seg_model": "large",
         "device": "auto",
     }
@@ -166,7 +168,9 @@ def test_defaults_are_saved_and_validated(tmp_path):
         "/api/settings", json={"defaults": {"seg_model": "tiny", "device": "cpu"}}
     ).json()
     assert saved["defaults"] == {
+        "poses": "colmap",
         "remove_obstructions": True,
+        "fill_obstructions": True,
         "seg_model": "tiny",
         "device": "cpu",
     }

@@ -31,7 +31,10 @@ from common.redact import redact
 
 TOKEN_ENV = "MAPILLARY_ACCESS_TOKEN"
 DEFAULTS: dict[str, Any] = {
+    # camera poses for texturing: "colmap" aligns them to OSM (pose_alignment)
+    "poses": "colmap",
     "remove_obstructions": True,
+    "fill_obstructions": True,
     "seg_model": "large",
     "device": "auto",
 }

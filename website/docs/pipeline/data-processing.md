@@ -28,7 +28,7 @@ Each building element has:
 
 :::warning[OSM data quality]
 
-OSM heights are community-contributed and often missing. Buildings without a `height` or `building:levels` tag get a default height of 3 m.
+OSM heights are community-contributed and often missing. Buildings without a `height` or `building:levels` tag get a default of 3 levels (10.5 m).
 
 :::
 

@@ -5,6 +5,7 @@ import requests
 
 from ..constants import OVERPASS_FALLBACK_URLS, OVERPASS_URL, USER_AGENT, BoundingBox
 from ..reporter import Reporter, get_reporter
+from .osm_api import OsmApiClient
 
 # Status codes Overpass returns when it is overloaded or rate limiting.
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}
@@ -19,8 +20,9 @@ class OSM_MAP_FEATURES(Enum):
 class OSMClient:
     def __init__(
         self,
-        timeout: int = 60,
-        rounds: int = 3,
+        timeout: int = 30,
+        # one try per server, then the main OSM API (osm_api.py)
+        rounds: int = 1,
         backoff_s: float = 5.0,
         urls: tuple[str, ...] = (OVERPASS_URL, *OVERPASS_FALLBACK_URLS),
         reporter: Reporter | None = None,
@@ -51,7 +53,15 @@ class OSMClient:
         );
         out body geom;
         """
-        return self._post(query)
+        try:
+            return self._post(query)
+        except RuntimeError as exc:
+            keys = {k for f in features for k in self._get_tag_filters(f)}
+            self.reporter.warning(f"{exc}; fetching from the OpenStreetMap API instead")
+            return OsmApiClient().elements(
+                (bbox.min_lon, bbox.min_lat, bbox.max_lon, bbox.max_lat),
+                lambda tags: any(k in tags for k in keys),
+            )
 
     def _post(self, query: str) -> Dict[str, Any]:
         """POST to each Overpass endpoint in turn, retrying with backoff.

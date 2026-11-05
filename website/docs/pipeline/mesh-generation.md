@@ -22,15 +22,17 @@ All buildings are then combined into one mesh with `trimesh.util.concatenate`.
 
 ## Height
 
-Heights come from the OSM tags, in this order (`get_height()` in `src/common/MeshUtils.py`):
+Heights come from the OSM tags, in this order (`building_heights()` in `src/common/MeshUtils.py`, shared with the pose alignment's fit to the footprints):
 
-1. `height`: metres, used as is;
-2. `building:levels`: 3 m per level;
-3. otherwise 3 m (one level).
+1. `height` or `building:height`: metres, used as is (a unit such as `12 m` is fine);
+2. `building:levels`: 3.5 m per level;
+3. otherwise 3 levels, 10.5 m.
+
+A building part with `min_height` (or `building:min_level`, 3.5 m per level) starts that high above the ground, e.g. the upper section of a tower, and every part is at least 2.5 m tall.
 
 :::warning[Missing heights]
 
-Many OSM buildings have neither tag, so they come out as 3 m boxes. Better height estimation is an open area of work.
+Many OSM buildings have neither tag, so they get the 3-level default. Better height estimation is an open area of work.
 
 :::
 
