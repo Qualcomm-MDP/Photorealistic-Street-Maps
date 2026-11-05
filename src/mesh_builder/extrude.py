@@ -43,13 +43,16 @@ def extrude_buildings(
 ):
     reporter = reporter or get_reporter()
     buildings = {}
+    flagged = [] #(osm, reason for buildings left out of mesh)
 
     for _, element in reporter.progress(
         enumerate(input_data["elements"]),
         desc="Generating Building Mesh(s)",
         total=len(input_data["elements"]),
     ):
+        osm = f"{element.get('type')} {element.get('id')}"
         if "geometry" not in element:
+            flagged.append((osm, "no outline in data"))
             continue
 
         id = element["id"]
@@ -62,10 +65,18 @@ def extrude_buildings(
             vertices=corners,
         )
 
-        height = get_height(element)
+        try:
+            height = get_height(element)
+        except KeyError:
+            flagged.append((osm, "no tags"))
+            continue
+        except ValueError as exc:
+            flagged.append((osm, f"unreadable height tag: {exc}"))
+            continue
 
         polys = path.polygons_closed
-        if not polys[0]:
+        if len(polys) == 0 or not polys[0]:
+            flagged.append((osm, "outline is not a valid closed shape"))
             continue
 
         # Meshes here are z-down (texturing and export flip z). On terrain the
@@ -95,6 +106,11 @@ def extrude_buildings(
             mesh.apply_translation([0.0, 0.0, -bottom])
 
         buildings[id] = mesh
+
+    if flagged:
+        reporter.warning(f"{len(flagged)} building(s) were left out of the mesh:")
+        for osm, reason in flagged:
+            reporter.info(f"  {osm}: {reason}")
 
     combined_mesh = trimesh.util.concatenate(
         [building for _, building in buildings.items()]
