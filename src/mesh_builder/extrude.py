@@ -108,9 +108,10 @@ def extrude_buildings(
         buildings[id] = mesh
 
     if flagged:
-        reporter.warning(f"{len(flagged)} building(s) were left out of the mesh:")
-        for osm, reason in flagged:
-            reporter.info(f"  {osm}: {reason}")
+        details = "\n".join(f"  {osm}: {reason}" for osm, reason in flagged)
+        reporter.warning(
+            f"{len(flagged)} building(s) were left out of the mesh:\n{details}"
+        )
 
     combined_mesh = trimesh.util.concatenate(
         [building for _, building in buildings.items()]
