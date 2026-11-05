@@ -54,6 +54,9 @@ def extrude_buildings(
         if "geometry" not in element:
             flagged.append((osm, "no outline in data"))
             continue
+        if len(element["geometry"]) < 3:
+            flagged.append((osm, "outline has too few points"))
+            continue
 
         id = element["id"]
         corners = get_corners(element, area_bbox)
