@@ -62,6 +62,7 @@ def run(
     metadata: dict[str, Any] | None = None,
     profiler: 'PipelineProfiler | None' = None,
     on_stage: StageListener | None = None,
+    skip_stages: set[str] | None = None,
 ) -> PipelineState
 ```
 
@@ -77,7 +78,7 @@ def resume(
 ) -> PipelineState
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/pipeline_chain.py#L154)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/pipeline_chain.py#L159)
 
 ## PipelineState
 
@@ -150,7 +151,7 @@ def reset_from(stage_names: list[str]) -> None
 def build_pipeline() -> PipelineChain
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/pipeline.py#L71)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/pipeline.py#L96)
 
 ### export_mesh()
 
@@ -158,7 +159,7 @@ def build_pipeline() -> PipelineChain
 def export_mesh(value, state)
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/pipeline.py#L20)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/pipeline.py#L25)
 
 ## BoundingBox
 
@@ -166,7 +167,7 @@ def export_mesh(value, state)
 class BoundingBox(min_lat: float, max_lat: float, min_lon: float, max_lon: float)
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/constants.py#L17)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/constants.py#L18)
 
 ### BoundingBox.to_list()
 
@@ -174,7 +175,7 @@ class BoundingBox(min_lat: float, max_lat: float, min_lon: float, max_lon: float
 def to_list()
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/constants.py#L24)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/constants.py#L25)
 
 ### BoundingBox.to_str()
 
@@ -182,7 +183,7 @@ def to_list()
 def to_str()
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/constants.py#L27)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/constants.py#L28)
 
 ### BoundingBox.from_json()
 
@@ -190,7 +191,7 @@ def to_str()
 def from_json(data)
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/constants.py#L30)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/constants.py#L31)
 
 ### BoundingBox.from_list()
 
@@ -198,4 +199,4 @@ def from_json(data)
 def from_list(data)
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/constants.py#L47)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/constants.py#L48)

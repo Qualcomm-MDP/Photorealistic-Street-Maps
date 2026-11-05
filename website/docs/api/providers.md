@@ -15,15 +15,15 @@ Clients for the external data sources, in `src/common/providers/`, and the fetch
 
 ```python
 class OSMClient(
-    timeout: int = 60,
-    rounds: int = 3,
+    timeout: int = 30,
+    rounds: int = 1,
     backoff_s: float = 5.0,
     urls: tuple[str, ...] = (OVERPASS_URL, *OVERPASS_FALLBACK_URLS),
     reporter: Reporter | None = None,
 )
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/osm.py#L19)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/osm.py#L20)
 
 #### OSMClient.fetch()
 
@@ -34,7 +34,7 @@ def fetch(
 ) -> Dict[str, Any]
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/osm.py#L34)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/osm.py#L36)
 
 #### OSMClient.build_feature_query()
 
@@ -44,7 +44,7 @@ def build_feature_query(feature: OSM_MAP_FEATURES, bbox: BoundingBox) -> List[st
 
 Build Overpass query snippets for a feature.
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/osm.py#L94)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/osm.py#L104)
 
 ### OSM_MAP_FEATURES
 
@@ -55,23 +55,32 @@ class OSM_MAP_FEATURES(Enum)
 - `BUILDING = 'building'`
 - `NATURE = 'nature'`
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/osm.py#L14)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/osm.py#L15)
 
 ### OverpassClient
 
 ```python
-class OverpassClient()
+class OverpassClient(
+    urls: tuple[str, ...] = (OVERPASS_URL, *OVERPASS_FALLBACK_URLS),
+    timeout: float = 25.0,
+    rounds: int = 1,
+    backoff_s: float = 10.0,
+)
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/overpass.py#L1)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/overpass.py#L22)
 
 #### OverpassClient.fetch()
 
 ```python
-def fetch()
+def fetch(query: str) -> dict[str, Any]
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/overpass.py#L5)
+The JSON answer to an Overpass QL query, trying each server in turn, for `rounds`
+rounds with a growing pause between them (the public servers are often overloaded
+for a minute or two).
+
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/overpass.py#L38)
 
 ## Mapillary
 
@@ -91,6 +100,22 @@ def get_token()
 
 [source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/mapillary.py#L32)
 
+#### MapillaryClient.fetch_images()
+
+```python
+def fetch_images(
+    bbox: BoundingBox,
+    fields: list[str],
+    limit=MAX_IMAGES_PER_REQUEST,
+    tile_deg: float = TILE_DEG,
+) -> list[dict]
+```
+
+Mapillary's records (the requested fields) of every image in bbox, queried in
+tiles of tile_deg degrees (a tile near the image cap is split further).
+
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/mapillary.py#L83)
+
 #### MapillaryClient.fetch()
 
 ```python
@@ -108,7 +133,17 @@ If min_quality is set, images whose quality_score is below it are
 skipped (images with no score are kept). quality_score must then be
 in fields.
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/mapillary.py#L83)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/mapillary.py#L114)
+
+#### MapillaryClient.to_metadata()
+
+```python
+def to_metadata(data: list[dict], min_quality: float | None = None)
+```
+
+{image id: the pipeline's metadata} from Mapillary records (see fetch).
+
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/mapillary.py#L132)
 
 ## Fetch stage
 
@@ -118,4 +153,17 @@ in fields.
 def ingest_data(bbox: BoundingBox, state: PipelineState)
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/data_ingest/ingest.py#L7)
+OSM buildings and Mapillary image metadata for the box.
+
+The photos are the chosen captures (choose_captures): along each OSM street in the
+box, the densest run that covers it, then further runs where that one ends, plus rig
+siblings. Only their frames are downloaded and textured, and with aligned poses
+(pose_source "colmap") the alignment reconstructs the same runs
+(provider_data["mapillary_selection"]). Mapillary is asked for the records over the
+box grown by ALIGNMENT_REACH_M, as the streets' captures run past the box. When no
+capture is usable, every image in the box is used instead.
+
+Every 360 photo becomes two pinhole views, right and left of travel (data_ingest.pano),
+which texturing cuts out of it.
+
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/data_ingest/ingest.py#L115)

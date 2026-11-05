@@ -20,6 +20,7 @@ The size of the area is shown under the coordinates. Each side can be at most 2.
 | **Device**              | **Auto** uses an NVIDIA GPU when the server has one, otherwise the CPU. **GPU** is only available on the GPU image with a GPU.                                                          |
 | **Terrain**             | Put buildings on real ground heights and add the ground to the model.                                                                                                                   |
 | **Aerial photos**       | Texture the ground and roofs with NAIP aerial photos. Continental US only; turns on Terrain (and locks it on while it's on). A note appears if the area looks outside NAIP's coverage. |
+| **Profile this run**    | Measure each stage's time and memory, shown live in the job's details. See [Profiling a job](#profiling-a-job).                                                                         |
 
 The starting values come from the defaults in [Settings](#settings).
 
@@ -45,6 +46,22 @@ Every job is listed with its area, status, building count and duration. Click a 
 - the street photos
 
 Jobs are saved under `output/jobs/<job id>/` (in Docker, the `output` folder in your project) with `job.json`, `pipeline.log`, `model.glb` and the photo previews.
+
+## Profiling a job
+
+Turn on **Profile this run** in the Options panel to measure each pipeline stage's time and memory. The job's details then get a **Profile** section:
+
+- **Headline figures:** total time, the slowest stage and its share of the run, the highest memory peak and where it happened, and CPU use (CPU time divided by wall time; over 100% means several cores were busy).
+- **Time per stage** and **Peak memory per stage:** one bar per stage, with its value at the end. Hover or focus a bar for its wall time, CPU time and peak memory. Stages that are off for the job are labelled **skipped**; a stage that failed has a red bar marked **⚠ error**, and its error is in the tooltip.
+- **All metrics:** a table with every stage's wall time, CPU time, CPU %, peak memory, memory change and GPU memory.
+- **Download JSON** saves the full report (`profile.json`, the same format as the command line's `--profile`, see [Evaluation](pipeline/evaluation.md#pipeline-profiler)).
+
+The profile **updates live** while the job runs: after every stage, and the running stage's time ticks every second. You can open it at any point:
+
+- **View profile**, next to the progress bar, opens the current job's profile.
+- In **Recent jobs**, profiled jobs carry a **Profiled** marker; open the job to see its profile, finished or not.
+
+A job that fails keeps its profile up to the failed stage. Peak memory is what Python's `tracemalloc` sees: Python and NumPy allocations, not the whole process (for example not PyTorch's own buffers or GPU memory). Profiling makes a run slower, because `tracemalloc` records every allocation.
 
 ## Settings
 
