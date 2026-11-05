@@ -150,7 +150,7 @@ Optional environment variables (set in `.env` or with `-e`):
 
 | Variable     | Default                                                     | Purpose                                                                                                                                                      |
 | ------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `SEG_DEVICE` | auto (`cuda` if available, else `cpu`)                      | Force the segmentation device (`cuda`, `mps`, `cpu`).                                                                                                        |
+| `SEG_DEVICE` | auto (`cuda` if available, else Apple's `mps`, else `cpu`)  | Force the device for segmentation and inpainting (`cuda`, `mps`, `cpu`).                                                                                     |
 | `SEG_MODEL`  | `facebook/mask2former-swin-large-mapillary-vistas-semantic` | Any Mask2Former semantic checkpoint (Mapillary Vistas or Cityscapes classes), e.g. `facebook/mask2former-swin-tiny-cityscapes-semantic` for faster CPU runs. |
 
 # Contribution

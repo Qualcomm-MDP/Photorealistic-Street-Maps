@@ -32,13 +32,11 @@ _seg_model: Mask2FormerForUniversalSegmentation | None = None
 _seg_key: tuple[str, str, bool] | None = None
 
 
-def select_device(
-    requested: str | None = None, allow_mps: bool = False
-) -> torch.device:
-    """The requested device, else SEG_DEVICE (cuda/mps/cpu), else CUDA when available,
-    else (with allow_mps) Apple's GPU, else the CPU."""
+def select_device(requested: str | None = None, allow_mps: bool = True) -> torch.device:
+    """The requested device (cuda, mps, cpu; "auto" or "gpu": the best one here), else
+    SEG_DEVICE, else CUDA when available, else (with allow_mps) Apple's GPU, else the CPU."""
     requested = (requested or os.environ.get("SEG_DEVICE", "")).strip().lower()
-    if requested and requested != "auto":
+    if requested and requested not in ("auto", "gpu"):
         return torch.device(requested)
     if torch.cuda.is_available():
         return torch.device("cuda")

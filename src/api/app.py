@@ -64,7 +64,7 @@ class JobDefaults(BaseModel):
     remove_obstructions: bool | None = None
     fill_obstructions: bool | None = None
     seg_model: Literal["large", "tiny"] | None = None
-    device: Literal["auto", "cpu", "cuda"] | None = None
+    device: Literal["auto", "cpu", "gpu", "cuda"] | None = None
 
 
 class SettingsUpdate(BaseModel):
@@ -103,7 +103,8 @@ class JobRequest(BaseModel):
     # False: segment the obstructions but do not paint them over (the CLI's --no-fill)
     fill_obstructions: bool = True
     seg_model: Literal["large", "tiny"] = "large"
-    device: Literal["auto", "cpu", "cuda"] = "auto"
+    # auto and gpu: the best GPU here (NVIDIA, else Apple), else the CPU; cuda: NVIDIA only
+    device: Literal["auto", "cpu", "gpu", "cuda"] = "auto"
     # Same as the CLI's --terrain and --naip; aerial photos need the terrain.
     terrain: bool = False
     naip: bool = False
@@ -124,6 +125,20 @@ def _cuda_available() -> bool:
         return bool(torch.cuda.is_available())
     except Exception:
         return False
+
+
+def _gpu_kind() -> str | None:
+    """The GPU the pipeline would use here: "cuda" (NVIDIA), "mps" (Apple), or None."""
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            return "cuda"
+        if torch.backends.mps.is_available():
+            return "mps"
+    except Exception:
+        pass
+    return None
 
 
 def create_app(
@@ -155,6 +170,7 @@ def create_app(
     def system() -> dict[str, Any]:
         return {
             "cuda": _cuda_available(),
+            "gpu": _gpu_kind(),
             "seg_models": list(SEG_MODELS),
             "max_side_m": MAX_SIDE_M,
         }
@@ -265,6 +281,8 @@ def create_app(
     def create_job(req: JobRequest) -> dict[str, Any]:
         if req.device == "cuda" and not _cuda_available():
             raise HTTPException(422, "No CUDA GPU is available on this server.")
+        if req.device == "gpu" and _gpu_kind() is None:
+            raise HTTPException(422, "No GPU is available on this server.")
         job = jobs.submit(
             name=req.name.strip() or "Custom area",
             bbox=req.bbox.model_dump(),

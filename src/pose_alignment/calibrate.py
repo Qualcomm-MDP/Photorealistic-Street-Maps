@@ -274,7 +274,13 @@ def calibrate_roi(
     gravity_refill=4.0,
 ):
     p = RoiPaths(roi_dir, calibration=calibration)
-    device = device or ("mps" if torch.backends.mps.is_available() else "cpu")
+    device = device or (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
+    )
     docs = {}
     for s in p.sequences():
         folder = s["folder"]

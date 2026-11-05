@@ -82,7 +82,11 @@ class Matcher:
 
     def __init__(self):
         self.device = torch.device(
-            "mps" if torch.backends.mps.is_available() else "cpu"
+            "cuda"
+            if torch.cuda.is_available()
+            else "mps"
+            if torch.backends.mps.is_available()
+            else "cpu"
         )
         self.extractor = ALIKED(max_num_keypoints=MAX_KEYPOINTS).eval().to(self.device)
         self.matchers = {"nn": NearestNeighbour()}

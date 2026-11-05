@@ -1208,7 +1208,9 @@ function applyDefaults(d) {
   $("fillObs").checked = d.fill_obstructions !== false;
   $("seg").checked = d.remove_obstructions;
   $("model").value = d.seg_model;
-  device = d.device === "cuda" && !state.system.cuda ? "auto" : d.device;
+  // "cuda" was the GPU button's value before it meant any GPU (NVIDIA or Apple)
+  const wanted = d.device === "cuda" ? "gpu" : d.device;
+  device = wanted === "gpu" && !state.system.gpu ? "auto" : wanted;
   setDeviceButtons("device", device);
   syncOptionRows();
 }
@@ -1258,10 +1260,10 @@ async function openSettings(intro = "") {
     $("defFill").checked = d.fill_obstructions !== false;
     $("defSeg").checked = d.remove_obstructions;
     $("defModel").value = d.seg_model;
-    defDevice = d.device;
-    setDeviceButtons("defDevice", d.device);
+    defDevice = d.device === "cuda" ? "gpu" : d.device;
+    setDeviceButtons("defDevice", defDevice);
   }
-  $("defDevice").querySelector('[data-v="cuda"]').disabled = !state.system.cuda;
+  $("defDevice").querySelector('[data-v="gpu"]').disabled = !state.system.gpu;
   tokenInput.value = "";
   renderTokenStatus();
   renderTokenControls();
@@ -1543,9 +1545,13 @@ renderGallery();
     $("go").disabled = true;
     return;
   }
-  const gpu = $("device").querySelector('[data-v="cuda"]');
-  gpu.disabled = !state.system.cuda;
-  gpu.title = state.system.cuda ? "" : "No CUDA GPU on this server";
+  const gpu = $("device").querySelector('[data-v="gpu"]');
+  gpu.disabled = !state.system.gpu;
+  gpu.title = state.system.gpu
+    ? state.system.gpu === "mps"
+      ? "Apple GPU"
+      : "NVIDIA GPU (CUDA)"
+    : "No GPU on this server";
   try {
     await loadSettings();
     applyDefaults(state.settings.defaults);

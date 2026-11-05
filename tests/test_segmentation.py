@@ -41,3 +41,20 @@ def test_label_cache_scales_maps_and_drops_another_models(tmp_path):
 
     cache.start("cityscapes", CITYSCAPES)  # another model's maps would mislabel classes
     assert cache.get("123") is None and cache.model()[0] == "cityscapes"
+
+
+def test_auto_and_gpu_pick_the_best_device(monkeypatch):
+    import torch
+
+    from segmentation.model import select_device
+
+    monkeypatch.delenv("SEG_DEVICE", raising=False)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(torch.backends.mps, "is_available", lambda: True)
+    assert select_device("auto").type == "mps" and select_device("gpu").type == "mps"
+    assert select_device(None).type == "mps" and select_device("cpu").type == "cpu"
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    assert select_device("gpu").type == "cuda"
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(torch.backends.mps, "is_available", lambda: False)
+    assert select_device("gpu").type == "cpu"
