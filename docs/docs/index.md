@@ -16,6 +16,9 @@ You can run it from a **web app** (pick an area on a map, watch the job, preview
 
 This project is developed as part of the **Qualcomm Multidisciplinary Design Program (MDP)** at the University of Michigan.
 
+
+![The PSM web app: pick an area on the map, set the options, and watch the 3D model, the pipeline timeline and its log](/img/screenshots/app-overview.webp)
+
 ## The Problem
 
 There is currently no open-source, automated pipeline for producing photorealistic 3D street-level maps from GPS coordinates. Existing solutions such as Google Maps 3D are proprietary, hardware-dependent, time-intensive, and unscalable. This creates a gap for anyone building systems that need realistic environment representations, including robotics and drone navigation, natural disaster simulation, autonomous vehicles, and digital twin applications.

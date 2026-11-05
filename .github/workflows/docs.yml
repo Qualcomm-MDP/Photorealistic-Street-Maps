@@ -1,14 +1,14 @@
 name: Docs
 
-# Builds the documentation site (website/). On pull requests it also checks
+# Builds the documentation site (docs/). On pull requests it also checks
 # that the generated API pages match the docstrings in src/; on main it
 # deploys the site to GitHub Pages.
 on:
   push:
     branches: ["main"]
-    paths: ["website/**", "src/**", ".github/workflows/docs.yml"]
+    paths: ["docs/**", "src/**", ".github/workflows/docs.yml"]
   pull_request:
-    paths: ["website/**", "src/**", ".github/workflows/docs.yml"]
+    paths: ["docs/**", "src/**", ".github/workflows/docs.yml"]
   workflow_dispatch:
 
 permissions:
@@ -39,10 +39,10 @@ jobs:
       - name: Regenerate the API pages
         run: |
           pip install "griffelib>=2.4.1,<3"
-          python website/scripts/gen_api.py
-          if ! git diff --quiet -- website/docs/api; then
-            echo "::warning::The committed API pages differ from the docstrings in src/. The site uses fresh ones; to update the committed copies, run 'poetry run npm run api --prefix website' and commit the result."
-            git diff --stat -- website/docs/api
+          python docs/scripts/gen_api.py
+          if ! git diff --quiet -- docs/docs/api; then
+            echo "::warning::The committed API pages differ from the docstrings in src/. The site uses fresh ones; to update the committed copies, run 'poetry run npm run api --prefix docs' and commit the result."
+            git diff --stat -- docs/docs/api
           fi
 
       - name: Set up Node.js
@@ -50,10 +50,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: website/package-lock.json
+          cache-dependency-path: docs/package-lock.json
 
       - name: Build the site
-        working-directory: website
+        working-directory: docs
         run: |
           npm ci
           npm run build
@@ -61,7 +61,7 @@ jobs:
       # Opens every page of the built site, directly and through in-app
       # navigation, and fails on script errors, missing chunks or broken requests.
       - name: Test the built site
-        working-directory: website
+        working-directory: docs
         run: |
           npx playwright install --with-deps chromium
           npm run test:site
@@ -70,7 +70,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
-          path: website/build
+          path: docs/build
 
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
