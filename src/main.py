@@ -1,25 +1,16 @@
-import argparse
-import os
-
-import numpy as np
-import trimesh
-from dotenv import load_dotenv
-
-from common import PipelineChain, ProgressMonitor, export_to_glb
-from common.constants import BoundingBox
-from common.MeshUtils import _get_utm_transformer
+from common import ProgressMonitor
 from common.profiler import PipelineProfiler
-from common.providers import OSM_MAP_FEATURES, OSMClient
-from data_ingest.ingest import ingest_data
-from mesh_builder.extrude import build_mesh, extrude_buildings
-from texturing.tex_projection import tex_projection
+from common.constants import BoundingBox
+from common.providers import OSMClient, OSM_MAP_FEATURES
+from common.env import load_app_env
 
-_env = os.environ.get("APP_ENV", "").lower()
-_env_file = {
-    "development": ".env.development",
-    "production": ".env.production",
-}.get(_env, ".env")
-load_dotenv(_env_file)
+from mesh_builder.extrude import extrude_buildings
+from pipeline import build_pipeline
+from pose_alignment.align_poses import POSE_SOURCES
+
+import argparse
+
+load_app_env()
 
 
 def progress():
@@ -74,43 +65,32 @@ def ask_save_path(default_name: str = "combined.glb") -> str | None:
     return path or None
 
 
-def export_mesh(value, state):
-    bbox = state.require_metadata("bbox")
-    center_lon = (bbox.min_lon + bbox.max_lon) / 2
-    center_lat = (bbox.min_lat + bbox.max_lat) / 2
-    transformer = _get_utm_transformer(center_lon, center_lat)
-    ox, oy = transformer.transform(center_lon, center_lat)
-
-    value.vertices -= np.array([ox, oy, 0.0])
-    value.vertices[:, 2] *= -1
-    center = value.bounding_box.centroid
-    value.apply_translation(-center)
-    rotation = trimesh.transformations.rotation_matrix(
-        angle=np.radians(-90.0),
-        direction=[1.0, 0.0, 0.0],
-        point=[0.0, 0.0, 0.0],
-    )
-    value.apply_transform(rotation)
-
-    path = state.get_metadata("output_path", None) or ask_save_path()
-    if path is not None:
-        export_to_glb(value, path)
-        print(f"Saved mesh to {path}")
-
-    state.require_metadata("progress_monitor").next()
-
-
-run_pipeline = PipelineChain()
-run_pipeline.add_stage("fetch", ingest_data)
-run_pipeline.add_stage("build_mesh", build_mesh)
-run_pipeline.add_stage("texturing", tex_projection)
-run_pipeline.add_stage("export", export_mesh)
+run_pipeline = build_pipeline()
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", metavar="FILENAME", default=None)
-    parser.add_argument("--no-seg", action="store_true", default=False)
+    parser.add_argument(
+        "--no-seg",
+        action="store_true",
+        default=False,
+        help="Skip obstruction removal in texturing (no segmentation, no inpainting)",
+    )
+    parser.add_argument(
+        "--texture",
+        choices=["blend", "best"],
+        default="blend",
+        help="blend (default): each wall texel averages every photo that sees it, weighted "
+        "by view angle, distance and obstructions; best: each face from its single best photo",
+    )
+    parser.add_argument(
+        "--no-fill",
+        action="store_true",
+        default=False,
+        help="Segment the obstructions (cars, people, poles, ...) but do not paint them over "
+        "(LaMa): each face takes the photo where they hide it least",
+    )
     parser.add_argument(
         "--bbox",
         nargs=4,
@@ -130,6 +110,46 @@ def main():
         metavar="PATH",
         default=None,
         help="Write the raw Mapillary metadata to this JSON file for debugging.",
+    )
+    parser.add_argument(
+        "--terrain",
+        action="store_true",
+        default=False,
+        help="Place buildings and cameras on real ground heights (Terrarium "
+        "elevation tiles) and add the ground to the .glb. Off by default.",
+    )
+    parser.add_argument(
+        "--naip",
+        action="store_true",
+        default=False,
+        help="Texture the ground and roofs with NAIP aerial photos (USGS, "
+        "~0.6 m/px). Turns on --terrain. Off by default.",
+    )
+    parser.add_argument(
+        "--min-quality",
+        metavar="SCORE",
+        type=float,
+        default=None,
+        help="Skip Mapillary images whose quality_score (0-1) is below SCORE, "
+        "e.g. 0.6. Off by default.",
+    )
+    parser.add_argument(
+        "--poses",
+        choices=POSE_SOURCES,
+        default="raw",
+        help="Camera poses for texturing: Mapillary raw GPS (default), Mapillary computed, "
+        "or COLMAP aligned to OSM (see src/pose_alignment/align_poses.py)",
+    )
+    parser.add_argument(
+        "--aligned-only",
+        action="store_true",
+        help="With --poses colmap, texture only from images with an aligned pose",
+    )
+    parser.add_argument(
+        "--alignment-dir",
+        metavar="DIR",
+        default=None,
+        help="With --poses colmap, reuse this ROI folder (outputs/alignment/mapillary_roi_N)",
     )
     args = parser.parse_args()
 
@@ -154,8 +174,17 @@ def main():
             "bbox": bbox,
             "progress_monitor": pipeline_progress,
             "remove_obstructions": not args.no_seg,
+            "fill_obstructions": not args.no_fill,
+            "texture_mode": args.texture,
             "output_path": args.output,
+            "ask_output_path": ask_save_path,
             "mapillary_dump_path": args.dump_mapillary,
+            "use_terrain": args.terrain or args.naip,
+            "use_naip": args.naip,
+            "min_quality": args.min_quality,
+            "pose_source": args.poses,
+            "aligned_only": args.aligned_only,
+            "alignment_dir": args.alignment_dir,
         },
         profiler=profiler,
     )

@@ -1,45 +1,86 @@
-# CPU (works on any machine):
+# Web app (CPU, works on any machine), then open http://localhost:8000
+#   docker compose up --build api
+# Web app with an NVIDIA GPU (Linux, or Windows with WSL2, plus NVIDIA Container Toolkit):
+#   docker compose --profile gpu up --build api-gpu
+# Only this machine can reach it; add PSM_HOST=0.0.0.0 to allow other devices.
+#
+# Command-line pipeline:
 #   docker compose run --rm pipeline --bbox W S E N --output output/map.glb
-# NVIDIA GPU (Linux, or Windows with WSL2, plus NVIDIA Container Toolkit):
 #   docker compose --profile gpu run --rm pipeline-gpu --bbox W S E N --output output/map.glb
 
-x-pipeline: &pipeline
+x-common: &common
   # Same convention as src/main.py: APP_ENV=development -> .env.development,
   # APP_ENV=production -> .env.production, unset -> .env
   env_file:
     - path: .env${APP_ENV:+.$APP_ENV}
       required: false
+  # Passed in too, so the app can tell people which file its settings came from.
+  environment:
+    APP_ENV: ${APP_ENV:-}
   volumes:
     - ./output:/app/output
     - model-cache:/cache
 
+x-cpu: &cpu
+  <<: *common
+  image: photorealistic-street-maps:cpu
+  # Built for the machine's own architecture (x86 or ARM, e.g. Apple Silicon):
+  # every dependency has builds for both, so nothing runs under emulation.
+  build:
+    context: .
+    args:
+      TORCH_VARIANT: cpu
+
+x-gpu: &gpu
+  <<: *common
+  image: photorealistic-street-maps:gpu
+  profiles: [gpu]
+  build:
+    context: .
+    args:
+      TORCH_VARIANT: cu130
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+
+x-api: &api
+  entrypoint: ["uvicorn", "api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+  command: []
+  # The API has no login, so it's only reachable from this machine by default.
+  # To open it to your network (anyone who can reach it can run jobs and see
+  # results), start it with PSM_HOST=0.0.0.0.
+  ports:
+    - "${PSM_HOST:-127.0.0.1}:8000:8000"
+  restart: unless-stopped
+
 services:
   pipeline:
-    <<: *pipeline
-    image: photorealistic-street-maps:cpu
-    # triangle (used by trimesh to fill building floors/roofs) has no Linux ARM64
-    # build, so Apple Silicon Macs run this x86 image under emulation.
-    platform: linux/amd64
-    build:
-      context: .
-      args:
-        TORCH_VARIANT: cpu
+    <<: *cpu
 
   pipeline-gpu:
-    <<: *pipeline
-    image: photorealistic-street-maps:gpu
-    profiles: [gpu]
-    build:
-      context: .
-      args:
-        TORCH_VARIANT: cu130
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    <<: *gpu
+
+  # The web app also gets the project folder, so Settings can create the env
+  # file (e.g. .env) there when it doesn't exist yet, the same file this
+  # compose file reads the next time it starts.
+  api:
+    <<: [*cpu, *api]
+    environment: &api-environment
+      APP_ENV: ${APP_ENV:-}
+      PSM_ENV_DIR: /app/project
+    volumes: &api-volumes
+      - ./output:/app/output
+      - model-cache:/cache
+      - ./:/app/project
+
+  api-gpu:
+    <<: [*gpu, *api]
+    environment: *api-environment
+    volumes: *api-volumes
 
 volumes:
   model-cache:

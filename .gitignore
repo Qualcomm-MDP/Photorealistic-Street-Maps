@@ -12,3 +12,9 @@ dist/
 # Pipeline outputs (Docker bind mount)
 output/*
 !output/.gitkeep
+
+# Local model weights and COLMAP alignment working data
+models/
+outputs/alignment/*/data/
+AGENTS.md
+CLAUDE.md

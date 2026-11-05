@@ -1,3 +1,5 @@
+import pytest
+
 from common.pipeline_chain import PipelineChain
 
 
@@ -105,3 +107,47 @@ def test_pipeline_resume_clears_fork_outputs_before_replay():
         "roads": 30,
     }
     assert resumed_state.get_output("finish") == 50
+
+
+def test_pipeline_reports_stage_events_in_order():
+    pipeline = PipelineChain("events")
+    pipeline.add_stage("first", lambda value, state: value + 1)
+    pipeline.add_stage("second", lambda value, state: value * 2)
+    events = []
+
+    pipeline.run(1, on_stage=lambda name, event: events.append((name, event)))
+
+    assert events == [
+        ("first", "start"),
+        ("first", "done"),
+        ("second", "start"),
+        ("second", "done"),
+    ]
+
+
+def test_pipeline_reports_error_and_stops():
+    def fail(value, state):
+        raise RuntimeError("boom")
+
+    pipeline = PipelineChain("events")
+    pipeline.add_stage("first", fail)
+    pipeline.add_stage("second", lambda value, state: value)
+    events = []
+
+    with pytest.raises(RuntimeError, match="boom"):
+        pipeline.run(1, on_stage=lambda name, event: events.append((name, event)))
+
+    assert events == [("first", "start"), ("first", "error")]
+
+
+def test_pipeline_describe_lists_labels_in_run_order():
+    pipeline = PipelineChain("labels")
+    pipeline.add_stage("fetch", lambda v, s: v, label="Fetch data", detail="OSM")
+    pipeline.add_fork("geometry", {"a": lambda v, s: v}, label="Geometry")
+    pipeline.add_stage("export", lambda v, s: v)
+
+    assert pipeline.describe() == [
+        {"name": "fetch", "label": "Fetch data", "detail": "OSM"},
+        {"name": "geometry", "label": "Geometry", "detail": ""},
+        {"name": "export", "label": "export", "detail": ""},
+    ]

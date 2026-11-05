@@ -6,15 +6,13 @@ OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 OVERPASS_FALLBACK_URLS = (
     "https://overpass.private.coffee/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 )
 MAPILLARY_URL = "https://graph.mapillary.com/images"
 
 # overpass-api.de rejects the default python-requests User-Agent with 406 Not
 # Acceptable, so identify the app explicitly.
-USER_AGENT = (
-    "photorealistic-street-maps/0.1 "
-    "(+https://github.com/Qualcomm-MDP/Photorealistic-Street-Maps)"
-)
+USER_AGENT = "photorealistic-street-maps/0.1 (+https://github.com/Qualcomm-MDP/PSM)"
 
 
 @dataclass(frozen=True)
