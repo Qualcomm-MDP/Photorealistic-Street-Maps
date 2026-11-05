@@ -4,8 +4,9 @@ Per leg and camera of a run:
   bow          lateral deviation of the camera path from a straight line (quadratic part, metres
                at the GPS scale), next to the same for Mapillary's raw GPS track: a straight
                street driven straight bows ~1 m; a bent reconstruction bows much more
-  gravity      median angle between each camera's down direction and GeoCalib's (the model's
-               consistency with an independent gravity estimate)
+  gravity      median angle between each camera's down direction and the calibration's
+               (Mapillary's rotations): the model's consistency with an independent gravity
+               estimate; n/a for a sequence without Mapillary rotations
   scale        camera spacing in the last third of the leg / first third, both relative to GPS
                spacing (1.0 = no scale drift along the leg)
 Writes nothing; prints one line per leg camera and a frame-weighted mean.
@@ -19,7 +20,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .align import level_with_gravity
+from .align import _level, level_with_gravity, spread_text
 from .geo_common import LocalFrame, RoiPaths, load_cameras, similarity_2d
 
 
@@ -47,7 +48,11 @@ def leg_shape(p, cam):
     gc = json.loads(p.calibration_json(folder).read_text())
     meta = p.frames(folder)
     names, C, R = load_cameras(p.reconstruction / cam["model"])
-    o, B, spread, _ = level_with_gravity(names, C, R, gc)
+    if sum(n in gc["frames"] for n in names) >= 3:
+        o, B, spread, _ = level_with_gravity(names, C, R, gc)
+    else:  # no gravity: level from the cameras' own down axes
+        o, B, _, _ = _level(R[:, :, 1], C)
+        spread = None
     L = (C - o) @ B.T
     enu = LocalFrame(*meta[names[0]]["gps"])
     g = np.array([enu.xy(*meta[n]["gps"]) for n in names])
@@ -85,14 +90,18 @@ def main():
             rows.append(r)
             print(
                 f"{leg['id']}/{cam['folder']}: {r['cameras']} cams over {r['length_m']:.0f} m, bow {r['bow_m']:.1f} m "
-                f"(GPS {r['gps_bow_m']:.1f} m), gravity {r['gravity_deg']:.1f} deg, scale end/start "
+                f"(GPS {r['gps_bow_m']:.1f} m), gravity {spread_text(r['gravity_deg'])}, scale end/start "
                 f"{r['scale_end_start']:.2f}, calibration {cam.get('calibration', {}).get('source')} "
                 f"{cam.get('calibration', {}).get('model')}{REFINED.get(cam.get('calibration', {}).get('refined'), '')}"
             )
     w = np.array([r["cameras"] for r in rows], float)
     m = lambda k: float(np.average([r[k] for r in rows], weights=w))  # noqa: E731
+    g = [(r["gravity_deg"], r["cameras"]) for r in rows if r["gravity_deg"] is not None]
+    g_mean = (
+        float(np.average([x for x, _ in g], weights=[n for _, n in g])) if g else None
+    )
     print(
-        f"MEAN ({args.tag or 'base'}): bow {m('bow_m'):.1f} m (GPS {m('gps_bow_m'):.1f}), gravity {m('gravity_deg'):.1f} deg, "
+        f"MEAN ({args.tag or 'base'}): bow {m('bow_m'):.1f} m (GPS {m('gps_bow_m'):.1f}), gravity {spread_text(g_mean)}, "
         f"scale end/start {m('scale_end_start'):.2f}, {len(rows)} leg cameras"
     )
 

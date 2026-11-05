@@ -1,387 +1,261 @@
-"""Stage 4 (calibrate): camera calibration and gravity with GeoCalib (cvg/GeoCalib, ECCV 2024).
+"""Stage 4 (calibrate): each sequence's camera calibration and per-frame gravity, from Mapillary.
 
-Per sequence folder of the ROI:
-  1. Calibration: GeoCalib's "distorted" model (simple radial camera) on --sample frames (10) spread
-     over the sequence; the median focal and k1 are the sequence's calibration (one camera).
-  2. Gravity: every --gravity-every-th frame (default 5) and the last, with the focal fixed to
-     that median, for its roll, pitch and up direction in the camera frame. Each estimate starts
-     from the previous one with at most 10 optimiser steps (GeoCalib's own "gravity prior" would
-     fix the gravity, not start from it, so the start is set in its optimiser instead). Where two
-     estimates differ by more than --gravity-refill degrees (default 4), the frames between are
-     estimated too; the rest are interpolated. --gravity-every 1 estimates every frame from a cold
-     start (the old way). Against the COLMAP models' rotations (roi_6 motorcycle, roi_19, 24, 27),
-     every 5th frame was 3-5x faster and its gravity 0.04-0.15 deg further off (median) than every
-     frame's (0.44-0.48 deg on the cars, 1.27 on the motorcycle); every 3rd was no closer. A 2 deg
-     refill fired on GeoCalib's own frame-to-frame scatter rather than real changes.
-With --calibration mapillary, step 1 is Mapillary's focal, k1 and k2 instead (the sequence's
-most common camera_parameters; GeoCalib's where Mapillary has none), written to
-data/calibration_mapillary/; step 2 is the same, with Mapillary's focal as the prior.
-Crops of a 360 camera (data_ingest/mapillary_sequences.py) are pinhole views with an exactly known focal and no
-distortion: step 1 is that focal (source "pano") with either --calibration; step 2 the same.
-
-A warning suggests --calibration mapillary when GeoCalib's calibration looks unreliable: its
-optimiser did not converge on most of the sampled frames, or cameras of one rig (same make,
-model and image size, so the same lens) got focals more than 15% apart. Both happen with lenses
-wider than GeoCalib's model holds (roi_21's 2017 Roush rig: 0.42-0.65 for six identical cameras,
-Mapillary 0.48).
-Frames are shrunk to --work-size on the CPU first (GeoCalib works at 320 px internally; focals
-are kept as fractions of the image's long side, so the scale does not matter).
+Per sequence folder of the ROI, from its frames' cameras.json (data_ingest/mapillary_sequences.py):
+  1. Calibration: the sequence's most common Mapillary camera_parameters: focal (a fraction of the
+     image's long side), k1 and k2, from Mapillary's own structure from motion. Mapillary's focal
+     is sometimes far off (roi_15's iPhone: 1.338 against about 0.8; a Google Pixel 3 in downtown
+     Ann Arbor: 0.976, 0.918 and 0.732), so each sequence is checked against the other sequences
+     of the same camera in the ROI (make, model and image size): when at least two others have a
+     calibration and this one's focal is more than FOCAL_TOLERANCE (15%) from their median, it
+     takes the calibration of the one closest to that median instead (source "mapillary_median",
+     "correction" says why). With only two sequences of a camera there is no majority: both are
+     kept, with a warning when they differ by more than 15%. A sequence with no Mapillary
+     calibration starts from COLMAP's usual
+     guess, DEFAULT_FOCAL (1.2) x the long side with no distortion (source "default"). Bundle
+     adjustment refines the focal and distortion either way (reconstruct.py).
+     Crops of a 360 camera are pinhole views with an exactly known focal and no distortion
+     (source "pano"); reconstruct keeps them fixed.
+  2. Gravity: each frame's up vector in the camera frame, from its computed_rotation (OpenSfM,
+     world-to-camera in east/north/up): that rotation applied to the world's up. Frames without
+     one are interpolated between their neighbours. A sequence with no rotation at all gets no
+     gravity ("frames" empty, gravity_source null): reconstruct solves it without gravity priors
+     and align levels it from its road points.
 Writes data/calibration/<sequence folder>.json:
-  focal_norm, focal_px, k1, width, height       the calibration (GeoCalib simple radial; reconstruct.camera_setup
-                                                picks the COLMAP model); k2 too from Mapillary
-  source                                        geocalib or mapillary
-  sample_not_converged, gravity_not_converged   frames where GeoCalib's optimiser hit its step limit
+  source            mapillary, mapillary_median, default or pano
+  correction        why the focal was replaced (mapillary_median), else null
+  focal_norm, focal_px, k1, k2, width, height, camera_model (RADIAL), colmap_params
+  gravity_source    "mapillary", or null when the sequence has no rotations
+  gravity_estimated frames with their own rotation
   frames: {file: {roll_deg, pitch_deg, up_cam,  up_cam: unit up vector in the camera frame
                   estimated}}                   (x right, y down, z forward); gravity = -up_cam;
                                                 estimated false: interpolated
 
-Against COLMAP's refined focal (12 normal-lens sequences), the median of 10 frames was 5.4% off
-(median), 20 frames 6.0%, 5 frames 5.0%, 1 frame 16%: past about 5 frames GeoCalib's own bias, not the
-sample, sets the error (logs/geocalib_focal_samples.png).
+Earlier versions of this stage estimated the focal, distortion and gravity from the photos
+themselves with GeoCalib (cvg/GeoCalib). Their calibrations (source "geocalib", or no
+gravity_source) are recalculated when found.
 
-Usage: python -m pose_alignment.calibrate outputs/alignment/mapillary_roi_2 [--sample 10] [--force] [--calibration mapillary]
+Usage: python -m pose_alignment.calibrate outputs/alignment/mapillary_roi_2 [--force]
 """
 
 import argparse
 import json
-import logging
-import time
-import warnings
 from pathlib import Path
 
 import numpy as np
-import torch
+from scipy.spatial.transform import Rotation
 
 from .geo_common import RoiPaths, mapillary_calibration
 
-warnings.filterwarnings("ignore", category=FutureWarning)
-import geocalib.lm_optimizer as _lmo  # noqa: E402
-from geocalib import GeoCalib  # noqa: E402
-from geocalib.gravity import Gravity  # noqa: E402
-
-RIG_SPREAD = 0.15  # rig cameras' GeoCalib focals further apart than this: unreliable
-UNRELIABLE = (
-    "GeoCalib calibration looks unreliable for this camera; try --calibration mapillary"
+SOURCES = ("mapillary", "mapillary_median", "default", "pano")
+FOCAL_TOLERANCE = (
+    0.15  # a focal further than this from its camera's other sequences is replaced
 )
-
-
-class NotConverged(logging.Handler):
-    """Counts GeoCalib's "Reached maximum number of steps without convergence" warnings and keeps
-    them off the console (the stage reports the counts)."""
-
-    def __init__(self):
-        super().__init__(logging.WARNING)
-        self.count = 0
-
-    def emit(self, record):
-        self.count += "without convergence" in record.getMessage()
-
-
-NOT_CONVERGED = NotConverged()
-_lm_log = logging.getLogger("geocalib.lm_optimizer")
-_lm_log.addHandler(NOT_CONVERGED)
-_lm_log.propagate = False
-
-
-# GeoCalib's "gravity" prior fixes the gravity rather than starting from it, so a warm start is
-# injected into the optimiser's initial estimate instead (the up vector to start from, or None)
-_WARM = {"up": None}
-_trivial_estimation = _lmo.get_trivial_estimation
-
-
-def _warm_estimation(data, camera_model):
-    camera, gravity = _trivial_estimation(data, camera_model)
-    if _WARM["up"] is not None and "prior_gravity" not in data:
-        gravity = Gravity(
-            torch.as_tensor(
-                _WARM["up"], dtype=torch.float32, device=gravity.vec3d.device
-            )[None]
-        )
-    return camera, gravity
-
-
-_lmo.get_trivial_estimation = _warm_estimation
-
-
-def converged(model, im, **kw):
-    """(GeoCalib result, whether its optimiser converged)."""
-    before = NOT_CONVERGED.count
-    r = model.calibrate(im, camera_model="simple_radial", **kw)
-    return r, NOT_CONVERGED.count == before
+DEFAULT_FOCAL = 1.2  # COLMAP's starting focal without a calibration, x the long side
 
 
 def rp_from_up(up):
-    """(roll, pitch) in degrees of an up vector in the camera frame (GeoCalib's convention)."""
+    """(roll, pitch) in degrees of an up vector in the camera frame (x right, y down, z forward)."""
     return float(np.degrees(np.arctan2(-up[0], -up[1]))), float(
         np.degrees(np.arcsin(np.clip(up[2], -1, 1)))
     )
 
 
-def angle_deg(a, b):
-    return float(np.degrees(np.arccos(np.clip(np.dot(a, b), -1, 1))))
+def up_from_rotation(rotvec):
+    """A camera's up vector in its own frame (x right, y down, z forward) from a Mapillary
+    computed_rotation: OpenSfM's world-to-camera rotation (axis-angle), world east/north/up."""
+    return Rotation.from_rotvec(rotvec).as_matrix() @ np.array([0.0, 0.0, 1.0])
 
 
-def gravity_frames(
-    model, imgs, files, prior, dev, every=5, refill_deg=4.0, warm_steps=10
-):
-    """Per-frame gravity: GeoCalib on every `every`-th frame in capture order (and the last), each
-    starting from the previous estimate with at most warm_steps optimiser steps; where two
-    estimates differ by more than refill_deg, the frames between are estimated too; the rest are
-    interpolated. Returns ({file: {roll_deg, pitch_deg, up_cam, estimated}}, estimates that did not
-    converge, number of estimates). every=1, warm_steps=None: every frame from a cold start (the
-    old behaviour)."""
-    opt = model.model.optimizer
-    cold_steps = opt.num_steps
-    up, bad = {}, 0
-
-    def estimate(i, start):
-        nonlocal bad
-        _WARM["up"] = start if warm_steps else None
-        opt.num_steps = warm_steps if (warm_steps and start is not None) else cold_steps
-        try:
-            r, ok = converged(model, imgs[i].to(dev), priors={"focal": prior})
-        finally:
-            _WARM["up"], opt.num_steps = None, cold_steps
-        bad += not ok
-        up[i] = r["gravity"].vec3d[0].cpu().numpy().astype(float)
-
-    n = len(files)
-    keys = sorted(set(range(0, n, max(1, every))) | {n - 1})
-    for i in keys:
-        estimate(i, up[max(up)] if up else None)
-    for a, b in zip(keys, keys[1:]):
-        if b - a > 1 and angle_deg(up[a], up[b]) > refill_deg:
-            for i in range(a + 1, b):
-                estimate(i, up[i - 1])
-    est = sorted(up)
-    for i in range(n):
-        if i not in up:  # between two estimates: normalised linear interpolation
-            a = max(k for k in est if k < i)
-            b = min(k for k in est if k > i)
-            v = up[a] + (up[b] - up[a]) * (i - a) / (b - a)
-            up[i] = v / np.linalg.norm(v)
+def mapillary_gravity(meta, files):
+    """Per-frame gravity from Mapillary's computed rotations, or None when no frame has one.
+    files: in capture order; a frame without a rotation is interpolated between its nearest
+    neighbours that have one (estimated false), or takes the nearest one at either end. Returns
+    ({file: {roll_deg, pitch_deg, up_cam, estimated}}, number of frames with their own rotation)."""
+    up = {
+        i: up_from_rotation(meta[f]["computed_rotation"])
+        for i, f in enumerate(files)
+        if meta[f].get("computed_rotation")
+    }
+    if not up:
+        return None
+    known = sorted(up)
     frames = {}
     for i, f in enumerate(files):
-        roll, pitch = rp_from_up(up[i])
+        if i in up:
+            v = up[i]
+        else:
+            before = [k for k in known if k < i]
+            after = [k for k in known if k > i]
+            if before and after:
+                a, b = before[-1], after[0]
+                v = up[a] + (up[b] - up[a]) * (i - a) / (b - a)
+            else:
+                v = up[(before or after)[-1 if before else 0]]
+        v = v / np.linalg.norm(v)
+        roll, pitch = rp_from_up(v)
         frames[f] = {
             "roll_deg": round(roll, 3),
             "pitch_deg": round(pitch, 3),
-            "up_cam": [round(float(v), 6) for v in up[i]],
-            "estimated": i in est,
+            "up_cam": [round(float(x), 6) for x in v],
+            "estimated": i in up,
         }
-    return frames, bad, len(est)
+    return frames, len(known)
 
 
-def load(model, path, work_size):
-    im = model.load_image(path)
-    s = work_size / max(im.shape[-2:])
-    if s < 1:
-        im = torch.nn.functional.interpolate(
-            im[None], scale_factor=s, mode="area", recompute_scale_factor=False
-        )[0]
-    return im
+def is_current(doc):
+    """Whether a calibration JSON comes from this version of the stage (not GeoCalib's)."""
+    return doc.get("source") in SOURCES and "gravity_source" in doc
+
+
+def camera_key(meta):
+    """A sequence's camera: (make, model, width, height) of its first frame."""
+    f0 = next(iter(meta.values()))
+    return (f0.get("make"), f0.get("model"), f0.get("width"), f0.get("height"))
+
+
+def choose_calibrations(mly, cameras, tolerance=FOCAL_TOLERANCE):
+    """Each sequence's calibration from Mapillary's, checked against its camera's other sequences.
+
+    mly: {folder: [focal, k1, k2] or None}; cameras: {folder: camera_key}. Returns
+    {folder: (source, [focal, k1, k2], correction)}: Mapillary's, or with at least two other
+    sequences of the same camera calibrated and this focal more than tolerance from their median,
+    the calibration of the one closest to that median; DEFAULT_FOCAL without any."""
+    out = {}
+    for folder, own in mly.items():
+        if not own:
+            out[folder] = ("default", [DEFAULT_FOCAL, 0.0, 0.0], None)
+            continue
+        others = [
+            mly[f]
+            for f in mly
+            if f != folder and mly[f] and cameras[f] == cameras[folder]
+        ]
+        if len(others) >= 2:
+            median = float(np.median([c[0] for c in others]))
+            if abs(own[0] / median - 1) > tolerance:
+                closest = min(others, key=lambda c: abs(c[0] - median))
+                out[folder] = (
+                    "mapillary_median",
+                    list(closest),
+                    f"Mapillary's focal {own[0]:.3f} is {100 * (own[0] / median - 1):+.0f}% from "
+                    f"the median {median:.3f} of {len(others)} other sequences of this camera",
+                )
+                continue
+        out[folder] = ("mapillary", list(own), None)
+    return out
+
+
+def focal_warnings(mly, cameras, tolerance=FOCAL_TOLERANCE):
+    """Warnings for cameras with exactly two calibrated sequences whose focals differ by more than
+    tolerance: without a third there is no telling which is right, so both are kept."""
+    groups = {}
+    for folder, own in mly.items():
+        if own:
+            groups.setdefault(cameras[folder], []).append((folder, own[0]))
+    out = []
+    for (make, model, *_), seqs in groups.items():
+        if len(seqs) == 2:
+            (a, fa), (b, fb) = seqs
+            if abs(fa / fb - 1) > tolerance:
+                out.append(
+                    f"WARNING: the {make} {model} sequences {a} and {b} have Mapillary focals "
+                    f"{fa:.3f} and {fb:.3f}, {100 * abs(fa / fb - 1):.0f}% apart; kept both "
+                    "(no third to compare with): check the reconstruction (shape_check.py)"
+                )
+    return out
 
 
 def calibrate_sequence(
-    images_dir,
-    files,
-    out_json,
-    sample=10,
-    work_size=640,
-    device="mps",
-    fixed=None,
-    source="geocalib",
-    gravity=None,
+    images_dir, files, out_json, source, calibration, meta, correction=None
 ):
-    """GeoCalib's calibration (or fixed = a known [focal, k1, k2]: Mapillary's, or a 360 crop's) and
-    per-frame gravity."""
-    t0 = time.time()
-    dev = torch.device(device)
-    model = GeoCalib(weights="distorted").to(dev)
-    imgs = [load(model, images_dir / f, work_size) for f in files]
-    L = max(imgs[0].shape[-2:])
+    """Write one sequence's calibration: calibration = [focal (fraction of the long side), k1, k2]
+    and source as chosen by choose_calibrations (or "pano"), gravity from meta (the frames'
+    cameras.json records)."""
     from PIL import Image
 
     w, h = Image.open(images_dir / files[0]).size
-
-    idx = np.unique(
-        np.linspace(0, len(files) - 1, min(sample, len(files))).round().astype(int)
-    )
-    fs, ks, sample_bad = [], [], 0
-    if fixed:
-        f_norm, k1, k2 = fixed
-        idx = []
-    for i in idx:
-        r, ok = converged(model, imgs[i].to(dev))
-        sample_bad += not ok
-        fs.append(float(r["camera"].f[0, 0].cpu()) / L)
-        ks.append(float(r["camera"].k1[0].cpu()))
-    if not fixed:
-        f_norm, k1, k2 = float(np.median(fs)), float(np.median(ks)), None
-    t_cal = time.time() - t0
-
-    prior = torch.tensor(f_norm * L, device=dev)
-    frames, gravity_bad, n_est = gravity_frames(
-        model, imgs, files, prior, dev, **(gravity or {})
-    )
+    f_norm, k1, k2 = (float(x) for x in calibration)
+    gravity = mapillary_gravity(meta, files)
+    frames, n_own = gravity if gravity else ({}, 0)
     doc = {
-        "source": source if fixed else "geocalib",
+        "source": source,
+        "correction": correction,
         "focal_norm": f_norm,
         "focal_px": f_norm * max(w, h),
         "k1": k1,
+        "k2": k2,
         "width": w,
         "height": h,
+        "camera_model": "RADIAL",
+        "colmap_params": [f_norm * max(w, h), w / 2, h / 2, k1, k2],
+        "gravity_source": "mapillary" if gravity else None,
+        "gravity_estimated": n_own,
+        "frames": frames,
     }
-    if fixed:
-        doc.update(
-            k2=k2,
-            camera_model="RADIAL",
-            colmap_params=[f_norm * max(w, h), w / 2, h / 2, k1, k2],
-        )
-    else:
-        doc.update(
-            camera_model="SIMPLE_RADIAL",
-            colmap_params=[f_norm * max(w, h), w / 2, h / 2, k1],
-            sample_frames=[files[i] for i in idx],
-            sample_focal_norm=fs,
-            sample_k1=ks,
-            focal_spread_mad=float(np.median(np.abs(np.array(fs) - f_norm))),
-            sample_not_converged=sample_bad,
-        )
-    doc.update(
-        gravity_not_converged=gravity_bad,
-        gravity_estimated=n_est,
-        gravity_settings=gravity or {},
-        frames=frames,
-        seconds={
-            "calibration": round(t_cal, 1),
-            "gravity": round(time.time() - t0 - t_cal, 1),
-        },
-    )
     out_json.parent.mkdir(parents=True, exist_ok=True)
     out_json.write_text(json.dumps(doc, indent=1))
     return doc
 
 
-def calibrate_roi(
-    roi_dir,
-    sample=10,
-    work_size=640,
-    force=False,
-    device=None,
-    calibration="geocalib",
-    gravity_every=5,
-    gravity_refill=4.0,
-):
-    p = RoiPaths(roi_dir, calibration=calibration)
-    device = device or (
-        "cuda"
-        if torch.cuda.is_available()
-        else "mps"
-        if torch.backends.mps.is_available()
-        else "cpu"
-    )
+def calibrate_roi(roi_dir, force=False):
+    p = RoiPaths(roi_dir)
+    sequences = [s["folder"] for s in p.sequences()]
+    metas = {folder: p.frames(folder) for folder in sequences}
+    panos = {folder: p.pano(folder) for folder in sequences}
+    mly = {folder: mapillary_calibration(p, folder)[1] for folder in sequences}
+    checked = {f: mly[f] for f in sequences if not panos[f]}
+    cameras = {f: camera_key(metas[f]) for f in checked}
+    chosen = choose_calibrations(checked, cameras)
+    for warning in focal_warnings(checked, cameras):
+        print(warning)
     docs = {}
-    for s in p.sequences():
-        folder = s["folder"]
+    for folder in sequences:
         out = p.calibration_json(folder)
-        meta = p.frames(folder)
+        meta = metas[folder]
         files = sorted(meta)
-        if (
-            out.exists()
-            and not force
-            and set(json.loads(out.read_text())["frames"]) == set(files)
-        ):
-            print(f"{folder}: {calibration} calibration exists ({out})")
-            docs[folder] = json.loads(out.read_text())
-            continue
-        _, mly = mapillary_calibration(p, folder)
-        pano = p.pano(folder)
-        if pano:  # a 360 crop: exact pinhole (camera_parameters [focal, 0, 0])
-            fixed, source = mly, "pano"
-        else:
-            if calibration == "mapillary" and not mly:
+        if out.exists() and not force:
+            old = json.loads(out.read_text())
+            if not is_current(old):
                 print(
-                    f"{folder}: no Mapillary calibration for this sequence; using GeoCalib's"
+                    f"{folder}: {out} is from the GeoCalib version of this stage; recalculating"
                 )
-            fixed, source = (
-                (mly, "mapillary") if calibration == "mapillary" else (None, "geocalib")
-            )
+            elif set(old["frames"]) == set(files) or not old["gravity_source"]:
+                print(f"{folder}: calibration exists ({out})")
+                docs[folder] = old
+                continue
+        pano = panos[folder]
+        if pano:  # a 360 crop: an exact pinhole (camera_parameters [focal, 0, 0])
+            source, calib, correction = "pano", mly[folder], None
+        else:
+            source, calib, correction = chosen[folder]
         d = calibrate_sequence(
-            p.images / folder,
-            files,
-            out,
-            sample,
-            work_size,
-            device,
-            fixed,
-            source,
-            {
-                "every": gravity_every,
-                "refill_deg": gravity_refill,
-                "warm_steps": 10 if gravity_every > 1 else None,
-            },
-        )  # 1: the old every-frame cold start
+            p.images / folder, files, out, source, calib, meta, correction
+        )
         docs[folder] = d
-        mly_f = sorted(
-            {
-                round(f["camera_parameters"][0], 3)
-                for f in meta.values()
-                if f.get("camera_parameters")
-            }
-        )
         what = (
-            f"360 {pano['side']} crop, exact focal {d['focal_norm']:.3f} of the side ({d['focal_px']:.0f} px, "
-            f"{pano['fov_deg']:g} deg), no distortion"
-            if d["source"] == "pano"
-            else f"Mapillary focal {d['focal_norm']:.3f} of long side ({d['focal_px']:.0f} px), k1 {d['k1']:+.3f}, "
-            f"k2 {d['k2']:+.3f}"
-            if d["source"] == "mapillary"
-            else f"focal {d['focal_norm']:.3f} of long side ({d['focal_px']:.0f} px, spread {d['focal_spread_mad']:.3f}), "
-            f"k1 {d['k1']:+.3f}, optimiser did not converge on {d['sample_not_converged']}/"
-            f"{len(d['sample_frames'])} sampled frames"
+            f"360 {pano['side']} crop, exact focal {d['focal_norm']:.3f} of the side "
+            f"({d['focal_px']:.0f} px, {pano['fov_deg']:g} deg), no distortion"
+            if source == "pano"
+            else f"Mapillary focal {d['focal_norm']:.3f} of the long side ({d['focal_px']:.0f} px), "
+            f"k1 {d['k1']:+.3f}, k2 {d['k2']:+.3f}"
+            + (f" (replaced: {correction})" if correction else "")
+            if source != "default"
+            else f"WARNING: no Mapillary calibration; starting from {DEFAULT_FOCAL} x the long "
+            f"side ({d['focal_px']:.0f} px), no distortion, for bundle adjustment to refine"
         )
-        print(
-            f"{folder}: {what}; gravity for {len(files)} frames ({d['gravity_estimated']} estimated, roll median "
-            f"{np.median([v['roll_deg'] for v in d['frames'].values()]):+.1f} deg, did not converge on "
-            f"{d['gravity_not_converged']}); {d['seconds']['calibration'] + d['seconds']['gravity']:.0f} s. "
-            f"Mapillary focals: {mly_f}"
-        )
-    if calibration == "geocalib":
-        warn_unreliable(p, docs)
-
-
-def warn_unreliable(p, docs):
-    """Print UNRELIABLE for each sequence whose GeoCalib optimiser did not converge on most sampled
-    frames, or whose rig siblings (same make, model and image size) got focals more than
-    RIG_SPREAD apart."""
-    reasons = {}
-    for folder, d in docs.items():
-        n = len(d.get("sample_frames", []))
-        if (
-            d.get("source", "geocalib") == "geocalib"
-            and n
-            and d.get("sample_not_converged", 0) > n / 2
-        ):
-            reasons.setdefault(folder, []).append(
-                f"no convergence on {d['sample_not_converged']}/{n} sampled frames"
+        if d["gravity_source"]:
+            roll = np.median([v["roll_deg"] for v in d["frames"].values()])
+            how = (
+                f"gravity for {len(files)} frames ({d['gravity_estimated']} with their own "
+                f"rotation, roll median {roll:+.1f} deg)"
             )
-    rigs = {}
-    for folder, d in docs.items():
-        f0 = next(iter(p.frames(folder).values()))
-        rigs.setdefault(
-            (f0.get("make"), f0.get("model"), d["width"], d["height"]), []
-        ).append(folder)
-    for (make, model, *_), folders in rigs.items():
-        focals = [docs[f]["focal_norm"] for f in folders]
-        if len(folders) > 1 and max(focals) / min(focals) - 1 > RIG_SPREAD:
-            for f in folders:
-                reasons.setdefault(f, []).append(
-                    f"{len(folders)} {make} {model} rig cameras got focals "
-                    f"{min(focals):.2f}-{max(focals):.2f}"
-                )
-    for folder, why in reasons.items():
-        print(f"{folder}: WARNING: {UNRELIABLE} ({'; '.join(why)})")
+        else:
+            how = (
+                "WARNING: no Mapillary rotations, so no gravity: reconstructed without gravity "
+                "priors and levelled from the road"
+            )
+        print(f"{folder}: {what}; {how}")
+    return docs
 
 
 def main():
@@ -389,41 +263,9 @@ def main():
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("roi_dir", type=Path)
-    parser.add_argument(
-        "--sample", type=int, default=10, help="Frames used for the focal and k1"
-    )
-    parser.add_argument("--work-size", type=int, default=640)
-    parser.add_argument("--device", help="mps or cpu (default: mps if available)")
     parser.add_argument("--force", action="store_true")
-    parser.add_argument(
-        "--calibration",
-        choices=["geocalib", "mapillary"],
-        default="geocalib",
-        help="Focal and distortion from GeoCalib (default) or Mapillary; gravity from GeoCalib either way",
-    )
-    parser.add_argument(
-        "--gravity-every",
-        type=int,
-        default=5,
-        help="Estimate gravity on every n-th frame and interpolate between (1: every frame)",
-    )
-    parser.add_argument(
-        "--gravity-refill",
-        type=float,
-        default=4.0,
-        help="Also estimate the frames between two estimates further apart than this (deg)",
-    )
     args = parser.parse_args()
-    calibrate_roi(
-        args.roi_dir,
-        args.sample,
-        args.work_size,
-        args.force,
-        args.device,
-        args.calibration,
-        args.gravity_every,
-        args.gravity_refill,
-    )
+    calibrate_roi(args.roi_dir, args.force)
 
 
 if __name__ == "__main__":

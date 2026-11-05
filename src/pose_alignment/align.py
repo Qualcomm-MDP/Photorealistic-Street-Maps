@@ -1,9 +1,11 @@
 """Stage 6 (align): ground-plane projection and alignment to the OpenStreetMap footprints.
 
 Per leg and sequence model:
-  1. Level with GeoCalib's gravity: each camera's down direction (GeoCalib, camera frame) turned
-     into the model's frame by that camera's rotation; their robust mean is the model's down.
-     Plan view: x right of travel, y along it, z up.
+  1. Level with the calibration's gravity (Mapillary's rotations, calibrate.py): each camera's
+     down direction (camera frame) turned into the model's frame by that camera's rotation; their
+     robust mean is the model's down. A sequence without gravity is levelled from the plane of
+     its road points instead, or, with too few of those, from its cameras' own down axes (a
+     vehicle's cameras ride about level). Plan view: x right of travel, y along it, z up.
   2. Ground plane: the median height of the road points (segmentation) near the camera path.
   3. Building points: points labelled Building in most of their observations, seen in 3+
      frames, 2.5-40 m above the ground, thinned to one per 0.5 m cell in plan view.
@@ -94,6 +96,7 @@ OPT = {
 
 
 _LABELS = {}
+ROAD_MIN = 30  # road points needed to level a model from the road plane
 
 
 def labels(model, mask_dir, value):
@@ -110,17 +113,14 @@ def labels(model, mask_dir, value):
     return _LABELS[key]
 
 
-def level_with_gravity(names, C, R, gc):
-    """(origin, basis rows [right, forward, up], gravity spread deg) from GeoCalib's per-frame
-    gravity. R: world-from-camera rotations."""
-    d = np.array(
-        [R[i] @ -np.asarray(gc["frames"][n]["up_cam"]) for i, n in enumerate(names)]
-    )
-    keep = np.ones(len(d), bool)
+def _level(down, C):
+    """(origin, basis rows [right, forward, up], spread deg, outliers) from down directions in the
+    model frame (robust mean, 3 rounds dropping those over 3x the median angle and 2 deg)."""
+    keep = np.ones(len(down), bool)
     for _ in range(3):
-        m = d[keep].mean(axis=0)
+        m = down[keep].mean(axis=0)
         m /= np.linalg.norm(m)
-        ang = np.degrees(np.arccos(np.clip(d @ m, -1, 1)))
+        ang = np.degrees(np.arccos(np.clip(down @ m, -1, 1)))
         keep = ang < max(3 * np.median(ang), 2.0)
     up = -m
     fwd = C[-1] - C[0]
@@ -128,6 +128,56 @@ def level_with_gravity(names, C, R, gc):
     fwd /= np.linalg.norm(fwd)
     right = np.cross(fwd, up)
     return C[0], np.stack([right, fwd, up]), float(np.median(ang)), int((~keep).sum())
+
+
+def level_with_gravity(names, C, R, gc):
+    """(origin, basis rows [right, forward, up], gravity spread deg, outliers) from the
+    calibration's per-frame gravity, on the cameras it has. R: world-from-camera rotations."""
+    have = [i for i, n in enumerate(names) if n in gc["frames"]]
+    down = np.array(
+        [R[i] @ -np.asarray(gc["frames"][names[i]]["up_cam"]) for i in have]
+    )
+    return _level(down, C)
+
+
+def level_from_road(C, xyz, road):
+    """(origin, basis, None, 0) from the plane of the road points near the camera path (within
+    10x the median camera spacing), or None with fewer than ROAD_MIN of them. The plane is fitted
+    twice, the second time without the points over 2x the median distance from the first."""
+    spacing = float(np.median(np.linalg.norm(np.diff(C, axis=0), axis=1))) or 1.0
+    near = (
+        np.min(np.linalg.norm(xyz[:, None] - C[None, ::3], axis=2), axis=1)
+        < 10 * spacing
+    )
+    pts = xyz[road & near]
+    if len(pts) < ROAD_MIN:
+        return None
+    for _ in range(2):
+        centre = pts.mean(axis=0)
+        normal = np.linalg.svd(pts - centre)[2][2]
+        dist = np.abs((pts - centre) @ normal)
+        pts = pts[dist <= max(2 * np.median(dist), 1e-9)]
+    if (
+        normal @ (C.mean(axis=0) - centre) < 0
+    ):  # up points from the road towards the cameras
+        normal = -normal
+    return _level(np.array([-normal]), C)[:2] + (None, 0)
+
+
+def level_camera(names, C, R, gc, xyz, road):
+    """The levelling for one sequence's model: (origin, basis, spread deg or None, outliers,
+    what it came from). The calibration's gravity when it covers 3+ cameras; else the road
+    plane; else the cameras' own down axes."""
+    if sum(n in gc["frames"] for n in names) >= 3:
+        return (*level_with_gravity(names, C, R, gc), "Mapillary gravity")
+    road_level = level_from_road(C, xyz, road)
+    if road_level is not None:
+        return (*road_level, f"road plane ({int(road.sum())} road points; no gravity)")
+    return (*_level(R[:, :, 1], C), "cameras' down axes (no gravity, few road points)")
+
+
+def spread_text(spread):
+    return "n/a" if spread is None else f"{spread:.1f} deg"
 
 
 def heading_pitch_roll(R_enu):
@@ -343,10 +393,12 @@ def align_camera(
     gc = json.loads(p.calibration_json(folder).read_text())
     model = p.reconstruction / cam["model"]
     names, C, R = load_cameras(model)
-    origin, basis, g_spread, g_out = level_with_gravity(names, C, R, gc)
+    xyz, rgb, track = load_points(model)
+    masks = p.masks / folder
+    road, _ = labels(model, masks, MASK_ROAD)
+    origin, basis, g_spread, g_out, level_src = level_camera(names, C, R, gc, xyz, road)
     if shared:
         origin, basis = shared["origin"], shared["basis"]
-    xyz, rgb, track = load_points(model)
     L = (xyz - origin) @ basis.T
     Lc = (C - origin) @ basis.T
 
@@ -360,8 +412,6 @@ def align_camera(
     s_gps = similarity_2d(Lc[:, :2], gps)[0]
 
     # ground plane from the road points near the path
-    masks = p.masks / folder
-    road, _ = labels(model, masks, MASK_ROAD)
     near = (
         np.min(np.linalg.norm(L[:, None, :2] - Lc[None, ::3, :2], axis=2), axis=1)
         * s_gps
@@ -563,7 +613,11 @@ def align_camera(
         "folder": folder,
         "registered": len(names),
         "frames": cam["frames"],
-        "gravity": {"spread_median_deg": g_spread, "outlier_cameras": g_out},
+        "gravity": {
+            "levelling": level_src,
+            "spread_median_deg": g_spread,
+            "outlier_cameras": g_out,
+        },
         "ground": ground_src,
         "camera_height_m": cam_height,
         "building_points": int(len(bpts)),
@@ -674,8 +728,8 @@ def align_camera(
         ax.set_title(title, fontsize=9, loc="left")
         ax.legend(fontsize=7, loc="lower right")
     fig.suptitle(
-        f"{p.name} {leg['id']}/{folder}: {len(names)} cameras, GeoCalib gravity levelling "
-        f"(spread {g_spread:.1f} deg), camera height {cam_height:.2f} m, "
+        f"{p.name} {leg['id']}/{folder}: {len(names)} cameras, levelled from {level_src} "
+        f"(spread {spread_text(g_spread)}), camera height {cam_height:.2f} m, "
         f"{'reliable' if reliable else 'UNRELIABLE'}",
         fontsize=10,
         x=0.01,
@@ -1135,7 +1189,7 @@ def align_roi(roi_dir, max_error=2.0, tag=None, link=True):
                     f"{res['building_points']} building points: {ptf['mapillary_only']:.2f} -> {ptf['aligned']:.2f} m "
                     f"({100 * res['points_to_footprint_within_1m']:.0f}% within 1 m), scale x{res['scale_vs_mapillary']:.2f}, "
                     f"heading {res['heading_change_deg']:+.1f} deg, camera height {res['camera_height_m']:.2f} m, "
-                    f"gravity spread {res['gravity']['spread_median_deg']:.1f} deg"
+                    f"gravity spread {spread_text(res['gravity']['spread_median_deg'])}"
                     + (
                         f", {len(res['cameras_out_of_order'])} cameras behind earlier ones "
                         f"({', '.join(n[6:10] for n in res['cameras_out_of_order'])})"

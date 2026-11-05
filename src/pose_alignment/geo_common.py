@@ -217,8 +217,8 @@ class RoiPaths:
         mapillary/        roi.json, sequences.json, one folder per sequence
                           (frame_0001.jpg ... and cameras.json)
         masks/            segmentation masks, one folder per sequence
-        calibration/      GeoCalib's calibration and per-frame gravity, <sequence folder>.json
-        calibration_mapillary/  the same with Mapillary's focal and distortion (--calibration mapillary)
+        calibration/      each sequence's calibration and per-frame gravity (calibrate.py),
+                          <sequence folder>.json
         reconstruction/   COLMAP work folders and models per leg and sequence, legs.json
         alignment/        aligned cameras per sequence (<sequence folder>.json), summary.json
                           and per-leg fit data
@@ -226,10 +226,9 @@ class RoiPaths:
 
     tag="t" points the reconstruction, alignment and results at a separate run
     (data/reconstruction_t, data/alignment_t, results/t), so it never overwrites the main one;
-    the calibration is shared. calibration="geocalib" or "mapillary" picks the calibration folder;
-    left out, it is the one the run's reconstruction used (legs.json), else GeoCalib's."""
+    the calibration is shared."""
 
-    def __init__(self, roi_dir, tag=None, calibration=None):
+    def __init__(self, roi_dir, tag=None):
         root = Path(roi_dir).resolve()
         # Accept a subfolder too (e.g. .../mapillary_roi_1/data or its data/mapillary).
         for _ in range(2):
@@ -256,14 +255,7 @@ class RoiPaths:
         self.sequences_json = self.images / "sequences.json"
         self.legs_json = self.reconstruction / "legs.json"
         self.summary_json = self.alignment / "summary.json"
-        if calibration is None and self.legs_json.exists():
-            calibration = json.loads(self.legs_json.read_text()).get("calibration")
-        self.calibration_source = calibration or "geocalib"
-        self.calibration = self.data / (
-            "calibration"
-            if self.calibration_source == "geocalib"
-            else f"calibration_{self.calibration_source}"
-        )
+        self.calibration = self.data / "calibration"
 
     def calibration_json(self, folder):
         """The calibration of one sequence (shared by every tagged run)."""

@@ -1,4 +1,4 @@
-"""Pose alignment logic that runs without COLMAP, GeoCalib or LightGlue."""
+"""Pose alignment logic that runs without COLMAP or LightGlue."""
 
 import json
 import sqlite3

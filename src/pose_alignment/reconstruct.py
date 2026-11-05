@@ -1,5 +1,5 @@
 """Stage 5 (reconstruct): camera poses and sparse points with ALIKED features and COLMAP 4.2.1's
-global mapper (GLOMAP), using GeoCalib's calibration and gravity.
+global mapper (GLOMAP), using Mapillary's calibration and gravity (calibrate.py).
 
 Legs: the primary sequence of each drawn line is split at turns sharper than --max-turn (its
 frames heading within --trim-deg of the leg kept) and into chunks of at most --max-frames; each
@@ -17,22 +17,22 @@ on 60 false matches of the centre lines; cutting them took the side cameras' bow
 Per leg and sequence:
   1. Frames hard-linked into the work folder; feature masks for the burned-in overlay and for sky,
      vehicles and people from the segmentation.
-  2. Camera (camera_setup): one per sequence from GeoCalib's focal, principal point at the
-     centre; RADIAL_FISHEYE for strongly distorted lenses, RADIAL otherwise. A warning when
-     Mapillary's focal differs by more than 10%. With --calibration mapillary: RADIAL from
-     Mapillary's focal, k1 and k2 (calibrate.py --calibration mapillary first). Crops of a 360
-     camera: their exact focal, no distortion, held fixed (nothing for bundle adjustment to refine).
+  2. Camera (camera_setup): one per sequence, RADIAL from the calibration's focal, k1 and k2
+     (Mapillary's, checked against the ROI's other sequences of the same camera; see
+     calibrate.py), principal point at the centre. Crops of a 360 camera: their exact focal, no
+     distortion, held fixed (nothing for bundle adjustment to refine).
   3. ALIKED keypoints, matched between each frame and its next 10, imported into COLMAP. Frames
      under 6 m apart (median, Mapillary positions): mutual nearest neighbour of the descriptors
      (nn_features.py, seconds per leg); further apart: LightGlue (~15x slower, but it holds the
      larger changes between neighbouring frames). --matcher nn|lightglue forces one.
-  4. Gravity priors: GeoCalib's per-frame gravity in the database's pose_priors table (no
-     position: GPS is not used here). COLMAP expects the gravity as the downward direction in the
+  4. Gravity priors: the calibration's per-frame gravity (Mapillary's rotations) in the
+     database's pose_priors table (no position: GPS is not used here). A sequence without
+     Mapillary rotations has no priors, and the global mapper runs without gravity for it. COLMAP expects the gravity as the downward direction in the
      camera frame (-up_cam) and aligns the model's +y axis with it: checked on roi_2, where the
      cameras' world "down" came out (0, 1, 0) with the down vector, (0, -1, 0) with the up vector
      given instead, and in an arbitrary direction without priors.
   5. colmap global_mapper (GLOMAP) with gravity-aided rotation averaging (GlobalMapper.ra_use_gravity);
-     bundle adjustment refines the focal and distortion from GeoCalib's start; then
+     bundle adjustment refines the focal and distortion from the calibration's start; then
      point_triangulator re-triangulates every match with the poses fixed and relaxed
      triangulation settings (more road and building points). Fallback: if any camera lies behind
      an earlier one along the leg (GLOMAP turned a few cameras wrongly and slid a stretch back),
@@ -118,10 +118,12 @@ SHARED_FOCAL_TOL = 0.01  # a leg camera whose own refined focal is this close to
 # few matches between neighbours and the reconstruction becomes unstable (bends, lost frames)
 NN_MAX_SPACING = 6.0  # metres between frames
 WEAK_RATIO = 0.35  # frames under this x the leg's median 3D observations are dropped
-CALIBRATION_NAMES = {"mapillary": "Mapillary", "pano": "the 360 crop (exact, fixed)"}
-DISAGREE = (
-    0.10  # warn when Mapillary's and GeoCalib's focals are further apart than this
-)
+CALIBRATION_NAMES = {
+    "mapillary": "Mapillary",
+    "mapillary_median": "Mapillary (this camera's median)",
+    "default": "a default focal (no Mapillary calibration)",
+    "pano": "the 360 crop (exact, fixed)",
+}
 
 
 # ----------------------------------------------------------------------------- legs
@@ -254,72 +256,33 @@ def plan_legs(p, sequences, frames, settings):
 # ----------------------------------------------------------------------------- camera
 
 
-def camera_setup(p, folder, k1_limit=-0.2, focal=None):
-    """(COLMAP camera model, params, description) for a sequence, from GeoCalib's median focal:
-    RADIAL_FISHEYE (f, k1, k2 on the angle from the axis, starting undistorted) for a strongly
-    distorted lens (GeoCalib k1 below k1_limit, e.g. wide action cameras), RADIAL (f, k1, k2,
-    starting from GeoCalib's k1) otherwise. Bundle adjustment refines it. On roi_11's wide
-    motorcycle camera the refined fisheye model kept the scale of a leg's second half at 0.93 of
-    its first, RADIAL at 0.80-0.84.
-    Mapillary's focal is recorded for comparison only: starting smartphones from it (roi_2, 4, 5,
-    7, 8, 9) changed nothing where frames are close and did not steady widely spaced ones (roi_9
-    collapsed), and it is sometimes far off (roi_15: 1.338).
-    A Mapillary calibration (calibrate.py --calibration mapillary) starts RADIAL from Mapillary's
-    focal, k1 and k2 instead: for lenses too wide for GeoCalib (roi_21's 2017 Roush rig: GeoCalib
-    did not converge and gave its six identical cameras focals of 0.42-0.65, Mapillary 0.48)."""
+def camera_setup(p, folder, focal=None):
+    """(COLMAP camera model, params, description) for a sequence, from its calibration
+    (calibrate.py): RADIAL (f, cx, cy, k1, k2) from the calibration's focal, k1 and k2, for bundle
+    adjustment to refine. focal: a fraction of the long side overriding the calibration's.
+    A 360 crop is an exact pinhole (RADIAL with no distortion; reconstruct holds it fixed).
+    Mapillary's focal was only a comparison while GeoCalib calibrated (an earlier version):
+    starting smartphones from it (roi_2, 4, 5, 7, 8, 9) changed nothing where frames are close
+    and did not steady widely spaced ones (roi_9 collapsed), and it is sometimes far off
+    (roi_15: 1.338), which calibrate.py's same-camera check now catches."""
     gc = json.loads(p.calibration_json(folder).read_text())
     w, h = gc["width"], gc["height"]
-    make, mly = mapillary_calibration(p, folder)
-    if (
-        gc.get("source") == "pano"
-    ):  # a 360 crop: an exact pinhole (RADIAL with no distortion, so every reader takes it)
-        params = [gc["focal_px"], w / 2, h / 2, 0.0, 0.0]
-        return (
-            "RADIAL",
-            params,
-            {
-                "source": "pano",
-                "model": "RADIAL",
-                "params": params,
-                "make": make,
-                "pano_focal_norm": gc["focal_norm"],
-                "focal_disagreement": None,
-            },
-        )
-    if gc.get("source") == "mapillary":
-        params = [gc["focal_px"], w / 2, h / 2, gc["k1"], gc["k2"]]
-        return (
-            "RADIAL",
-            params,
-            {
-                "source": "mapillary",
-                "model": "RADIAL",
-                "params": params,
-                "make": make,
-                "mapillary_focal_norm": gc["focal_norm"],
-                "focal_disagreement": None,
-            },
-        )
-    fisheye = gc["k1"] < k1_limit
-    model = "RADIAL_FISHEYE" if fisheye else "RADIAL"
-    f_px = (
-        focal * max(w, h) if focal else gc["focal_px"]
-    )  # focal: fraction of the long side, overriding GeoCalib's
-    params = [f_px, w / 2, h / 2, 0.0 if fisheye else gc["k1"], 0.0]
+    make, _ = mapillary_calibration(p, folder)
+    pano = gc.get("source") == "pano"
+    f_px = focal * max(w, h) if focal and not pano else gc["focal_px"]
+    k1, k2 = (0.0, 0.0) if pano else (gc.get("k1") or 0.0, gc.get("k2") or 0.0)
+    params = [f_px, w / 2, h / 2, k1, k2]
     info = {
-        "source": "geocalib" if not focal else "geocalib, focal set to %.3f" % focal,
-        "model": model,
+        "source": gc.get("source")
+        if not focal or pano
+        else f"{gc.get('source')}, focal set to {focal:.3f}",
+        "model": "RADIAL",
         "params": params,
         "make": make,
-        "geocalib_focal_norm": gc["focal_norm"],
-        "geocalib_k1": gc["k1"],
-        "mapillary_focal_norm": mly[0] if mly else None,
-        "focal_disagreement": (
-            gc["focal_norm"] and mly and mly[0] / gc["focal_norm"] - 1
-        )
-        or None,
+        "focal_norm": gc["focal_norm"],
+        "correction": gc.get("correction"),
     }
-    return model, params, info
+    return "RADIAL", params, info
 
 
 # ----------------------------------------------------------------------------- COLMAP
@@ -631,18 +594,8 @@ def reconstruct_camera(
 
     gc = json.loads(p.calibration_json(folder).read_text())
     cmodel, cparams, cinfo = camera_setup(p, folder, focal=focal)
-    if (
-        not reuse
-        and stage != "solve"
-        and cinfo.get("focal_disagreement") is not None
-        and abs(cinfo["focal_disagreement"]) > DISAGREE
-    ):
-        print(
-            f"{log_prefix}: WARNING: GeoCalib's focal {cinfo['geocalib_focal_norm']:.3f} and Mapillary's "
-            f"{cinfo['mapillary_focal_norm']:.3f} (of the long side) differ by "
-            f"{100 * cinfo['focal_disagreement']:+.0f}%; starting from GeoCalib's",
-            flush=True,
-        )
+    if not reuse and stage != "solve" and cinfo.get("correction"):
+        print(f"{log_prefix}: focal replaced: {cinfo['correction']}", flush=True)
     spacing = frame_spacing(p, folder, cam["frame_files"])
     if matcher == "auto":
         matcher = "nn" if spacing < NN_MAX_SPACING else "lightglue"
@@ -659,7 +612,7 @@ def reconstruct_camera(
         if stage != "solve":
             print(
                 f"{log_prefix}: {cam['frames']} frames {spacing:.1f} m apart, ALIKED + {MATCHERS[matcher]}, "
-                f"{cmodel} from {CALIBRATION_NAMES.get(cinfo['source'], 'GeoCalib')}, {mapper} mapper",
+                f"{cmodel} from {CALIBRATION_NAMES.get(cinfo['source'], cinfo['source'])}, {mapper} mapper",
                 flush=True,
             )
         params = ",".join(f"{v:.8g}" for v in cparams)
@@ -745,7 +698,7 @@ def reconstruct_camera(
                 "--output_path",
                 sparse,
                 "--GlobalMapper.ra_use_gravity",
-                1,
+                int(n_priors > 0),  # no priors: a sequence without Mapillary rotations
                 "--GlobalMapper.random_seed",
                 SEED["value"],
                 "--GlobalMapper.ba_refine_focal_length",
@@ -1412,7 +1365,7 @@ def reconstruct_rig(
                 "--output_path",
                 sparse,
                 "--GlobalMapper.ra_use_gravity",
-                1,
+                int(n_priors > 0),  # no priors: a sequence without Mapillary rotations
                 "--GlobalMapper.random_seed",
                 SEED["value"],
                 "--GlobalMapper.ba_refine_focal_length",
@@ -1683,7 +1636,6 @@ def reconstruct_roi(
     matcher="auto",
     split_weak=False,
     mapper="global",
-    calibration="geocalib",
     refine="all",
     focal=None,
     gap_factor=3.0,
@@ -1699,14 +1651,13 @@ def reconstruct_roi(
     camera has one focal; solved per leg, the focal of a forward-looking leg is weakly held and
     drifts, which stretches that leg along the street (roi_27: 0.84 -> fit 0.89 m, 0.81 -> 0.59 m)."""
     t_start, run_secs = time.time(), {}
-    p = RoiPaths(roi_dir, tag, calibration)
+    p = RoiPaths(roi_dir, tag)
     sequences = p.sequences()
     frames = {s["folder"]: p.frames(s["folder"]) for s in sequences}
     for s in sequences:
         if not p.calibration_json(s["folder"]).exists():
             raise SystemExit(
-                f"No {calibration} calibration for {s['folder']}: run the calibrate stage first"
-                f"{' with --calibration mapillary' if calibration == 'mapillary' else ''}"
+                f"No calibration for {s['folder']}: run the calibrate stage first"
             )
     settings = {
         "max_turn": max_turn,
@@ -1722,7 +1673,8 @@ def reconstruct_roi(
     doc = {
         "pipeline": "Alignment_Pipeline",
         "settings": settings,
-        "calibration": calibration,
+        "calibration": "mapillary",
+        "gravity": "mapillary",
         "features": "aliked",
         "mapper": mapper,
         "refine_intrinsics": refine,
@@ -2001,7 +1953,7 @@ def main():
     )
     parser.add_argument(
         "--tag",
-        help="Separate run: data/reconstruction_<tag> etc. (GeoCalib's calibration is shared)",
+        help="Separate run: data/reconstruction_<tag> etc. (the calibration is shared)",
     )
     parser.add_argument(
         "--mapper",
@@ -2022,12 +1974,6 @@ def main():
         help=f"auto (default): nn for frames under {NN_MAX_SPACING:g} m apart, lightglue otherwise",
     )
     parser.add_argument(
-        "--calibration",
-        choices=["geocalib", "mapillary"],
-        default="geocalib",
-        help="Start the camera from GeoCalib's calibration (default) or Mapillary's",
-    )
-    parser.add_argument(
         "--fix-intrinsics",
         action="store_true",
         help="Keep the calibration's focal and distortion fixed (bundle adjustment refines them by default)",
@@ -2042,7 +1988,7 @@ def main():
         "--focal",
         type=float,
         help="Start (or with --fix-focal hold) the focal at this fraction of the image's long side "
-        "instead of GeoCalib's, e.g. a camera's value from other reconstructions",
+        "instead of the calibration's, e.g. a camera's value from other reconstructions",
     )
     args = parser.parse_args()
     SEED["value"] = args.seed
@@ -2067,7 +2013,6 @@ def main():
         matcher=args.matcher,
         split_weak=args.split_weak,
         mapper=args.mapper,
-        calibration=args.calibration,
         focal=args.focal,
         gap_factor=args.gap_factor,
         rig=not args.solo_cameras,

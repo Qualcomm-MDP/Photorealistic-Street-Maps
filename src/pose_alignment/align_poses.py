@@ -72,7 +72,7 @@ def _run_alignment(
     without it they are chosen here from images, the fetch stage's Mapillary records (or
     from a query). The photos are downloaded at full resolution into
     the ROI's image store, for texturing to reuse. Every stage from the download on runs in
-    its own process (run_pipeline.py), as when the pipeline runs on its own: GeoCalib,
+    its own process (run_pipeline.py), as when the pipeline runs on its own: LightGlue,
     PyTorch, OpenCV's threaded image work and COLMAP each bring their own runtimes, which can
     clash in this process (cutting 360 frames here crashed it)."""
     from .geo_common import module_command, next_roi_dir

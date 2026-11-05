@@ -5,8 +5,9 @@ Stages, in order (each is also its own script):
   mapillary     data_ingest/mapillary_sequences.py   best Mapillary run + rig siblings -> data/mapillary/
                                         (a 360 run: right and left pinhole crops, as a two-camera rig)
   segmentation  segmentation/street_masks.py   Mask2Former building/road masks -> data/masks/
-  calibrate     calibrate.py            GeoCalib focal, distortion and per-frame gravity -> data/calibration/
-                                        (--calibration mapillary: Mapillary's -> data/calibration_mapillary/)
+  calibrate     calibrate.py            Mapillary's focal and distortion (checked against the ROI's other
+                                        sequences of the same camera) and per-frame gravity from Mapillary's
+                                        rotations -> data/calibration/
   reconstruct   reconstruct.py          ALIKED + nearest-neighbour or LightGlue matching, COLMAP global
                                         mapper with gravity priors, per leg -> data/reconstruction/
   align         align.py                building points fitted to the OSM footprints; aligned cameras
@@ -27,7 +28,6 @@ Usage:
   python -m pose_alignment.run_pipeline --roi outputs/alignment/routes/my_route.json             # skip the GUI
   python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_19        # resume where it stopped
   python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_19 --from reconstruct --one-leg
-  python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_21 --calibration mapillary --tag mly    # wide rig lenses
   python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_19 --from reconstruct --tag test   # separate run
   python -m pose_alignment.run_pipeline --view right --to segmentation
 """
@@ -54,13 +54,18 @@ def stage_done(paths):
         for s in json.loads(paths.sequences_json.read_text())
     )
     done["segmentation"] = done["mapillary"] and not missing_masks(paths)
+    from .calibrate import is_current
+
     done["calibrate"] = done["mapillary"] and all(
-        paths.calibration_json(s["folder"]).exists() for s in paths.sequences()
+        paths.calibration_json(s["folder"]).exists()
+        and is_current(json.loads(paths.calibration_json(s["folder"]).read_text()))
+        for s in paths.sequences()
     )
     doc = json.loads(paths.legs_json.read_text()) if paths.legs_json.exists() else {}
+    # reconstructions from the GeoCalib version (other calibration, GeoCalib's gravity) are redone
     legs = (
         doc.get("legs", [])
-        if doc.get("calibration", "geocalib") == paths.calibration_source
+        if doc.get("calibration") == "mapillary" and doc.get("gravity") == "mapillary"
         else []
     )
     done["reconstruct"] = bool(legs) and all(
@@ -108,7 +113,7 @@ def report_timings(paths, timings, parts):
 
 
 def run_script(script, *args):
-    """A stage in its own process (GeoCalib, PyTorch and COLMAP each bring their own libraries)."""
+    """A stage in its own process (PyTorch, LightGlue and COLMAP each bring their own libraries)."""
     cmd, env = module_command(script, *args)
     r = subprocess.run(cmd, env=env)
     if r.returncode:
@@ -236,20 +241,6 @@ def main():
         "--previews", action="store_true", help="Also save colour mask overlays"
     )
     g.add_argument("--device", help="mps, cuda or cpu (default: best available)")
-    g = parser.add_argument_group("calibrate stage")
-    g.add_argument(
-        "--calibration",
-        choices=["geocalib", "mapillary"],
-        default="geocalib",
-        help="Focal and distortion from GeoCalib (default) or from Mapillary (data/calibration_mapillary/), "
-        "for lenses GeoCalib warns about; gravity from GeoCalib either way",
-    )
-    g.add_argument(
-        "--gravity-every",
-        type=int,
-        default=5,
-        help="Estimate gravity on every n-th frame and interpolate between (1: every frame)",
-    )
     g = parser.add_argument_group("reconstruct stage")
     g.add_argument(
         "--fix-intrinsics",
@@ -264,7 +255,7 @@ def main():
     g.add_argument(
         "--focal",
         type=float,
-        help="Focal as a fraction of the long side, instead of GeoCalib's",
+        help="Focal as a fraction of the long side, instead of the calibration's",
     )
     g.add_argument(
         "--max-turn",
@@ -352,7 +343,7 @@ def main():
         args.max_turn, args.trim_deg, args.max_frames = 180.0, 180.0, 1000
 
     # Where to start.
-    paths = RoiPaths(args.roi_dir, args.tag, args.calibration) if args.roi_dir else None
+    paths = RoiPaths(args.roi_dir, args.tag) if args.roi_dir else None
     if paths and not paths.root.exists():
         raise SystemExit(f"{paths.root} does not exist")
     start = args.start
@@ -448,7 +439,7 @@ def main():
                 keep_originals=args.keep_originals,
                 one_run=args.one_run,
             )
-        paths = RoiPaths(roi_dir, args.tag, args.calibration)
+        paths = RoiPaths(roi_dir, args.tag)
         timings["mapillary"] = time.time() - t0
         from data_ingest.mapillary_sequences import TIMINGS
 
@@ -476,25 +467,9 @@ def main():
         run_script(
             "calibrate.py",
             paths.root,
-            "--calibration",
-            args.calibration,
-            "--gravity-every",
-            args.gravity_every,
             *(["--force"] if args.force else []),
         )
         timings["calibrate"] = time.time() - t0
-        fresh = [
-            json.loads(f.read_text())
-            for f in paths.calibration.glob("*.json")
-            if f.stat().st_mtime >= t0
-        ]
-        if fresh:
-            parts["calibrate"] = {
-                "focal and distortion (sampled frames)": sum(
-                    d["seconds"]["calibration"] for d in fresh
-                ),
-                "gravity, every frame": sum(d["seconds"]["gravity"] for d in fresh),
-            }
     if "reconstruct" in run:
         t0 = time.time()
         run_script(
@@ -518,8 +493,6 @@ def main():
             *(["--no-shared-focal"] if args.no_shared_focal else []),
             "--mapper",
             args.mapper,
-            "--calibration",
-            args.calibration,
             *tag,
             *(["--fix-intrinsics"] if args.fix_intrinsics else []),
             *(["--fix-focal"] if args.fix_focal else []),

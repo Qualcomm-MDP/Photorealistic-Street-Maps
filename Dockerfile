@@ -15,7 +15,7 @@ ARG TORCH_VARIANT=cpu
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# git: GeoCalib and LightGlue are installed from their repositories
+# git: LightGlue is installed from its repository
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*

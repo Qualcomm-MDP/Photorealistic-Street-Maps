@@ -17,8 +17,8 @@ before texturing. Until it is merged into `main`, it lives on the
 client access token ([developer dashboard](https://www.mapillary.com/dashboard/developers)),
 and, for aligned poses, [COLMAP](https://colmap.github.io/install.html) 4.2 or newer.
 
-1. Get the branch and install the Python packages (GeoCalib and LightGlue are installed from
-    their GitHub repositories, so git must be available):
+1. Get the branch and install the Python packages (LightGlue is installed from its GitHub
+    repository, so git must be available):
 
     ```
     git clone https://github.com/Qualcomm-MDP/PSM.git
@@ -28,8 +28,8 @@ and, for aligned poses, [COLMAP](https://colmap.github.io/install.html) 4.2 or n
     poetry install
     ```
 
-    The first run also downloads model weights (Mask2Former, about 900 MB; LaMa; GeoCalib;
-    ALIKED and LightGlue) into your Hugging Face and PyTorch caches.
+    The first run also downloads model weights (Mask2Former, about 900 MB; LaMa; ALIKED
+    and LightGlue) into your Hugging Face and PyTorch caches.
 
 2. Install COLMAP 4.2+:
 
@@ -85,7 +85,7 @@ and, for aligned poses, [COLMAP](https://colmap.github.io/install.html) 4.2 or n
 then picks the captures to use: along each OSM street, the densest run that covers it (a
 360 camera first, as its right and left views both face the facades, then cameras facing
 the side of the street), and further runs where that one ends. With aligned poses, those
-photos are downloaded, segmented, calibrated (GeoCalib), reconstructed (COLMAP) and fitted
+photos are downloaded, segmented, calibrated (Mapillary's focal and gravity), reconstructed (COLMAP) and fitted
 to the OSM building outlines, in `outputs/alignment/mapillary_roi_N/` (figures in its
 `results/`). The buildings are extruded from OSM, every wall is textured by blending all
 the photos that see it, and the model is saved as a `.glb`, with `<model>.overlays.json`
@@ -103,7 +103,7 @@ The full pipeline has been run end to end on macOS; on Windows and Linux the tes
 runs on every push, but a full run has not been tried yet.
 
 **Time and hardware.** A few blocks (300-450 frames) take about 10-15 minutes on an Apple
-silicon laptop, most of it the alignment. The alignment's segmentation, GeoCalib and
+silicon laptop, most of it the alignment. The alignment's segmentation and
 feature matching use the Apple GPU (or an NVIDIA GPU, with CUDA); COLMAP runs on the CPU
 with Homebrew's build, and texturing's obstruction removal uses an NVIDIA GPU if there is
 one, else the CPU.

@@ -231,12 +231,10 @@ def plot_leg(p, folder_dir, buildings):
         ]
         mapper = (used and used[0]) or doc.get("mapper", "global")
     pano = p.pano(folder)
-    calib = (
-        f"360 {pano['side']} crop"
-        if pano
-        else "Mapillary calibration"
-        if p.calibration_source == "mapillary"
-        else "GeoCalib"
+    calib = (f"360 {pano['side']} crop" if pano else "Mapillary calibration") + (
+        f", levelled from {stats['gravity']['levelling']}"
+        if stats.get("gravity", {}).get("levelling")
+        else ""
     )
     fig.suptitle(
         f"{p.name} {stats['leg']}/{folder}: {calib} + ALIKED + "

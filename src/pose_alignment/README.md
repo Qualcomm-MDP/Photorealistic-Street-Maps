@@ -2,7 +2,7 @@
 
 Places Mapillary street-view cameras, and a sparse point cloud of the street, on
 OpenStreetMap. You draw the streets on a map; the pipeline fetches the imagery, segments
-buildings and roads, calibrates the camera with GeoCalib, reconstructs each stretch with
+buildings and roads, takes each camera's calibration and gravity from Mapillary, reconstructs each stretch with
 COLMAP, and fits the reconstructed building points onto the OSM building footprints. GPS is
 used only as a starting point.
 
@@ -11,20 +11,21 @@ reliable leg typically sit 0.5–1 m (median) from the OSM footprint edges.
 
 ## Stages
 
-| #   | Stage        | Script                               | Output (in the ROI folder)                                                                                                              |
-| --- | ------------ | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | gui          | `route_gui.py`                       | the drawn route (`outputs/alignment/routes/*.json`)                                                                                     |
-| 2   | mapillary    | `data_ingest/mapillary_sequences.py` | `data/mapillary/`: frames and `cameras.json` per sequence, `roi.json`, `sequences.json`                                                 |
-| 3   | segmentation | `segmentation/street_masks.py`       | `data/masks/`: building/road/sky-and-moving mask per frame                                                                              |
-| 4   | calibrate    | `calibrate.py`                       | `data/calibration/<sequence>.json`: focal, distortion, per-frame gravity (`data/calibration_mapillary/` with `--calibration mapillary`) |
-| 5   | reconstruct  | `reconstruct.py`                     | `data/reconstruction/`: COLMAP model per leg and sequence, `legs.json`                                                                  |
-| 6   | align        | `align.py`                           | `data/alignment/`: aligned cameras per sequence, `summary.json`; figures in `results/`                                                  |
+| #   | Stage        | Script                               | Output (in the ROI folder)                                                                    |
+| --- | ------------ | ------------------------------------ | --------------------------------------------------------------------------------------------- |
+| 1   | gui          | `route_gui.py`                       | the drawn route (`outputs/alignment/routes/*.json`)                                           |
+| 2   | mapillary    | `data_ingest/mapillary_sequences.py` | `data/mapillary/`: frames and `cameras.json` per sequence, `roi.json`, `sequences.json`       |
+| 3   | segmentation | `segmentation/street_masks.py`       | `data/masks/`: building/road/sky-and-moving mask per frame                                    |
+| 4   | calibrate    | `calibrate.py`                       | `data/calibration/<sequence>.json`: focal, distortion, per-frame gravity (all from Mapillary) |
+| 5   | reconstruct  | `reconstruct.py`                     | `data/reconstruction/`: COLMAP model per leg and sequence, `legs.json`                        |
+| 6   | align        | `align.py`                           | `data/alignment/`: aligned cameras per sequence, `summary.json`; figures in `results/`        |
 
 The mapillary and segmentation stages live with the main pipeline's own stages of the same
 kind (`src/data_ingest/`, `src/segmentation/`); the others are in this folder.
 `run_pipeline.py` runs them in order from any stage. Helpers: `geo_common.py` (geography, ROI
 folders, COLMAP readers), `osm.py` (OSM buildings), `learned_features.py` and `nn_features.py`
-(feature matching), `plot_fit.py` (figures). Tools: `shape_check.py` (how straight and
+(feature matching), `plot_fit.py` (figures). Tools: `gravity_check.py` (how consistent each
+gravity source is with the reconstructed cameras), `shape_check.py` (how straight and
 drift-free each reconstruction is). To see the aligned photos on the buildings, run the main
 pipeline with `--poses colmap`: texturing projects them and the web app's 3D viewer shows the
 .glb (Aadi's `scripts/eval/` renders it from the photos' poses in Blender).
@@ -173,9 +174,9 @@ compass. Each view's `cameras.json` carries a `pano` header (side, yaw, field of
 size). Its compass and rotation are turned to the view's direction.
 
 Every later stage handles the views like any rig camera, with one difference: the focal length
-is exact and there is no distortion. Calibrate takes that focal and GeoCalib estimates only
-gravity. Reconstruct keeps the camera fixed, so the focal cannot drift and stretch the model
-along the street.
+is exact and there is no distortion. Calibrate takes that focal, and the gravity from the
+view's turned rotation. Reconstruct keeps the camera fixed, so the focal cannot drift and
+stretch the model along the street.
 
 Rig siblings (vehicles with several cameras upload one sequence per camera) are added.
 Frames are saved as `data/mapillary/line<L>_cam<k>_<id>/frame_0001.jpg …` with
@@ -192,40 +193,38 @@ an Apple-silicon GPU. `--previews` saves colour overlays.
 
 ## 4. Calibrate (`calibrate.py`)
 
-GeoCalib (ECCV 2024) estimates the camera from single images:
+Everything comes from Mapillary's own structure from motion, in each frame's `cameras.json`:
 
-- **Calibration:** 10 frames spread over each sequence (`--sample`); the median focal length and
-    distortion become the sequence's camera.
-- **Gravity:** roll, pitch and up direction per frame, with the focal fixed to that median.
-    GeoCalib runs on every fifth frame (`--gravity-every`) and the last. Each estimate starts
-    from the previous one and gets at most 10 optimiser steps. The frames in between are
-    interpolated, unless the two estimates either side differ by more than 4°
-    (`--gravity-refill`), in which case those frames are estimated too.
-    `--gravity-every 1` estimates every frame from scratch, the old behaviour.
-    Tested against the COLMAP models' rotations (roi_6, 19, 24 and 27): 3–5× faster, and the
-    median error grew by 0.04–0.15°, from 0.44–0.48° on cars and 1.27° on a motorcycle.
+- **Calibration:** the sequence's most common `camera_parameters` (focal as a fraction of the
+    long side, k1, k2). Mapillary's focal is sometimes far off (roi_15's iPhone reports 1.338
+    against about 0.8; a Google Pixel 3 downtown got 0.976, 0.918 and 0.732), so each sequence is
+    checked against the ROI's other sequences of the same camera (make, model and image size).
+    When at least two others are calibrated and this one's focal is more than 15% from their
+    median, it takes the calibration of the one closest to that median (with only two, both are
+    kept and a warning is printed when they differ by more than 15%; `source:   mapillary_median`, with a `correction` saying why). Without any Mapillary calibration a
+    sequence starts from COLMAP's usual 1.2 x the long side with no distortion (`source:   default`), with a warning. Bundle adjustment refines the focal and distortion either way.
+- **Gravity:** each frame's up direction in the camera frame from its `computed_rotation`
+    (world-to-camera in east/north/up): the rotation applied to the world's up. Frames without
+    one are interpolated between their neighbours. A sequence without any rotation gets no
+    gravity: reconstruct solves it without gravity priors, and align levels it from the plane
+    of its road points (or, with too few, from the cameras' own down axes), with a warning.
 
-Mapillary's own calibration is not used by default: it is sometimes far off (roi_15's iPhone
-reports 1.34 of the image width against about 0.8), and starting phones from it did not help.
-The reconstruct stage warns when Mapillary's focal differs from GeoCalib's by more than 10%.
-About 0.8 s per frame; the result is reused by later runs.
+It takes no time to compute and needs no model. Calibrations from the earlier GeoCalib
+version of this stage are recalculated when found (`--force` recalculates every sequence).
 
-**When GeoCalib fails:** very wide lenses are beyond GeoCalib's lens model. roi_21's 2017 Roush
-rig has six identical cameras, and GeoCalib gave them focals from 0.42 to 0.65, against
-Mapillary's 0.48. The stage prints
-`GeoCalib calibration looks unreliable for this camera; try --calibration mapillary` when either:
+**The GeoCalib version.** Until this change the stage estimated the focal, distortion and
+gravity from the photos with GeoCalib (ECCV 2024). Its measurements, kept for reference:
+GeoCalib's per-frame gravity was 0.44-0.48° from the COLMAP models' rotations on cars and 1.27°
+on a motorcycle (roi_6, 19, 24, 27; those models were built with GeoCalib's own gravity
+priors); its focal was about 5.4% off COLMAP's refined one (12 normal-lens sequences); it took
+about 0.8 s per frame; and lenses wider than its model (roi_21's 2017 Roush rig: 0.42-0.65 for
+six identical cameras, Mapillary 0.48) needed Mapillary's calibration anyway. Starting
+smartphones from Mapillary's focal changed nothing where frames are close (roi_2, 4, 5, 7, 8,
+9). On 4 frames compared after the change, GeoCalib's and Mapillary's gravity differed by
+2.6-3.8°, about the same on every frame.
 
-- GeoCalib's optimiser did not converge on most of the sampled frames, or
-- cameras of one rig (same make, model and image size) got focals more than 15% apart.
-
-`--calibration mapillary` then takes the focal and both distortion terms from Mapillary and
-writes them to `data/calibration_mapillary/`. GeoCalib still estimates gravity per frame, with
-Mapillary's focal fixed. The reconstruct stage records which calibration it used, and the align
-stage follows it. Use a `--tag` to keep both runs:
-
-```
-python -m pose_alignment.run_pipeline --roi-dir outputs/alignment/mapillary_roi_21 --calibration mapillary --tag mly
-```
+To see how consistent Mapillary's gravity is with a reconstruction, run `gravity_check.py`
+(below); the alignment's `summary.json` and `shape_check.py` show the result on the fit.
 
 ## 5. Reconstruct (`reconstruct.py`)
 
@@ -236,17 +235,18 @@ Per leg and camera:
 
 1. **Feature masks:** burned-in overlays (timestamps, bonnets) and the segmentation's sky,
     vehicles and people.
-2. **Camera:** one per sequence from GeoCalib's focal. Strongly distorted lenses (GeoCalib
-    k1 below −0.2, e.g. action cameras) use COLMAP's `RADIAL_FISHEYE` model, others
-    `RADIAL`. Bundle adjustment refines it.
+2. **Camera:** one per sequence, COLMAP's `RADIAL` from the calibration's focal, k1 and k2.
+    Bundle adjustment refines it. (The GeoCalib version switched strongly distorted lenses,
+    GeoCalib k1 below −0.2, to `RADIAL_FISHEYE`.)
 3. **Features:** ALIKED keypoints, each frame matched with its next 10:
     - frames under 6 m apart: mutual nearest neighbour of the descriptors (`nn_features.py`),
         2–6 s per leg;
     - 6 m and over: LightGlue (`learned_features.py`), about 15× slower. With
         nearest-neighbour, sequences 8–10 m apart (roi_4, 5, 9, 19) reconstructed unstably
         (bent, crushed or lost frames).
-4. **Gravity priors:** GeoCalib's down direction per frame goes into COLMAP's pose priors
-    (no positions: GPS is not used).
+4. **Gravity priors:** the calibration's down direction per frame (Mapillary's rotations)
+    goes into COLMAP's pose priors (no positions: GPS is not used). A sequence without
+    rotations has none, and the mapper runs without gravity for it.
 5. **COLMAP 4.2 `global_mapper`** (GLOMAP) with gravity-aided rotation averaging, then
     `point_triangulator` re-triangulates every match with the poses fixed (more road and
     building points).
@@ -267,7 +267,8 @@ Per leg and camera:
 
 Per leg and camera:
 
-1. **Level** the model with GeoCalib's gravity.
+1. **Level** the model with the calibration's gravity; without it, from the road points'
+    plane, or the cameras' own down axes (`summary.json`: `gravity.levelling`).
 2. **Ground:** median height of the road points near the path.
 3. **Building points:** labelled Building, seen in 3+ frames, 2.5–40 m up, thinned to one
     per 0.5 m.
@@ -298,8 +299,14 @@ instead of 9–14 m, and failures are reported as unreliable instead of passing.
 
 ## Checking
 
+- `python -m pose_alignment.gravity_check <roi> [--tag t]`: per leg and sequence, how consistent
+    Mapillary's per-frame gravity is with the reconstructed cameras. Every camera's "down",
+    turned into the model by its COLMAP rotation, should point the same way (a street has one
+    up); the spread around their robust mean is reported. The reconstruction used that gravity
+    for its priors, so this is a lower bound, and a bias the same on every frame only shows where
+    the camera turns. Writes `results/[tag/]gravity_check.json`.
 - `python -m pose_alignment.shape_check <roi> [--tag t]`: per leg, how far the camera path bends compared
-    with Mapillary's track, how well each camera's tilt agrees with GeoCalib's gravity, and
+    with Mapillary's track, how well each camera's tilt agrees with the calibration's gravity, and
     the scale drift from the start to the end of the leg. Use it alongside the fit: a bent or
     crushed reconstruction can still fit its walls.
 
@@ -325,8 +332,9 @@ Each shows one camera's reconstruction after alignment: a plan view of the build
 (red), other points (blue) and road points (grey) over the OSM footprints with the camera
 path in black, and the same in 3D against the footprints extruded to their OSM heights.
 
-Typical time for 80–100 frames: about 5 minutes (GeoCalib 1 min, LightGlue matching 2.5
-min when used, COLMAP 0.5 min, alignment 0.3 min).
+Typical time for 80–100 frames, measured with the GeoCalib version: about 5 minutes
+(GeoCalib 1 min, which calibration no longer takes; LightGlue matching 2.5 min when used,
+COLMAP 0.5 min, alignment 0.3 min).
 
 ## Limits
 
@@ -339,10 +347,9 @@ min when used, COLMAP 0.5 min, alignment 0.3 min).
 
 ## Setup
 
-1. The project's environment (`poetry install`). It includes LightGlue (for ALIKED features)
-    and GeoCalib, installed from their GitHub repositories, so `git` must be available.
-    First runs download the Mask2Former (about 900 MB), GeoCalib, ALIKED and LightGlue
-    weights.
+1. The project's environment (`poetry install`). It includes LightGlue (for ALIKED
+    features), installed from its GitHub repository, so `git` must be available.
+    First runs download the Mask2Former (about 900 MB), ALIKED and LightGlue weights.
 2. COLMAP 4.2 or newer on the PATH (`brew install colmap` on macOS), or `COLMAP_BIN` in
     `.env` set to its executable.
 3. A Mapillary client access token from https://www.mapillary.com/dashboard/developers,
@@ -362,7 +369,6 @@ outputs/alignment/
       mapillary/    roi.json  sequences.json  line1_cam0_<id>/{frame_0001.jpg ..., cameras.json}
       masks/        classes.json  line1_cam0_<id>/frame_0001.png ...
       calibration/  line1_cam0_<id>.json
-      calibration_mapillary/  the same with Mapillary's focal and distortion (--calibration mapillary)
       reconstruction/  legs.json  leg01/line1_cam0_<id>/{sparse/0/txt, colmap.log, ...}
       alignment/    line1_cam0_<id>.json  summary.json  osm_buildings.json  leg01_line1_cam0_<id>/
       reconstruction_<tag>/  alignment_<tag>/      tagged runs
