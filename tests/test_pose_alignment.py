@@ -238,3 +238,46 @@ def test_crop_view_looks_where_its_yaw_says():
     centre = lambda yaw: int(crop_view(pano, yaw, 90.0, 100)[50, 50, 0])  # noqa: E731
     assert abs(centre(90.0) - 150) <= 1  # +90 deg: column 600, three quarters across
     assert abs(centre(-90.0) - 50) <= 1  # -90 deg: column 200, one quarter across
+
+
+def _rig_entry(fit, points=1500, reliable=None, backward=()):
+    return (
+        {
+            "aligned": True,
+            "reliable": fit <= 2.0 if reliable is None else reliable,
+            "points_to_footprint_median_m": {"aligned": fit},
+            "building_points": points,
+            "cameras_out_of_order": list(backward),
+            "cameras_inside_buildings": 0,
+            "registered": 40,
+        },
+        [{"file": "frame_0001.jpg", "reliable": fit <= 2.0}],
+    )
+
+
+def test_a_rig_is_reliable_when_its_best_camera_fits():
+    from pose_alignment.align import rig_reliability
+
+    leg = {
+        "id": "leg04",
+        "cameras": [
+            {"folder": "right", "rig": "right"},
+            {"folder": "left", "rig": "right"},
+        ],
+    }
+    out = {"right": _rig_entry(3.0), "left": _rig_entry(1.9)}
+    rig_reliability(leg, out, 2.0)
+    assert out["right"][0]["reliable"] and out["right"][1][0]["reliable"]
+    assert "reliable_via_rig" in out["right"][0]
+
+    # both sides far off: the shared pose is wrong
+    out = {"right": _rig_entry(4.5), "left": _rig_entry(1.9)}
+    rig_reliability(leg, out, 2.0)
+    assert not out["right"][0]["reliable"]
+    # a folded reconstruction stays unreliable however well it fits
+    out = {
+        "right": _rig_entry(3.0, backward=["frame_0002.jpg"]),
+        "left": _rig_entry(1.9),
+    }
+    rig_reliability(leg, out, 2.0)
+    assert not out["right"][0]["reliable"]

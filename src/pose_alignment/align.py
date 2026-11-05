@@ -974,6 +974,58 @@ def finish_links(ents, links, x0, x, keys, sl, report):
     return changed, report
 
 
+RIG_MIN_POINTS = (
+    300  # building points a rig camera needs for its fit to vouch for the rig
+)
+
+
+def rig_reliability(leg, out, max_error):
+    """A rig's cameras share one pose per frame (a 360 camera's right and left views, or a
+    multi-camera rig), so the rig is reliable or not as a whole: when its best-fitting camera
+    (with at least RIG_MIN_POINTS building points) is within max_error of the walls, none is
+    off by more than twice that, and no camera is inside a building or out of capture order,
+    every rig camera is reliable. The other cameras' weaker fits then come from their side of
+    the street not matching OSM (missing, set-back or wrongly drawn buildings), not from
+    their pose (roi_4, 2026-11-04: a 360 run's left view fitted within 1.2-1.9 m, its right
+    view 2.1-3.0 m, so the right view's photos were left out of texturing). out: {folder:
+    (entry, cameras_out, ...)}, updated in place."""
+    rigs: dict[str, list[str]] = {}
+    for cam in leg["cameras"]:
+        if cam.get("rig") and cam["folder"] in out:
+            rigs.setdefault(cam["rig"], []).append(cam["folder"])
+    for folders in rigs.values():
+        ents = [out[f][0] for f in folders if out[f][0].get("aligned")]
+        if len(ents) < 2 or all(e["reliable"] for e in ents):
+            continue
+        fits = [
+            (e["points_to_footprint_median_m"]["aligned"], e["building_points"])
+            for e in ents
+        ]
+        best = min((d for d, n in fits if n >= RIG_MIN_POINTS), default=math.inf)
+        worst = max(d for d, _ in fits)
+        sound = all(
+            not e["cameras_out_of_order"]
+            and e["cameras_inside_buildings"] <= 0.2 * e["registered"]
+            for e in ents
+        )
+        if not (sound and best <= max_error and worst <= 2 * max_error):
+            continue
+        for f in folders:
+            entry, cams_out = out[f][0], out[f][1]
+            if entry.get("aligned") and not entry["reliable"]:
+                entry["reliable"] = True
+                entry["reliable_via_rig"] = (
+                    f"the rig's best camera fits the walls within {best:.2f} m; this one "
+                    f"{entry['points_to_footprint_median_m']['aligned']:.2f} m"
+                )
+                for c in cams_out:
+                    c["reliable"] = True
+                print(
+                    f"{leg['id']}/{f}: reliable with its rig (the rig's best camera fits the walls "
+                    f"within {best:.2f} m, this one {entry['points_to_footprint_median_m']['aligned']:.2f} m)"
+                )
+
+
 def align_roi(roi_dir, max_error=2.0, tag=None, link=True):
     t_start, secs = time.time(), {}
     p = RoiPaths(roi_dir, tag)
@@ -1095,6 +1147,7 @@ def align_roi(roi_dir, max_error=2.0, tag=None, link=True):
                 )
             else:
                 print(f"{leg['id']}/{cam['folder']}: not aligned ({res.get('reason')})")
+        rig_reliability(leg, out, max_error)
         return out
 
     results = {}
