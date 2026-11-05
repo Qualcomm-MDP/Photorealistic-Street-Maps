@@ -49,7 +49,7 @@ Pre-commit runs on every commit (and on pull requests through [pre-commit.ci](ht
 | ruff, ruff-format                                    | Python linting and formatting                    |
 | mypy                                                 | Python types                                     |
 | codespell                                            | spelling                                         |
-| mdformat                                             | Markdown formatting (not `website/`)             |
+| mdformat                                             | Markdown formatting (not `docs/`)             |
 | prettier                                             | YAML and TOML formatting                         |
 | pyproject-fmt, validate-pyproject                    | `pyproject.toml`                                 |
 | trailing-whitespace, end-of-file-fixer, check-yaml, ... | general file hygiene                          |
@@ -99,23 +99,23 @@ Use `state.get_metadata()` / `state.require_metadata()` to read shared context a
 
 ## Documentation
 
-This site is built with [Docusaurus](https://docusaurus.io/) and lives in `website/`. You need [Node.js](https://nodejs.org/) 20 or newer.
+This site is built with [Docusaurus](https://docusaurus.io/) and lives in `docs/`. You need [Node.js](https://nodejs.org/) 20 or newer.
 
 ```bash
-cd website
+cd docs
 npm ci              # install
 npm start           # live preview at http://localhost:3000/PSM/
-npm run build       # production build into website/build (fails on broken links)
+npm run build       # production build into docs/build (fails on broken links)
 npx playwright install chromium   # once, for the tests below
 npm run test:site   # opens every page of the build and fails on errors or missing chunks
 ```
 
-The pages are Markdown files in `website/docs/`; the sidebar is `website/sidebars.js`.
+The pages are Markdown files in `docs/docs/`; the sidebar is `docs/sidebars.js`.
 
-The **API reference** pages (except Web API) are generated from the docstrings in `src/` by `website/scripts/gen_api.py`. After changing docstrings, regenerate them from the repo root and commit the result:
+The **API reference** pages (except Web API) are generated from the docstrings in `src/` by `docs/scripts/gen_api.py`. After changing docstrings, regenerate them from the repo root and commit the result:
 
 ```bash
-poetry run npm run api --prefix website
+poetry run npm run api --prefix docs
 ```
 
 The deployed site is always built from freshly generated pages; CI only warns when the committed copies have fallen behind. Docstrings use the Google style (`Args:`, `Returns:`, `Raises:`).

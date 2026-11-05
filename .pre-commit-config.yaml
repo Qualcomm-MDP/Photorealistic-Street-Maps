@@ -3,10 +3,10 @@ default_language_version:
 
 default_stages: [pre-commit]
 
-# The docs site (website/) is formatted the Docusaurus way and has a large
+# The docs site (docs/) is formatted the Docusaurus way and has a large
 # generated package-lock.json, so the hooks skip it; its Python script
-# (website/scripts/) is still checked.
-exclude: ^website/(?!scripts/)
+# (docs/scripts/) is still checked.
+exclude: ^docs/(?!scripts/)
 
 ci:
   autofix_prs: true

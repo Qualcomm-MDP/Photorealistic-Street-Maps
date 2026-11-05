@@ -11,6 +11,6 @@ npm run test:site   # open every page of the build; fails on errors or missing c
 ```
 
 - Pages: `docs/` (Markdown). Sidebar: `sidebars.js`. Site settings: `docusaurus.config.js`.
-- The API reference pages in `docs/api/` (except `web.md`) are generated from the docstrings in `src/`. Regenerate them from the repo root with `poetry run npm run api --prefix website`.
+- The API reference pages in `docs/api/` (except `web.md`) are generated from the docstrings in `src/`. Regenerate them from the repo root with `poetry run npm run api --prefix docs`.
 
 See the Contributing page of the docs for more.
