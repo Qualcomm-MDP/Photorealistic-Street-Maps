@@ -24,13 +24,10 @@ class OverpassClient:
 
     def __init__(
         self,
-        urls: tuple[str, ...] = (
-            OVERPASS_URL,
-            *OVERPASS_FALLBACK_URLS,
-            "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
-        ),
-        timeout: float = 45.0,
-        rounds: int = 2,
+        urls: tuple[str, ...] = (OVERPASS_URL, *OVERPASS_FALLBACK_URLS),
+        timeout: float = 25.0,
+        # one try per server: callers then fall back to the main OSM API (osm_api.py)
+        rounds: int = 1,
         backoff_s: float = 10.0,
     ):
         self.urls = urls

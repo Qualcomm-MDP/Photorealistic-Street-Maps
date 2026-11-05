@@ -3,16 +3,14 @@ when every Overpass server is down), their tagged heights, a raster of the dista
 nearest wall, and which side of the camera path points lie on."""
 
 import json
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import cv2
 import numpy as np
 
 from common.MeshUtils import building_heights  # noqa: F401  (align, plot_fit import it from here)
+from common.providers.osm_api import OsmApiClient
 from common.providers.overpass import OverpassClient, OverpassUnavailable
-
-from .geo_common import OSM_API_MAP, http_get
 
 
 def buildings_from_elements(elements):
@@ -59,59 +57,12 @@ def fetch_buildings(bbox, cache=None):
         print(
             "  Overpass is unavailable; fetching the buildings from the OpenStreetMap API instead"
         )
-        buildings = _buildings_from_osm_api(bbox)
+        buildings = buildings_from_elements(
+            OsmApiClient().elements(bbox, lambda tags: "building" in tags)["elements"]
+        )
     if cache:
         Path(cache).write_text(json.dumps(buildings))
     return buildings
-
-
-def _buildings_from_osm_api(bbox, tile=0.004):
-    """Building footprints from the main OSM API's map call, in tiles of about 400 m (it
-    caps the nodes per request). Multipolygon buildings keep their closed outer ways."""
-    nodes, ways, relations = {}, {}, {}
-    for lon in np.arange(bbox[0], bbox[2], tile):
-        for lat in np.arange(bbox[1], bbox[3], tile):
-            box = f"{lon:.6f},{lat:.6f},{min(lon + tile, bbox[2]):.6f},{min(lat + tile, bbox[3]):.6f}"
-            root = ET.fromstring(http_get(f"{OSM_API_MAP}?bbox={box}"))
-            tags = lambda el: {t.get("k"): t.get("v") for t in el.findall("tag")}  # noqa: E731
-            nodes.update(
-                {
-                    n.get("id"): (float(n.get("lon")), float(n.get("lat")))
-                    for n in root.iter("node")
-                }
-            )
-            ways.update(
-                {
-                    w.get("id"): (tags(w), [nd.get("ref") for nd in w.findall("nd")])
-                    for w in root.iter("way")
-                }
-            )
-            relations.update(
-                {
-                    r.get("id"): (
-                        tags(r),
-                        [
-                            m.get("ref")
-                            for m in r.findall("member")
-                            if m.get("type") == "way" and m.get("role") == "outer"
-                        ],
-                    )
-                    for r in root.iter("relation")
-                }
-            )
-    rings = [(t, refs) for t, refs in ways.values() if "building" in t]
-    rings += [
-        (t, ways[ref][1])
-        for t, outer in relations.values()
-        if "building" in t
-        for ref in outer
-        if ref in ways
-    ]
-    return [
-        (t, [nodes[r] for r in refs])
-        for t, refs in rings
-        if len(refs) >= 4 and refs[0] == refs[-1] and all(r in nodes for r in refs)
-    ]
 
 
 class WallMap:

@@ -24,7 +24,8 @@ import math
 from datetime import datetime
 from pathlib import Path
 
-from common.providers.overpass import OverpassClient
+from common.providers.osm_api import OsmApiClient
+from common.providers.overpass import OverpassClient, OverpassUnavailable
 
 from .geo_common import ROUTES_DIR, LocalFrame, line_length_m
 from .route_gui import make_roi
@@ -46,10 +47,18 @@ STREET_TYPES = [
 def fetch_streets(bbox):
     """OSM street ways in bbox (min_lon, min_lat, max_lon, max_lat): [(name, [(lon, lat)])]."""
     w, s, e, n = bbox
-    data = OverpassClient().fetch(
-        f'[out:json][timeout:90];way["highway"~"^({"|".join(STREET_TYPES)})$"]({s},{w},{n},{e});'
-        "out geom;"
-    )
+    try:
+        data = OverpassClient().fetch(
+            f'[out:json][timeout:90];way["highway"~"^({"|".join(STREET_TYPES)})$"]({s},{w},{n},{e});'
+            "out geom;"
+        )
+    except OverpassUnavailable:
+        print(
+            "  Overpass is unavailable; fetching the streets from the OpenStreetMap API instead"
+        )
+        data = OsmApiClient().elements(
+            bbox, lambda tags: tags.get("highway") in STREET_TYPES
+        )
     return [
         (
             el.get("tags", {}).get("name") or f"unnamed way {el['id']}",
