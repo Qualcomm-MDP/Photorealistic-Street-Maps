@@ -298,6 +298,15 @@ def create_app(
             filename=f"psm-{slug}-{job.id}.glb" if download else None,
         )
 
+    @app.get("/api/jobs/{job_id}/overlays.json")
+    def get_overlays(job_id: str) -> FileResponse:
+        """The model's cameras and the alignment's point cloud (common/overlays.py)."""
+        job = _job_or_404(job_id)
+        path = jobs.job_dir(job.id) / "model.overlays.json"
+        if job.status != "done" or not path.exists():
+            raise HTTPException(404, "This job has no overlays.")
+        return FileResponse(path, media_type="application/json")
+
     @app.get("/api/jobs/{job_id}/log", response_model=None)
     def get_log(
         job_id: str, download: bool = False

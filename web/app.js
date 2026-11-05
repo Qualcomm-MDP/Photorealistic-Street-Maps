@@ -514,6 +514,7 @@ async function loadModel(job) {
   // Only the latest request may change the scene: switching jobs quickly can
   // make an older model (or its error) arrive after the newer one.
   state.modelWanted = job.id;
+  if (overlays.jobId !== job.id) disposeOverlays();
   const empty = $("stageEmpty");
   if (!renderer) {
     state.modelJobId = job.id; // nothing to load; the WebGL note shows instead
@@ -550,6 +551,7 @@ async function loadModel(job) {
     state.modelJobId = job.id;
     empty.hidden = true;
     jobStageNote(job, "");
+    loadOverlays(job);
   } catch (err) {
     if (state.modelWanted !== job.id) return;
     empty.textContent = `Couldn't load the model: ${err.message || err}`;
@@ -558,6 +560,99 @@ async function loadModel(job) {
   }
   showModelInfo(job);
 }
+// ---------- Overlays: the photos' cameras and the alignment's point cloud ----------
+// /api/jobs/<id>/overlays.json (common/overlays.py), already in the model's frame.
+const CAMERA_COLOURS = { colmap: 0x3fb950, computed: 0xf0a020, raw: 0xe5534b };
+const overlays = { cameras: null, points: null, jobId: null };
+
+function disposeOverlays() {
+  for (const key of ["cameras", "points"]) {
+    if (overlays[key]) {
+      scene.remove(overlays[key]);
+      disposeModel(overlays[key]);
+      overlays[key] = null;
+    }
+  }
+  overlays.jobId = null;
+  for (const id of ["showCameras", "showPoints"]) $(id).hidden = true;
+}
+
+function cameraFrusta(cameras) {
+  // A small pyramid per camera: apex at the camera, 2 m deep, the photo's field of view.
+  const pos = [];
+  const col = [];
+  const depth = 2;
+  for (const c of cameras) {
+    const p = new THREE.Vector3(...c.p);
+    const f = new THREE.Vector3(...c.f).normalize();
+    const r = new THREE.Vector3().crossVectors(f, new THREE.Vector3(...c.u)).normalize();
+    const u = new THREE.Vector3().crossVectors(r, f);
+    const hh = depth * Math.tan(((c.fov || 60) * Math.PI) / 360);
+    const hw = hh * (c.aspect || 1.333);
+    const corner = (sx, sy) =>
+      p.clone().addScaledVector(f, depth).addScaledVector(r, sx * hw).addScaledVector(u, sy * hh);
+    const k = [corner(-1, 1), corner(1, 1), corner(1, -1), corner(-1, -1)];
+    const segs = [
+      [p, k[0]], [p, k[1]], [p, k[2]], [p, k[3]],
+      [k[0], k[1]], [k[1], k[2]], [k[2], k[3]], [k[3], k[0]],
+    ];
+    const colour = new THREE.Color(CAMERA_COLOURS[c.source] ?? CAMERA_COLOURS.raw);
+    for (const [a, b] of segs) {
+      pos.push(a.x, a.y, a.z, b.x, b.y, b.z);
+      col.push(colour.r, colour.g, colour.b, colour.r, colour.g, colour.b);
+    }
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geom.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  return new THREE.LineSegments(geom, new THREE.LineBasicMaterial({ vertexColors: true }));
+}
+
+function pointCloud(points) {
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(points.xyz, 3));
+  geom.setAttribute("color", new THREE.Uint8BufferAttribute(points.rgb, 3, true));
+  return new THREE.Points(
+    geom,
+    new THREE.PointsMaterial({ size: 0.35, sizeAttenuation: true, vertexColors: true })
+  );
+}
+
+async function loadOverlays(job) {
+  disposeOverlays();
+  let data;
+  try {
+    data = await api(`/api/jobs/${job.id}/overlays.json`);
+  } catch {
+    return; // jobs from before overlays existed have none
+  }
+  if (state.modelJobId !== job.id) return;
+  overlays.jobId = job.id;
+  if (data.cameras?.length) {
+    overlays.cameras = cameraFrusta(data.cameras);
+    $("showCameras").hidden = false;
+  }
+  if (data.points?.xyz?.length) {
+    overlays.points = pointCloud(data.points);
+    $("showPoints").hidden = false;
+  }
+  for (const [id, key] of [["showCameras", "cameras"], ["showPoints", "points"]]) {
+    const obj = overlays[key];
+    if (obj && $(id).getAttribute("aria-pressed") === "true") scene.add(obj);
+  }
+}
+
+for (const [id, key] of [["showCameras", "cameras"], ["showPoints", "points"]]) {
+  $(id).addEventListener("click", () => {
+    const on = $(id).getAttribute("aria-pressed") !== "true";
+    $(id).setAttribute("aria-pressed", String(on));
+    const obj = overlays[key];
+    if (!obj) return;
+    if (on) scene.add(obj);
+    else scene.remove(obj);
+  });
+}
+
 function showModelInfo(job) {
   const dl = $("download");
   dl.href = `/api/jobs/${job.id}/model.glb?download=true`;

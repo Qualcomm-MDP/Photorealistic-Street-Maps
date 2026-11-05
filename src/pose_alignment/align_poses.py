@@ -363,6 +363,10 @@ def align_poses(value, state):
             # segmentation made, instead of downloading and segmenting them again
             state.set_metadata("image_store", ImageStore(paths.originals))
             state.set_metadata("segmentation_labels", LabelCache(paths.labels))
+            # the reconstructed points on the map, for the viewer (common/overlays.py)
+            from .points import aligned_points
+
+            state.set_metadata("alignment_points", aligned_points(paths.root))
             state.set_metadata(
                 "pose_alignment",
                 _apply_alignment(

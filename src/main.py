@@ -78,6 +78,13 @@ def main():
         help="Skip obstruction removal in texturing (no segmentation, no inpainting)",
     )
     parser.add_argument(
+        "--texture",
+        choices=["blend", "best"],
+        default="blend",
+        help="blend (default): each wall texel averages every photo that sees it, weighted "
+        "by view angle, distance and obstructions; best: each face from its single best photo",
+    )
+    parser.add_argument(
         "--no-fill",
         action="store_true",
         default=False,
@@ -168,6 +175,7 @@ def main():
             "progress_monitor": pipeline_progress,
             "remove_obstructions": not args.no_seg,
             "fill_obstructions": not args.no_fill,
+            "texture_mode": args.texture,
             "output_path": args.output,
             "ask_output_path": ask_save_path,
             "mapillary_dump_path": args.dump_mapillary,
