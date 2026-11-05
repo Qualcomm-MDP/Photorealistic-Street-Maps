@@ -15,6 +15,7 @@ authors = [
   { name = "Anthony Chen", email = "anthoc@umich.edu" },
   { name = "Dervin Tian", email = "dervint@umich.edu" },
   { name = "Allison Du", email = "allial.du@gmail.com" },
+  { name = "Nick Duggan", email = "nkd2840@rit.edu" },
 ]
 requires-python = ">=3.11,<3.15,!=3.14.1"
 classifiers = [
