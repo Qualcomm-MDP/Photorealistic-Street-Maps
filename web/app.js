@@ -1205,7 +1205,7 @@ function setDeviceButtons(id, value) {
 // Put the saved defaults into the Options panel (on load, and after saving).
 function applyDefaults(d) {
   $("poses").value = d.poses || "colmap";
-  $("fill").checked = d.fill_obstructions !== false;
+  $("fillObs").checked = d.fill_obstructions !== false;
   $("seg").checked = d.remove_obstructions;
   $("model").value = d.seg_model;
   device = d.device === "cuda" && !state.system.cuda ? "auto" : d.device;
@@ -1216,7 +1216,7 @@ function applyDefaults(d) {
 // "Aligned photos only" applies to aligned poses; "Fill obstructions" to removing them.
 function syncOptionRows() {
   $("alignedOnlyRow").hidden = $("poses").value !== "colmap";
-  $("fill").disabled = !$("seg").checked;
+  $("fillObs").disabled = !$("seg").checked;
 }
 $("poses").addEventListener("change", syncOptionRows);
 $("seg").addEventListener("change", syncOptionRows);
@@ -1463,7 +1463,7 @@ $("go").addEventListener("click", async () => {
         poses: $("poses").value,
         aligned_only: $("poses").value === "colmap" && $("alignedOnly").checked,
         remove_obstructions: $("seg").checked,
-        fill_obstructions: $("fill").checked,
+        fill_obstructions: $("fillObs").checked,
         seg_model: $("model").value,
         device,
         terrain: $("terrain").checked,
