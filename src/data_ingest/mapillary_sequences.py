@@ -16,10 +16,11 @@ pipeline):
      capture into straight legs itself.
   3. Take the best run: enough frames along its longest straight stretch first (frames in a
      turn do not count), then frames dense enough to reconstruct (median spacing <=
-     --max-spacing), then the share of the drawn line it covers (in 25% steps), then frame
-     spacing (in 1 m steps), then the most frames. A 360 run is taken over a perspective one
-     when it covers more of the line (--pano prefer: whenever it is long and dense enough;
-     --pano off: never). --view keeps only cameras looking that way relative to travel (a 360
+     --max-spacing), then the share of the drawn line it covers (in 25% steps), then which way
+     the camera looks: a 360 run (cut into right and left views) first, then a camera facing
+     the side of the street, then one facing forward or back (it sees the facades at a grazing
+     angle), then frame spacing (in 1 m steps), then the most frames (--pano prefer: a 360
+     run whenever it is long and dense enough, before coverage; --pano off: never). --view keeps only cameras looking that way relative to travel (a 360
      run counts for left and right); --sequence picks a sequence by id.
   4. Add every rig sibling: multi-camera rigs (e.g. a vehicle with left- and right-facing
      cameras) upload one sequence per camera; a sibling has the same make/model, overlaps
@@ -312,6 +313,15 @@ def spacing_bucket(run):
     return math.floor(run["spacing_m"]) if math.isfinite(run["spacing_m"]) else math.inf
 
 
+def view_rank(run, side_deg=45.0):
+    """0 a 360 run, 1 a camera facing the side of the street (45-135 deg from travel), 2 one
+    facing forward or back, or of unknown direction."""
+    if run["pano"]:
+        return 0
+    v = run.get("view_deg")
+    return 1 if v is not None and side_deg <= abs(wrap_deg(v)) <= 180 - side_deg else 2
+
+
 def rank_runs(
     runs, min_images=20, max_spacing=10.0, view=None, view_tol=35.0, pano="auto"
 ):
@@ -319,9 +329,14 @@ def rank_runs(
     max_spacing: 10 m, as the reconstruct stage matches widely spaced frames with LightGlue: roi_4
     at 8.6 m and roi_5 at 9.9 m came out reliable; roi_9 at 10.3 m, a forward camera with
     buildings far back, did not), then coverage of the line in 25% steps, then spacing in
-    1 m steps (2.1 vs 2.2 m is no real difference), then the most frames.
-    pano: "auto" takes a 360 run over a perspective one only when it covers more of the line
-    (the same 25% steps), "prefer" whenever it has enough dense frames, "off" never."""
+    1 m steps (2.1 vs 2.2 m is no real difference), then the most frames. Among runs covering
+    the line equally, the camera's direction decides first (view_rank): a 360 run (right and
+    left views, both facing the facades) before a perspective camera facing the side of the
+    street, before one facing forward or back, which sees the facades at a grazing angle
+    (roi_3 of 2026-11-04: forward cameras beat 360 runs of the same street and 3 of their 8
+    legs came out unreliable, every 360 view reliable).
+    pano: "auto" ranks 360 runs as above, "prefer" takes one whenever it has enough dense
+    frames (before coverage), "off" never."""
     if pano == "off":
         runs = [r for r in runs if not r["pano"]]
     if view:
@@ -343,7 +358,7 @@ def rank_runs(
             r["spacing_m"] > max_spacing,
             pano == "prefer" and not r["pano"],
             -min(int(r["coverage"] * 4), 3),
-            pano == "auto" and r["pano"],
+            view_rank(r),
             spacing_bucket(r),
             -r["images"],
             r["spacing_m"],

@@ -179,3 +179,30 @@ def test_ingest_textures_only_the_chosen_runs(monkeypatch):
     with pytest.warns(UserWarning, match="Choosing captures failed"):
         data = ingest.ingest_data(bbox, _State({"progress_monitor": _Progress()}))
     assert len(data["mapillary"]) == 33 and "mapillary_selection" not in data
+
+
+def test_a_360_run_beats_a_forward_camera_covering_the_street_as_well():
+    from data_ingest.mapillary_sequences import rank_runs
+
+    def run(seq, pano, view, images=40):
+        return {
+            "sequence": seq,
+            "pano": pano,
+            "view_deg": view,
+            "straight": images,
+            "images": images,
+            "spacing_m": 3.1,
+            "coverage": 1.0,
+        }
+
+    runs = [
+        run("forward", False, 2.0, 106),
+        run("pano", True, -97.0),
+        run("side", False, 88.0),
+    ]
+    assert [r["sequence"] for r in rank_runs(runs)] == ["pano", "side", "forward"]
+    assert [r["sequence"] for r in rank_runs(runs, pano="off")] == ["side", "forward"]
+    # coverage still comes first: a forward camera covering more of the street wins
+    runs[0]["coverage"] = 1.0
+    runs[1]["coverage"] = runs[2]["coverage"] = 0.5
+    assert rank_runs(runs)[0]["sequence"] == "forward"

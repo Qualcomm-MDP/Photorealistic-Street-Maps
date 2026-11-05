@@ -152,13 +152,14 @@ is split into continuous runs, and the best run is picked:
 1. enough frames along its longest straight stretch;
 2. frames dense enough to reconstruct: median spacing at most 10 m (`--max-spacing`);
 3. the largest share of the drawn line (in 25% steps);
-4. a perspective camera before a 360 one;
+4. which way the camera looks: a 360 run first (its right and left views both face the
+    facades), then a camera facing the side of the street, then one facing forward or back
+    (it sees the facades at a grazing angle);
 5. the densest spacing, then the most frames.
 
-**360° sequences.** A 360 run competes with the perspective runs. It wins when it covers
-more of the line, so a perspective run with the same coverage still comes first.
-`--pano prefer` takes a 360 run whenever it has enough dense frames; `--pano off` ignores 360
-runs.
+**360° sequences.** A 360 run wins over perspective runs that cover the line as well as
+it does. `--pano prefer` takes a 360 run whenever it has enough dense frames, even over a
+perspective run covering more; `--pano off` ignores 360 runs.
 
 A picked 360 run is downloaded at full resolution. Each frame is cut into two square pinhole
 views, one facing right of travel and one facing left (`--pano-fov`, default 90°, at most
