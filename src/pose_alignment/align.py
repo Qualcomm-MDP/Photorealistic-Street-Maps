@@ -95,7 +95,8 @@ OPT = {
 }
 
 
-_LABELS = {}
+# labels() cache: (model, masks, value, points3D.txt mtime) -> label_points result
+_LABELS: dict[tuple, tuple] = {}
 ROAD_MIN = 30  # road points needed to level a model from the road plane
 
 
