@@ -856,6 +856,7 @@ function renderJobModal(job) {
   else dl.removeAttribute("href");
   dl.setAttribute("aria-disabled", String(!done));
   $("jobFacts").innerHTML = jobFactsHtml(job);
+  renderJobProfile(job);
 
   // Only a finished job has a model to show; otherwise say why there isn't one.
   if (done) {
@@ -893,9 +894,38 @@ function jobFactsHtml(job) {
   // Jobs from before these options existed don't have them.
   if ("terrain" in o) rows.push(["Terrain", o.terrain ? "On" : "Off"]);
   if ("naip" in o) rows.push(["Aerial photos", o.naip ? "NAIP ground and roofs" : "Off"]);
+  if ("profile" in o) rows.push(["Profile", o.profile ? "On" : "Off"]);
   if (job.result?.photos != null) rows.push(["Photos", `<span class="mono">${job.result.photos}</span>`]);
   if (job.error) rows.push(["Error", `<span class="bad">${esc(job.error)}</span>`]);
   return rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+}
+
+function renderJobProfile(job) {
+  const el = $("jobProfile");
+  const p = job.result?.profile;
+  if (!p?.stages?.length) {
+    el.hidden = true;
+    el.innerHTML = "";
+    return;
+  }
+  const rows = p.stages
+    .map((s) => {
+      const wall = Number(s.wall_time_s).toFixed(2);
+      const mem = Number(s.peak_memory_mb).toFixed(1);
+      return `<tr><td>${esc(s.name)}</td><td class="num">${wall}</td><td class="num">${mem}</td><td>${esc(s.status)}</td></tr>`;
+    })
+    .join("");
+  el.hidden = false;
+  el.innerHTML = `
+    <div class="job-profile-head">
+      <h3>Profile</h3>
+      <a class="btn small" href="/api/jobs/${esc(job.id)}/profile.json?download=true">Download JSON</a>
+    </div>
+    <table class="job-profile-table">
+      <thead><tr><th>Stage</th><th>Wall s</th><th>Peak MB</th><th>Status</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="job-profile-total">Total ${Number(p.total_wall_time_s).toFixed(1)} s</p>`;
 }
 
 jobDlg.addEventListener("click", (e) => {
@@ -1336,6 +1366,7 @@ $("go").addEventListener("click", async () => {
         device,
         terrain: $("terrain").checked,
         naip: $("naip").checked,
+        profile: $("profile").checked,
       }),
     });
     // The socket often delivers newer updates for this job (running, first

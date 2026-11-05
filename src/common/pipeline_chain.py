@@ -136,6 +136,7 @@ class PipelineChain:
         metadata: dict[str, Any] | None = None,
         profiler: "PipelineProfiler | None" = None,
         on_stage: StageListener | None = None,
+        skip_stages: set[str] | None = None,
     ) -> PipelineState:
         state = PipelineState(
             initial_input=initial_input,
@@ -145,7 +146,11 @@ class PipelineChain:
         if profiler is not None:
             profiler.start()
         result = self._execute(
-            state, start_index=0, profiler=profiler, on_stage=on_stage
+            state,
+            start_index=0,
+            profiler=profiler,
+            on_stage=on_stage,
+            skip_stages=skip_stages,
         )
         if profiler is not None:
             profiler.finish()
@@ -184,8 +189,10 @@ class PipelineChain:
         start_index: int,
         profiler: "PipelineProfiler | None" = None,
         on_stage: StageListener | None = None,
+        skip_stages: set[str] | None = None,
     ) -> PipelineState:
         current_value = state.current_value
+        skip_stages = skip_stages or set()
 
         for stage in self._stages[start_index:]:
             metrics = profiler.begin_stage(stage.name) if profiler else None
@@ -209,7 +216,8 @@ class PipelineChain:
                     state.stage_outputs[stage.name] = current_value
 
                 if profiler and metrics:
-                    profiler.end_stage(metrics, status="ok")
+                    status = "skipped" if stage.name in skip_stages else "ok"
+                    profiler.end_stage(metrics, status=status)
             except Exception as exc:
                 if profiler and metrics:
                     profiler.end_stage(metrics, status="error", error=str(exc))

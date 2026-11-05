@@ -11,6 +11,8 @@ from typing import Any
 
 import torch
 
+from .reporter import get_reporter
+
 
 def _gpu_available() -> bool:
     return torch.cuda.is_available()
@@ -149,25 +151,45 @@ class PipelineProfiler:
             ],
         }
 
-    def save(self, path: str = "performance.json") -> None:
+    def public_summary(self) -> dict[str, Any]:
+        """The columns the web job page shows (full detail stays in the JSON file)."""
+        return {
+            "total_wall_time_s": round(self.total_wall_time_s, 3),
+            "stages": [
+                {
+                    "name": s.name,
+                    "wall_time_s": round(s.wall_time_s, 3),
+                    "cpu_time_s": round(s.cpu_time_s, 3),
+                    "peak_memory_mb": round(s.peak_memory_mb, 1),
+                    "status": s.status,
+                }
+                for s in self._stages
+            ],
+        }
+
+    def save(self, path: str = "performance.json", reporter=None) -> dict[str, Any]:
         data = self.summary()
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
-        print(f"Performance report saved -> {path}")
-        self._print_table()
+        reporter = reporter or get_reporter()
+        reporter.info(f"Performance report saved -> {path}")
+        self._print_table(reporter)
+        return data
 
-    def _print_table(self) -> None:
+    def _print_table(self, reporter=None) -> None:
+        reporter = reporter or get_reporter()
         has_gpu = _gpu_available()
         header = f"{'Stage':<20} {'Wall(s)':>8} {'CPU(s)':>8} {'Peak MB':>9}"
         header += f" {'GPU Alloc MB':>13}" if has_gpu else f" {'GPU':>13}"
         header += f" {'Status':>8}"
-        print(f"\n{header}")
-        print("-" * (58 + 14))
+        reporter.info("")
+        reporter.info(header)
+        reporter.info("-" * (58 + 14))
         for s in self._stages:
             gpu_col = str(s.gpu_delta_allocated_mb)
-            print(
+            reporter.info(
                 f"{s.name:<20} {s.wall_time_s:>8.2f} {s.cpu_time_s:>8.2f}"
                 f" {s.peak_memory_mb:>9.1f} {gpu_col:>13} {s.status:>8}"
             )
-        print("-" * (58 + 14))
-        print(f"{'TOTAL':<20} {self.total_wall_time_s:>8.2f}")
+        reporter.info("-" * (58 + 14))
+        reporter.info(f"{'TOTAL':<20} {self.total_wall_time_s:>8.2f}")

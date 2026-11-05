@@ -150,6 +150,16 @@
         <p class="opt-note" id="naipNote" role="status" hidden>
           This area looks outside the continental US, which NAIP covers, so the ground and roofs would stay untextured.
         </p>
+        <div class="opt-row">
+          <div class="text">
+            <strong id="profileLabel">Profile this run</strong>
+            <span id="profileHint">Save per-stage time and memory when the job finishes</span>
+          </div>
+          <label class="switch" for="profile">
+            <input id="profile" type="checkbox" aria-labelledby="profileLabel" aria-describedby="profileHint">
+            <span class="track"></span><span class="knob"></span>
+          </label>
+        </div>
       </section>
     </div>
 
@@ -285,6 +295,7 @@
       </div>
       <div class="job-side" id="jobSide">
         <dl class="job-facts" id="jobFacts"></dl>
+        <div id="jobProfile" hidden></div>
       </div>
     </div>
     <section class="job-photos" aria-labelledby="jobPhotosTitle">

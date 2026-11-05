@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from api.joblog import JobReporter
-from common import PipelineChain, ProgressMonitor
+from common import PipelineChain, PipelineProfiler, ProgressMonitor
 from common.constants import BoundingBox
 from common.redact import redact
 
@@ -234,6 +234,14 @@ class JobManager:
             min_lat=b["south"], max_lat=b["north"], min_lon=b["west"], max_lon=b["east"]
         )
         opts = job.options
+        profiler = (
+            PipelineProfiler(pipeline_name="photorealistic-street-maps")
+            if opts.get("profile")
+            else None
+        )
+        skip_stages = {
+            name for name, status in job.stages.items() if status == "skipped"
+        }
         try:
             state = self._pipeline_factory().run(
                 bbox,
@@ -249,13 +257,27 @@ class JobManager:
                     "image_dir": str(job_dir / "images"),
                     "reporter": log,
                 },
+                profiler=profiler,
                 on_stage=on_stage,
+                skip_stages=skip_stages,
             )
         except Exception as exc:
+            if profiler is not None:
+                _write_profile(profiler, job_dir, log)
             log.error(traceback.format_exc())
             return {"status": "failed", "error": _describe_error(exc)}
 
-        return {"status": "done", "result": _summarize(state, job_dir)}
+        result = _summarize(state, job_dir)
+        if profiler is not None:
+            result["profile"] = _write_profile(profiler, job_dir, log)
+        return {"status": "done", "result": result}
+
+
+def _write_profile(
+    profiler: PipelineProfiler, job_dir: Path, log: JobReporter
+) -> dict[str, Any]:
+    profiler.save(str(job_dir / "profile.json"), reporter=log)
+    return profiler.public_summary()
 
 
 def _turned_off(stage: str, options: dict[str, Any]) -> bool:

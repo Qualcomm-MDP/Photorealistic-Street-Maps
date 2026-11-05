@@ -399,6 +399,14 @@ dialog.settings-modal { width: min(560px, calc(100% - 32px)); height: auto; max-
 .job-facts dd { margin: 0; overflow-wrap: anywhere; }
 .job-facts .mono { font: 12.5px/1.6 var(--font-mono); font-variant-numeric: tabular-nums; }
 .job-facts .bad { color: var(--bad); }
+.job-profile { margin-top: 16px; }
+.job-profile-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.job-profile-head h3 { margin: 0; font-size: 13px; }
+.job-profile-table { width: 100%; border-collapse: collapse; font: 12.5px/1.5 var(--font-mono); }
+.job-profile-table th { text-align: left; font: 500 11px/1.8 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 2px 8px 2px 0; }
+.job-profile-table td { padding: 2px 8px 2px 0; }
+.job-profile-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.job-profile-total { margin: 8px 0 0; color: var(--muted); font: 12.5px/1.5 var(--font-mono); }
 .job-photos { display: flex; flex-direction: column; gap: 12px; }
 .job-photos-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .job-photos-head h3 { margin: 0; font: 600 15px/1.2 var(--font-display); }

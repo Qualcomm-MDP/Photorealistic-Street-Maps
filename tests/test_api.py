@@ -490,3 +490,41 @@ def test_terrain_and_naip_options(tmp_path, request_options, options, use, stage
     log = client.get(f"/api/jobs/{job['id']}/log").text
     # A skipped stage doesn't get a section in the log either.
     assert ("── Terrain ──" in log) == options["terrain"]
+
+
+def test_profile_option_writes_json_and_job_summary(tmp_path):
+    client = make_client(tmp_path)
+    created = client.post("/api/jobs", json={"bbox": BBOX, "profile": True}).json()
+    assert created["options"]["profile"] is True
+    job = wait_for(client, created["id"])
+
+    assert job["status"] == "done"
+    stages = job["result"]["profile"]["stages"]
+    assert [s["name"] for s in stages] == ["fetch", "export"]
+    assert all(s["status"] == "ok" for s in stages)
+
+    report = client.get(f"/api/jobs/{job['id']}/profile.json")
+    assert report.status_code == 200
+    assert [s["name"] for s in report.json()["stages"]] == ["fetch", "export"]
+    download = client.get(f"/api/jobs/{job['id']}/profile.json?download=true")
+    assert "profile.json" in download.headers.get("content-disposition", "")
+
+
+def test_profile_off_has_no_file(tmp_path):
+    client = make_client(tmp_path)
+    job = wait_for(client, client.post("/api/jobs", json={"bbox": BBOX}).json()["id"])
+    assert "profile" not in job["result"]
+    assert client.get(f"/api/jobs/{job['id']}/profile.json").status_code == 404
+
+
+def test_profile_marks_optional_stages_skipped(tmp_path):
+    client = make_client(tmp_path, optional_stages_pipeline({}))
+    job = wait_for(
+        client,
+        client.post("/api/jobs", json={"bbox": BBOX, "profile": True}).json()["id"],
+    )
+    assert {s["name"]: s["status"] for s in job["result"]["profile"]["stages"]} == {
+        "fetch": "ok",
+        "terrain": "skipped",
+        "naip": "skipped",
+    }

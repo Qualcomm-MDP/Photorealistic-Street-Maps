@@ -4,7 +4,7 @@ PSM is evaluated on speed and resource use, measured by the built-in profiler, a
 
 ## Pipeline profiler
 
-`PipelineProfiler` (`src/common/profiler.py`) measures each stage. Turn it on from the command line:
+`PipelineProfiler` (`src/common/profiler.py`) measures each stage. Turn it on from the command line, or with **Profile this run** on a web job (the JSON is then `profile.json` in the job folder):
 
 ```bash
 poetry run python src/main.py --bbox W S E N --output map.glb --profile results.json
@@ -19,11 +19,11 @@ poetry run python src/main.py --bbox W S E N --output map.glb --profile results.
 | `peak_memory_mb`         | Peak Python memory traced during the stage        |
 | `memory_delta_mb`        | Memory at the end minus at the start              |
 | `gpu_delta_allocated_mb` | Change in allocated GPU memory (NVIDIA only)      |
-| `status`                 | `ok` or `error`                                   |
+| `status`                 | `ok`, `skipped` (optional stage was off), or `error` |
 
 ### Output
 
-The profiler writes a JSON report with system information and the per-stage metrics, and prints a summary table. The example below is from **Design Review 1**, when the pipeline had four stages; today the report also lists `terrain` and `naip`.
+The profiler writes a JSON report with system information and the per-stage metrics, and logs a summary table. Today's pipeline reports `fetch`, `terrain`, `build_mesh`, `naip`, `texturing`, and `export`. Optional stages that were off are `skipped`. The example below is from **Design Review 1**, when there were four stages.
 
 ```json
 {
