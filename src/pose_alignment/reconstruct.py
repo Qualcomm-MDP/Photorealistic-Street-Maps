@@ -328,7 +328,9 @@ def camera_setup(p, folder, k1_limit=-0.2, focal=None):
 def colmap(log, *args, check=True):
     """Run a COLMAP command, appending its output to the log file."""
     cmd = ["colmap", *map(str, args)]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, encoding="utf-8", errors="replace"
+    )
     with open(log, "a") as fh:
         fh.write("\n$ " + " ".join(cmd) + "\n" + result.stdout + result.stderr)
     if check and result.returncode != 0:
@@ -340,7 +342,9 @@ def run_python(log, script, *args):
     """Run one of this folder's scripts in its own Python process, appending its output to the log
     (PyTorch and COLMAP's libraries each ship an OpenMP runtime and are kept in separate processes)."""
     cmd, env = module_command(script, *args)
-    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env
+    )
     with open(log, "a") as fh:
         fh.write("\n$ " + " ".join(cmd) + "\n" + result.stdout + result.stderr)
     if result.returncode != 0:

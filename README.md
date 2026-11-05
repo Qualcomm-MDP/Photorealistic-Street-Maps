@@ -36,7 +36,8 @@ and, for aligned poses, [COLMAP](https://colmap.github.io/install.html) 4.2 or n
     - macOS: `brew install colmap`
     - Linux: build it from source ([instructions](https://colmap.github.io/install.html));
         distribution packages are often older than 4.2.
-    - Windows: the release binaries from [GitHub](https://github.com/colmap/colmap/releases).
+    - Windows: the release binaries from [GitHub](https://github.com/colmap/colmap/releases)
+        (put the folder holding `colmap.exe` on your `PATH`, or `COLMAP_BIN` at `colmap.exe`).
 
     If `colmap` is not on your `PATH`, set `COLMAP_BIN` in `.env` to its executable. Without
     COLMAP everything else still runs, and aligned poses fall back to Mapillary's computed
@@ -89,6 +90,17 @@ to the OSM building outlines, in `outputs/alignment/mapillary_roi_N/` (figures i
 `results/`). The buildings are extruded from OSM, every wall is textured by blending all
 the photos that see it, and the model is saved as a `.glb`, with `<model>.overlays.json`
 (cameras and point cloud) next to it.
+
+**Windows with an NVIDIA GPU.** On Windows `poetry install` gets PyTorch's CPU-only build
+(on Linux it includes CUDA), so everything runs on the CPU, several times slower. For the
+GPU, install the CUDA build of the same version over it:
+
+```
+poetry run pip install torch==2.14.1 torchvision==0.29.2 --index-url https://download.pytorch.org/whl/cu130
+```
+
+The full pipeline has been run end to end on macOS; on Windows and Linux the test suite
+runs on every push, but a full run has not been tried yet.
 
 **Time and hardware.** A few blocks (300-450 frames) take about 10-15 minutes on an Apple
 silicon laptop, most of it the alignment. The alignment's segmentation, GeoCalib and

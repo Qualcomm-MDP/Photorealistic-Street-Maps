@@ -83,6 +83,8 @@ def module_command(script, *args):
         "PYTHONPATH": os.pathsep.join(
             filter(None, [str(SRC), os.environ.get("PYTHONPATH")])
         ),
+        # UTF-8 for its files and its output on every OS (Windows defaults to its code page)
+        "PYTHONUTF8": "1",
     }
     return [
         sys.executable,
