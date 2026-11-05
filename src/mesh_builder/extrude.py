@@ -43,7 +43,7 @@ def extrude_buildings(
 ):
     reporter = reporter or get_reporter()
     buildings = {}
-    flagged = [] #(osm, reason for buildings left out of mesh)
+    flagged = []  # (osm, reason for buildings left out of mesh)
 
     for _, element in reporter.progress(
         enumerate(input_data["elements"]),
