@@ -18,11 +18,12 @@ def build_mesh(value, state):
         bbox,
         reporter=get_reporter(state),
         terrain=state.get_metadata("terrain", None),
-        flagged=flagged
+        flagged=flagged,
     )
     state.set_metadata("flagged_buildings", flagged)
     state.require_metadata("progress_monitor").next()
     return data
+
 
 def ground_under(corners, terrain) -> tuple[float, float]:
     """Lowest and highest ground (m above terrain datum) under a footprint."""
@@ -45,7 +46,9 @@ def extrude_buildings(
 ):
     reporter = reporter or get_reporter()
     buildings = {}
-    flagged = [] if flagged is None else flagged # (osm, reason for buildings left out of mesh)
+    flagged = (
+        [] if flagged is None else flagged
+    )  # (osm, reason for buildings left out of mesh)
 
     for _, element in reporter.progress(
         enumerate(input_data["elements"]),
