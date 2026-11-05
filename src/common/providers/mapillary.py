@@ -80,21 +80,17 @@ class MapillaryClient:
                 images.update(self._fetch_bbox(quadrant, fields, limit, depth + 1))
         return images
 
-    def fetch(
+    def fetch_images(
         self,
         bbox: BoundingBox,
         fields: list[str],
         limit=MAX_IMAGES_PER_REQUEST,
-        min_quality: float | None = None,
-    ):
-        """Fetch image metadata for every Mapillary image in bbox.
-
-        If min_quality is set, images whose quality_score is below it are
-        skipped (images with no score are kept). quality_score must then be
-        in fields.
-        """
-        n_lat = max(1, math.ceil((bbox.max_lat - bbox.min_lat) / TILE_DEG))
-        n_lon = max(1, math.ceil((bbox.max_lon - bbox.min_lon) / TILE_DEG))
+        tile_deg: float = TILE_DEG,
+    ) -> list[dict]:
+        """Mapillary's records (the requested fields) of every image in bbox, queried in
+        tiles of tile_deg degrees (a tile near the image cap is split further)."""
+        n_lat = max(1, math.ceil((bbox.max_lat - bbox.min_lat) / tile_deg))
+        n_lon = max(1, math.ceil((bbox.max_lon - bbox.min_lon) / tile_deg))
         d_lat = (bbox.max_lat - bbox.min_lat) / n_lat
         d_lon = (bbox.max_lon - bbox.min_lon) / n_lon
         tiles = [
@@ -113,11 +109,28 @@ class MapillaryClient:
                 lambda t: self._fetch_bbox(t, fields, limit), tiles
             ):
                 images.update(tile_images)
-        data = list(images.values())
+        return list(images.values())
 
+    def fetch(
+        self,
+        bbox: BoundingBox,
+        fields: list[str],
+        limit=MAX_IMAGES_PER_REQUEST,
+        min_quality: float | None = None,
+    ):
+        """Fetch image metadata for every Mapillary image in bbox.
+
+        If min_quality is set, images whose quality_score is below it are
+        skipped (images with no score are kept). quality_score must then be
+        in fields.
+        """
+        data = self.fetch_images(bbox, fields, limit)
         if not data:
             raise RuntimeError("No images found.")
+        return self.to_metadata(data, min_quality)
 
+    def to_metadata(self, data: list[dict], min_quality: float | None = None):
+        """{image id: the pipeline's metadata} from Mapillary records (see fetch)."""
         if min_quality is not None:
             kept = [
                 img
@@ -166,9 +179,12 @@ class MapillaryClient:
                     max_dim = max(w, h)
                     focal_px = round((f_norm * max_dim), 2)
 
+            computed = (img.get("computed_geometry") or {}).get("coordinates")
             metadata[img_id] = {
                 "latitude": img["geometry"]["coordinates"][1],
                 "longitude": img["geometry"]["coordinates"][0],
+                "computed_latitude": computed[1] if computed else None,
+                "computed_longitude": computed[0] if computed else None,
                 "rotvec": list(computed_rotation),  # raw angle-axis (preferred)
                 "yaw": yaw,
                 "pitch": pitch,
@@ -178,6 +194,7 @@ class MapillaryClient:
                 "original_height": img.get("height"),
                 "image_url": img.get("thumb_original_url"),
                 "quality_score": img.get("quality_score"),
+                "camera_type": img.get("camera_type"),
             }
 
         return metadata

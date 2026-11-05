@@ -1,0 +1,420 @@
+"""Pipeline stage: camera poses for texturing, picked with main.py --poses.
+
+Runs between `fetch` and `build_mesh` and edits the Mapillary metadata in place, in the
+format apply_textures reads (latitude/longitude, world-to-camera `rotvec` in ENU,
+focal_length_pixels at original_width x original_height, image_url):
+
+  raw       Mapillary's raw GPS position with its computed rotation (the default, unchanged)
+  computed  Mapillary's computed (OpenSfM) position with its computed rotation
+  colmap    the alignment pipeline on the OSM streets in the bounding box (streets_from_bbox ->
+            mapillary -> segmentation -> calibrate -> reconstruct -> align; see README.md).
+            Every image the align stage marks reliable gets its corrected pose and measured
+            camera height; reliable images the main fetch did not return (and the right and
+            left crops of 360 frames, which replace the fetch stage's unaligned views of
+            those frames) are added from the pipeline's downloads. Other
+            images keep the `computed` pose, or are dropped with --aligned-only. A leg
+            whose aligned cameras end up more than one corridor width (15 m) from the street
+            they were captured on is rejected too: the align stage can call a leg reliable when
+            a single short facade pinned its heading.
+            --alignment-dir reuses an ROI folder from an earlier run, finishing any stage
+            that did not complete.
+
+The colmap source writes <ROI folder>/pose_overrides.json: per image the pose used, how far
+the camera moved and turned from Mapillary's computed pose, and why an image kept it. If the alignment
+fails (COLMAP missing, no usable capture, no fit to OSM), the reason is printed and every
+image keeps the `computed` pose: the pipeline carries on.
+
+Every source stores the final pose of each image in the `camera_poses` metadata, so an
+evaluation can render from the poses texturing used. Images listed in the `exclude_images`
+metadata (held-out photos) get a pose there but are then removed from texturing.
+"""
+
+import json
+import math
+import os
+import shutil
+import subprocess
+from pathlib import Path
+
+import numpy as np
+from scipy.spatial.transform import Rotation
+
+from common.reporter import get_reporter
+from data_ingest.image_store import ImageStore
+from segmentation.model import LabelCache
+
+from .geo_common import LocalFrame, RoiPaths, wrap_deg
+from .streets_from_bbox import distance_to_polyline
+
+POSE_SOURCES = ("raw", "computed", "colmap")
+
+
+def _use_computed(mapillary, reporter=None):
+    reporter = reporter or get_reporter()
+    n = 0
+    for meta in mapillary.values():
+        if meta.get("computed_latitude") is not None:
+            meta["latitude"], meta["longitude"] = (
+                meta["computed_latitude"],
+                meta["computed_longitude"],
+            )
+            n += 1
+    reporter.info(
+        f"  align_poses: Mapillary computed positions for {n} of {len(mapillary)} images"
+    )
+
+
+def _run_alignment(
+    bbox, roi_dir=None, images=None, selection=None, reporter=None, osm=None
+):
+    """Run the alignment pipeline (or finish an earlier run in roi_dir); returns its RoiPaths.
+    selection: the captures the fetch stage chose (ingest.py), which are reconstructed;
+    without it they are chosen here from images, the fetch stage's Mapillary records (or
+    from a query). The photos are downloaded at full resolution into
+    the ROI's image store, for texturing to reuse. Every stage from the download on runs in
+    its own process (run_pipeline.py), as when the pipeline runs on its own: LightGlue,
+    PyTorch, OpenCV's threaded image work and COLMAP each bring their own runtimes, which can
+    clash in this process (cutting 360 frames here crashed it)."""
+    from .geo_common import module_command, next_roi_dir
+    from .run_pipeline import stage_done
+    from .streets_from_bbox import streets_roi
+
+    reporter = reporter or get_reporter()
+
+    if roi_dir is None:
+        paths = RoiPaths(next_roi_dir())
+        paths.data.mkdir(parents=True)
+        if osm is not None:
+            # the fetch stage's buildings (over the alignment's reach, ingest.py), saved as the
+            # align stage's building file so it does not ask Overpass again
+            from .osm import buildings_from_elements
+
+            paths.alignment.mkdir(parents=True, exist_ok=True)
+            (paths.alignment / "osm_buildings.json").write_text(
+                json.dumps(buildings_from_elements(osm.get("elements", [])))
+            )
+        args = ["--out", paths.root, "--keep-originals"]
+        if selection is not None:
+            (paths.data / "selection.json").write_text(json.dumps(selection))
+            args += ["--selection", paths.data / "selection.json"]
+        else:
+            roi = streets_roi((bbox.min_lon, bbox.min_lat, bbox.max_lon, bbox.max_lat))
+            (paths.data / "streets.json").write_text(json.dumps(roi, indent=1))
+            args += ["--roi", paths.data / "streets.json"]
+            if images is not None:
+                (paths.data / "mapillary_records.json").write_text(json.dumps(images))
+                args += ["--images", paths.data / "mapillary_records.json"]
+        done = {"align": False, "reconstruct": False}
+    else:
+        paths = RoiPaths(roi_dir)
+        done = stage_done(paths)
+        if not done["mapillary"]:
+            raise RuntimeError(f"{paths.root} has no finished Mapillary download")
+        args = ["--roi-dir", paths.root]
+    if not done["align"]:
+        cmd, env = module_command("run_pipeline.py", *args)
+        colmap_bin = os.environ.get("COLMAP_BIN")
+        if colmap_bin:
+            env["PATH"] = f"{Path(colmap_bin).parent}{os.pathsep}{env['PATH']}"
+        if not done["reconstruct"] and shutil.which("colmap", path=env["PATH"]) is None:
+            raise RuntimeError(
+                "COLMAP not found: install it, or set COLMAP_BIN in .env to its executable"
+            )
+        # its output, line by line, into this run's log (the web app shows it as it comes)
+        env["PYTHONUNBUFFERED"] = "1"
+        proc = subprocess.Popen(
+            cmd,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            # progress bars redraw with \r: keep only their latest state
+            line = line.rstrip("\n").split("\r")[-1].rstrip()
+            if line:
+                reporter.info(line)
+        if proc.wait():
+            raise RuntimeError(
+                f"the alignment pipeline stopped; see the output above ({paths.root})"
+            )
+    return paths
+
+
+def _heading(R_world_to_cam):
+    """Compass heading (deg) of a camera's viewing direction."""
+    forward = np.asarray(R_world_to_cam)[2]
+    return math.degrees(math.atan2(forward[0], forward[1]))
+
+
+def _aligned_cameras(paths):
+    """{image key: (sequence folder, camera record)} from the align stage's output. The key is
+    the Mapillary image id; a 360 frame's right and left crops share one id, so theirs is
+    "<id>_<folder>": they are added as images of their own."""
+    cameras = {}
+    for seq in paths.sequences():
+        f = paths.alignment / f"{seq['folder']}.json"
+        if not f.exists():
+            continue
+        doc = json.loads(f.read_text())
+        for cam in doc.get("cameras", []):
+            cameras[RoiPaths.image_key(doc["folder"], cam)] = (doc["folder"], cam)
+    return cameras
+
+
+def _extend(line, length_m):
+    """The polyline lengthened by length_m past both ends, along its end segments."""
+    pts = np.asarray(line, dtype=float)
+    ends = []
+    for tip, prev in ((pts[0], pts[1]), (pts[-1], pts[-2])):
+        d = tip - prev
+        ends.append(tip + d / (np.linalg.norm(d) or 1.0) * length_m)
+    return [ends[0], *pts, ends[1]]
+
+
+def _off_street_legs(paths, cameras, max_off_street_m, extend_m=50.0):
+    """{leg: metres} for legs whose aligned cameras stray further than max_off_street_m from
+    the ROI's street lines. Cameras drive along the street, so a leg that leaves it was fitted
+    to the wrong walls (e.g. a heading pinned by one short facade) even if the OSM stage calls
+    it reliable. The lines end at the bounding box but captures run on past it, so they are
+    extended by extend_m: only distance sideways off the street counts."""
+    lines = json.loads(paths.roi_json.read_text())["lines"]
+    frame = LocalFrame(*lines[0][0])
+    lines_xy = [_extend([frame.xy(*p) for p in line], extend_m) for line in lines]
+    worst = {}
+    for _, cam in cameras.values():
+        if cam["reliable"]:
+            d = min(
+                distance_to_polyline(frame.xy(cam["lon"], cam["lat"]), line)
+                for line in lines_xy
+            )
+            worst[cam["leg"]] = max(worst.get(cam["leg"], 0.0), d)
+    return {leg: d for leg, d in worst.items() if d > max_off_street_m}
+
+
+def _apply_alignment(
+    paths, mapillary, aligned_only=False, max_off_street_m=15.0, reporter=None
+):
+    """Put the reliable aligned poses into the Mapillary metadata; returns the summary."""
+    reporter = reporter or get_reporter()
+    images, counts = (
+        {},
+        {"overridden": 0, "added": 0, "kept_mapillary": 0, "aspect_mismatch": 0},
+    )
+    cameras = _aligned_cameras(paths)
+    aligned_panos = set()  # 360 photos whose views the alignment placed
+    off_street = _off_street_legs(paths, cameras, max_off_street_m)
+    for leg, d in off_street.items():
+        reporter.info(
+            f"  align_poses: {leg} rejected: its aligned cameras end up {d:.0f} m from the street"
+        )
+    for img_id, (folder, cam) in cameras.items():
+        info = {
+            "sequence_folder": folder,
+            "file": cam["file"],
+            "leg": cam.get("leg"),
+            "reliable": cam["reliable"],
+            "leg_fit_to_walls_m": cam.get("leg_fit_m"),
+        }
+        if cam.get("leg") in off_street:
+            info["reason"] = (
+                f"{cam['leg']} rejected: its aligned cameras end up {off_street[cam['leg']]:.0f} m "
+                f"from the street (more than {max_off_street_m:.0f} m)"
+            )
+            if img_id in mapillary:
+                images[img_id] = {"source": "mapillary", **info}
+            continue
+        if not cam["reliable"]:
+            info["reason"] = (
+                cam.get("not_aligned_reason")
+                or "leg not reliable (fits the OSM walls worse than 2 m)"
+            )
+            if img_id in mapillary:
+                images[img_id] = {"source": "mapillary", **info}
+            continue
+
+        R_wc = np.array(cam["rotation_cam_to_enu"]).T
+        rotvec = Rotation.from_matrix(R_wc).as_rotvec()
+        yaw, pitch, roll = Rotation.from_rotvec(rotvec).as_euler("ZYX", degrees=True)
+        intr = cam["intrinsics"]
+        pose = {
+            "latitude": cam["lat"],
+            "longitude": cam["lon"],
+            "rotvec": rotvec.tolist(),
+            "yaw": round(float(yaw), 2),
+            "pitch": round(float(pitch), 2),
+            "roll": round(float(roll), 2),
+            "camera_height_m": cam["height_m"],
+            "pose_source": "colmap",
+        }
+        info["camera_height_m"] = round(cam["height_m"], 3)
+
+        meta = mapillary.get(img_id)
+        if meta is None:
+            mapillary[img_id] = {
+                **pose,
+                "focal_length_pixels": intr["fx"],
+                "original_width": intr["width"],
+                "original_height": intr["height"],
+                "image_url": str(paths.images / folder / cam["file"]),
+            }
+            images[img_id] = {"source": "colmap (added)", **info}
+            counts["added"] += 1
+            if cam.get("pano_yaw_deg") is not None:
+                aligned_panos.add(str(cam["id"]))
+            continue
+        w, h = meta.get("original_width"), meta.get("original_height")
+        if not (w and h) or abs(w / h - intr["width"] / intr["height"]) > 0.02:
+            images[img_id] = {
+                "source": "mapillary",
+                **info,
+                "reason": "image size differs from the aligned download",
+            }
+            counts["aspect_mismatch"] += 1
+            continue
+        frame = LocalFrame(meta["longitude"], meta["latitude"])
+        info["moved_m"] = round(
+            math.dist((0.0, 0.0), frame.xy(cam["lon"], cam["lat"])), 3
+        )
+        if meta.get("rotvec") is not None:
+            old = _heading(Rotation.from_rotvec(meta["rotvec"]).as_matrix())
+            info["heading_change_deg"] = round(wrap_deg(_heading(R_wc) - old), 2)
+        meta.update(pose, focal_length_pixels=intr["fx"] * w / intr["width"])
+        images[img_id] = {"source": "colmap", **info}
+        counts["overridden"] += 1
+
+    # the fetch stage's own views of those 360 photos (data_ingest.pano) would texture the
+    # same facades again from Mapillary's pose
+    for img_id in [
+        k
+        for k, m in mapillary.items()
+        if (m.get("pano_crop") or {}).get("id") in aligned_panos
+    ]:
+        del mapillary[img_id]
+        images[img_id] = {
+            "source": "dropped",
+            "reason": "a view of a 360 photo whose aligned views were added",
+        }
+    for img_id in mapillary:
+        if img_id not in images:
+            images[img_id] = {
+                "source": "mapillary",
+                "reason": "not in an aligned capture",
+            }
+    counts["kept_mapillary"] = sum(v["source"] == "mapillary" for v in images.values())
+
+    used = counts["overridden"] + counts["added"]
+    if aligned_only and used:
+        for img_id in [
+            k for k, v in mapillary.items() if v.get("pose_source") != "colmap"
+        ]:
+            del mapillary[img_id]
+            images[img_id]["source"] = "dropped (--aligned-only)"
+        counts["kept_mapillary"] = 0
+    elif aligned_only:
+        reporter.info(
+            "  align_poses: no reliable aligned image, so --aligned-only is ignored"
+        )
+
+    summary = {
+        "pose_source": "colmap",
+        "roi_folder": str(paths.root),
+        "aligned_only": aligned_only,
+        "rejected_legs_off_street_m": {
+            leg: round(d, 1) for leg, d in off_street.items()
+        },
+        **counts,
+    }
+    (paths.root / "pose_overrides.json").write_text(
+        json.dumps({**summary, "images": images}, indent=1)
+    )
+    reporter.info(
+        f"  align_poses: {counts['overridden']} images got aligned poses, {counts['added']} aligned images "
+        f"added, {counts['kept_mapillary']} kept Mapillary poses"
+        + (
+            f", {len(images) - used - counts['kept_mapillary']} dropped"
+            if aligned_only and used
+            else ""
+        )
+        + f" (details: {paths.root / 'pose_overrides.json'})"
+    )
+    return summary
+
+
+POSE_KEYS = (
+    "latitude",
+    "longitude",
+    "rotvec",
+    "camera_height_m",
+    "focal_length_pixels",
+    "original_width",
+    "original_height",
+    "pose_source",
+)
+
+
+def align_poses(value, state):
+    reporter = get_reporter(state)
+    source = state.get_metadata("pose_source", "raw")
+    mapillary = state.require_metadata("provider_data")["mapillary"]
+    if source in ("computed", "colmap"):
+        _use_computed(mapillary, reporter)
+    if source == "colmap":
+        try:
+            paths = _run_alignment(
+                state.require_metadata("bbox"),
+                state.get_metadata("alignment_dir", None),
+                state.require_metadata("provider_data").get("mapillary_images"),
+                state.require_metadata("provider_data").get("mapillary_selection"),
+                reporter,
+                state.require_metadata("provider_data").get("osm_alignment"),
+            )
+            # texturing reads the photos the alignment downloaded, and the class maps its
+            # segmentation made, instead of downloading and segmenting them again
+            state.set_metadata("image_store", ImageStore(paths.originals))
+            state.set_metadata("segmentation_labels", LabelCache(paths.labels))
+            # the reconstructed points on the map, for the viewer (common/overlays.py)
+            from .points import aligned_points
+
+            state.set_metadata("alignment_points", aligned_points(paths.root))
+            state.set_metadata(
+                "pose_alignment",
+                _apply_alignment(
+                    paths,
+                    mapillary,
+                    state.get_metadata("aligned_only", False),
+                    reporter=reporter,
+                ),
+            )
+        except (Exception, SystemExit) as e:
+            reporter.warning(
+                f"align_poses: alignment failed ({e}); every image keeps Mapillary's computed pose"
+            )
+
+    for meta in mapillary.values():
+        if "pose_source" not in meta:
+            meta["pose_source"] = (
+                "raw"
+                if source == "raw" or meta.get("computed_latitude") is None
+                else "computed"
+            )
+    state.set_metadata(
+        "camera_poses",
+        {
+            img_id: {k: meta[k] for k in POSE_KEYS if meta.get(k) is not None}
+            for img_id, meta in mapillary.items()
+        },
+    )
+    excluded = [
+        i
+        for i in state.get_metadata("exclude_images", None) or ()
+        if mapillary.pop(i, None)
+    ]
+    if excluded:
+        reporter.info(
+            f"  align_poses: {len(excluded)} held-out images removed from texturing"
+        )
+    return value

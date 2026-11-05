@@ -102,21 +102,49 @@
 
       <section class="card" aria-labelledby="optTitle">
         <div class="card-head"><h2 id="optTitle">Options</h2></div>
+        <div class="field">
+          <label for="poses">Camera poses</label>
+          <select id="poses">
+            <option value="colmap">Aligned to OpenStreetMap · most accurate, slower (needs COLMAP)</option>
+            <option value="computed">Mapillary computed · fast</option>
+            <option value="raw">Mapillary raw GPS · fastest, least accurate</option>
+          </select>
+        </div>
+        <div class="opt-row" id="alignedOnlyRow">
+          <div class="text">
+            <strong id="alignedOnlyLabel">Aligned photos only</strong>
+            <span id="alignedOnlyHint">Texture only from photos the alignment placed on the map</span>
+          </div>
+          <label class="switch" for="alignedOnly">
+            <input id="alignedOnly" type="checkbox" aria-labelledby="alignedOnlyLabel" aria-describedby="alignedOnlyHint">
+            <span class="track"></span><span class="knob"></span>
+          </label>
+        </div>
         <div class="opt-row">
           <div class="text">
             <strong id="segLabel">Remove obstructions</strong>
-            <span id="segHint">Erase cars, poles and people from facade photos</span>
+            <span id="segHint">Find cars, poles and people in the facade photos</span>
           </div>
           <label class="switch" for="seg">
             <input id="seg" type="checkbox" checked aria-labelledby="segLabel" aria-describedby="segHint">
             <span class="track"></span><span class="knob"></span>
           </label>
         </div>
+        <div class="opt-row" id="fillObsRow">
+          <div class="text">
+            <strong id="fillObsLabel">Fill obstructions</strong>
+            <span id="fillObsHint">Paint over them (LaMa; slow without a GPU). Off: keep the photos as taken, and each facade takes the photo they hide least</span>
+          </div>
+          <label class="switch" for="fillObs">
+            <input id="fillObs" type="checkbox" checked aria-labelledby="fillObsLabel" aria-describedby="fillObsHint">
+            <span class="track"></span><span class="knob"></span>
+          </label>
+        </div>
         <div class="field">
           <label for="model">Segmentation model</label>
           <select id="model">
-            <option value="large">Mask2Former Swin-Large · best quality</option>
-            <option value="tiny">Mask2Former Swin-Tiny · faster on CPU</option>
+            <option value="large">Mask2Former Swin-Large (Mapillary Vistas) · best quality</option>
+            <option value="tiny">Mask2Former Swin-Tiny (Cityscapes) · faster on CPU</option>
           </select>
         </div>
         <div class="opt-row">
@@ -124,7 +152,7 @@
           <div class="segmented" role="group" aria-label="Device" id="device">
             <button type="button" aria-pressed="true" data-v="auto">Auto</button>
             <button type="button" aria-pressed="false" data-v="cpu">CPU</button>
-            <button type="button" aria-pressed="false" data-v="cuda" title="No CUDA GPU on this server" disabled>GPU</button>
+            <button type="button" aria-pressed="false" data-v="gpu" title="No GPU on this server" disabled>GPU</button>
           </div>
         </div>
         <div class="opt-row">
@@ -178,6 +206,10 @@
         </div>
         <div class="stage-placeholder" id="stagePlaceholder" hidden>Preview is open in a larger window</div>
         <div class="stage-tools" id="stageTools">
+          <button class="btn" id="showCameras" type="button" aria-pressed="false" hidden
+            title="The photos' camera positions: green aligned, orange Mapillary computed, red raw GPS">Cameras</button>
+          <button class="btn" id="showPoints" type="button" aria-pressed="false" hidden
+            title="The alignment's reconstructed points">Point cloud</button>
           <button class="btn" id="resetView" type="button">Reset view</button>
           <a class="btn" id="download" aria-disabled="true">
             <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2v8M4.5 6.5 8 10l3.5-3.5M3 13h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -361,21 +393,39 @@
     <section class="set-section" aria-labelledby="defaultsTitle">
       <div class="set-head"><h3 id="defaultsTitle">Defaults for new jobs</h3></div>
       <p class="set-hint">Used for the Options panel each time PSM opens. You can still change them for a single job.</p>
+      <div class="field">
+        <label for="defPoses">Camera poses</label>
+        <select id="defPoses">
+          <option value="colmap">Aligned to OpenStreetMap · most accurate, slower (needs COLMAP)</option>
+          <option value="computed">Mapillary computed · fast</option>
+          <option value="raw">Mapillary raw GPS · fastest, least accurate</option>
+        </select>
+      </div>
       <div class="opt-row">
         <div class="text">
           <strong id="defSegLabel">Remove obstructions</strong>
-          <span id="defSegHint">Erase cars, poles and people from facade photos</span>
+          <span id="defSegHint">Find cars, poles and people in the facade photos</span>
         </div>
         <label class="switch" for="defSeg">
           <input id="defSeg" type="checkbox" aria-labelledby="defSegLabel" aria-describedby="defSegHint">
           <span class="track"></span><span class="knob"></span>
         </label>
       </div>
+      <div class="opt-row">
+        <div class="text">
+          <strong id="defFillLabel">Fill obstructions</strong>
+          <span id="defFillHint">Paint over them (LaMa), or keep the photos as taken</span>
+        </div>
+        <label class="switch" for="defFill">
+          <input id="defFill" type="checkbox" aria-labelledby="defFillLabel" aria-describedby="defFillHint">
+          <span class="track"></span><span class="knob"></span>
+        </label>
+      </div>
       <div class="field">
         <label for="defModel">Segmentation model</label>
         <select id="defModel">
-          <option value="large">Mask2Former Swin-Large · best quality</option>
-          <option value="tiny">Mask2Former Swin-Tiny · faster on CPU</option>
+          <option value="large">Mask2Former Swin-Large (Mapillary Vistas) · best quality</option>
+          <option value="tiny">Mask2Former Swin-Tiny (Cityscapes) · faster on CPU</option>
         </select>
       </div>
       <div class="opt-row">
@@ -383,7 +433,7 @@
         <div class="segmented" role="group" aria-label="Default device" id="defDevice">
           <button type="button" aria-pressed="true" data-v="auto">Auto</button>
           <button type="button" aria-pressed="false" data-v="cpu">CPU</button>
-          <button type="button" aria-pressed="false" data-v="cuda" disabled>GPU</button>
+          <button type="button" aria-pressed="false" data-v="gpu" disabled>GPU</button>
         </div>
       </div>
     </section>

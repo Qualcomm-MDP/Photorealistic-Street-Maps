@@ -30,7 +30,8 @@ from common.redact import redact
 OPTIONAL_STAGES = {"terrain": "terrain", "naip": "naip"}
 
 SEG_MODELS = {
-    "large": "facebook/mask2former-swin-large-cityscapes-semantic",
+    # Mapillary Vistas: trained on Mapillary's own crowdsourced photos (no Tiny exists)
+    "large": "facebook/mask2former-swin-large-mapillary-vistas-semantic",
     "tiny": "facebook/mask2former-swin-tiny-cityscapes-semantic",
 }
 
@@ -261,7 +262,11 @@ class JobManager:
                 metadata={
                     "bbox": bbox,
                     "progress_monitor": ProgressMonitor(verbose=False),
+                    # jobs from before the option existed used Mapillary's raw GPS
+                    "pose_source": opts.get("poses", "raw"),
+                    "aligned_only": opts.get("aligned_only", False),
                     "remove_obstructions": opts.get("remove_obstructions", True),
+                    "fill_obstructions": opts.get("fill_obstructions", True),
                     "seg_model": SEG_MODELS.get(opts.get("seg_model", "large")),
                     "seg_device": opts.get("device", "auto"),
                     "use_terrain": opts.get("terrain", False),
@@ -318,6 +323,11 @@ def _summarize(state: Any, job_dir: Path) -> dict[str, Any]:
     elements = (fetched.get("osm") or {}).get("elements", [])
     result["buildings"] = sum(1 for e in elements if "geometry" in e)
     result["photos"] = len(fetched.get("mapillary") or {})
+    aligned = state.get_metadata("pose_alignment", None)
+    if aligned:
+        result["aligned_photos"] = aligned.get("overridden", 0) + aligned.get(
+            "added", 0
+        )
     mesh = state.stage_outputs.get("texturing")
     faces = getattr(mesh, "faces", None)
     if faces is not None:

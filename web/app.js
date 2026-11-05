@@ -514,6 +514,7 @@ async function loadModel(job) {
   // Only the latest request may change the scene: switching jobs quickly can
   // make an older model (or its error) arrive after the newer one.
   state.modelWanted = job.id;
+  if (overlays.jobId !== job.id) disposeOverlays();
   const empty = $("stageEmpty");
   if (!renderer) {
     state.modelJobId = job.id; // nothing to load; the WebGL note shows instead
@@ -550,6 +551,7 @@ async function loadModel(job) {
     state.modelJobId = job.id;
     empty.hidden = true;
     jobStageNote(job, "");
+    loadOverlays(job);
   } catch (err) {
     if (state.modelWanted !== job.id) return;
     empty.textContent = `Couldn't load the model: ${err.message || err}`;
@@ -558,6 +560,99 @@ async function loadModel(job) {
   }
   showModelInfo(job);
 }
+// ---------- Overlays: the photos' cameras and the alignment's point cloud ----------
+// /api/jobs/<id>/overlays.json (common/overlays.py), already in the model's frame.
+const CAMERA_COLOURS = { colmap: 0x3fb950, computed: 0xf0a020, raw: 0xe5534b };
+const overlays = { cameras: null, points: null, jobId: null };
+
+function disposeOverlays() {
+  for (const key of ["cameras", "points"]) {
+    if (overlays[key]) {
+      scene.remove(overlays[key]);
+      disposeModel(overlays[key]);
+      overlays[key] = null;
+    }
+  }
+  overlays.jobId = null;
+  for (const id of ["showCameras", "showPoints"]) $(id).hidden = true;
+}
+
+function cameraFrusta(cameras) {
+  // A small pyramid per camera: apex at the camera, 2 m deep, the photo's field of view.
+  const pos = [];
+  const col = [];
+  const depth = 2;
+  for (const c of cameras) {
+    const p = new THREE.Vector3(...c.p);
+    const f = new THREE.Vector3(...c.f).normalize();
+    const r = new THREE.Vector3().crossVectors(f, new THREE.Vector3(...c.u)).normalize();
+    const u = new THREE.Vector3().crossVectors(r, f);
+    const hh = depth * Math.tan(((c.fov || 60) * Math.PI) / 360);
+    const hw = hh * (c.aspect || 1.333);
+    const corner = (sx, sy) =>
+      p.clone().addScaledVector(f, depth).addScaledVector(r, sx * hw).addScaledVector(u, sy * hh);
+    const k = [corner(-1, 1), corner(1, 1), corner(1, -1), corner(-1, -1)];
+    const segs = [
+      [p, k[0]], [p, k[1]], [p, k[2]], [p, k[3]],
+      [k[0], k[1]], [k[1], k[2]], [k[2], k[3]], [k[3], k[0]],
+    ];
+    const colour = new THREE.Color(CAMERA_COLOURS[c.source] ?? CAMERA_COLOURS.raw);
+    for (const [a, b] of segs) {
+      pos.push(a.x, a.y, a.z, b.x, b.y, b.z);
+      col.push(colour.r, colour.g, colour.b, colour.r, colour.g, colour.b);
+    }
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geom.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  return new THREE.LineSegments(geom, new THREE.LineBasicMaterial({ vertexColors: true }));
+}
+
+function pointCloud(points) {
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(points.xyz, 3));
+  geom.setAttribute("color", new THREE.Uint8BufferAttribute(points.rgb, 3, true));
+  return new THREE.Points(
+    geom,
+    new THREE.PointsMaterial({ size: 0.35, sizeAttenuation: true, vertexColors: true })
+  );
+}
+
+async function loadOverlays(job) {
+  disposeOverlays();
+  let data;
+  try {
+    data = await api(`/api/jobs/${job.id}/overlays.json`);
+  } catch {
+    return; // jobs from before overlays existed have none
+  }
+  if (state.modelJobId !== job.id) return;
+  overlays.jobId = job.id;
+  if (data.cameras?.length) {
+    overlays.cameras = cameraFrusta(data.cameras);
+    $("showCameras").hidden = false;
+  }
+  if (data.points?.xyz?.length) {
+    overlays.points = pointCloud(data.points);
+    $("showPoints").hidden = false;
+  }
+  for (const [id, key] of [["showCameras", "cameras"], ["showPoints", "points"]]) {
+    const obj = overlays[key];
+    if (obj && $(id).getAttribute("aria-pressed") === "true") scene.add(obj);
+  }
+}
+
+for (const [id, key] of [["showCameras", "cameras"], ["showPoints", "points"]]) {
+  $(id).addEventListener("click", () => {
+    const on = $(id).getAttribute("aria-pressed") !== "true";
+    $(id).setAttribute("aria-pressed", String(on));
+    const obj = overlays[key];
+    if (!obj) return;
+    if (on) scene.add(obj);
+    else scene.remove(obj);
+  });
+}
+
 function showModelInfo(job) {
   const dl = $("download");
   dl.href = `/api/jobs/${job.id}/model.glb?download=true`;
@@ -882,6 +977,13 @@ function jobStageNote(job, text) {
   $("jobStageEmpty").hidden = !text;
 }
 
+// Jobs from before the option existed used Mapillary's raw GPS.
+const POSE_LABELS = {
+  colmap: "Aligned to OpenStreetMap",
+  computed: "Mapillary computed",
+  raw: "Mapillary raw GPS",
+};
+
 function jobFactsHtml(job) {
   const { w, h } = boxSize(job.bbox);
   const o = job.options || {};
@@ -891,7 +993,13 @@ function jobFactsHtml(job) {
     ["Area", `<span class="mono">${Math.round(w)} × ${Math.round(h)} m · ${((w * h) / 1e6).toFixed(2)} km²</span>`],
     ["Created", esc(when(job.created_at))],
     ["Duration", esc(duration(job))],
-    ["Obstructions", o.remove_obstructions ? `Removed · ${esc(o.seg_model)} model` : "Kept"],
+    ["Camera poses", esc(POSE_LABELS[o.poses] || POSE_LABELS.raw) + (o.aligned_only ? " · aligned photos only" : "")],
+    [
+      "Obstructions",
+      o.remove_obstructions
+        ? `${o.fill_obstructions === false ? "Masked, not filled" : "Removed"} · ${esc(o.seg_model)} model`
+        : "Kept",
+    ],
     ["Device", esc(o.device || "auto")],
   ];
   // Jobs from before these options existed don't have them.
@@ -899,6 +1007,8 @@ function jobFactsHtml(job) {
   if ("naip" in o) rows.push(["Aerial photos", o.naip ? "NAIP ground and roofs" : "Off"]);
   if ("profile" in o) rows.push(["Profile", o.profile ? "On" : "Off"]);
   if (job.result?.photos != null) rows.push(["Photos", `<span class="mono">${job.result.photos}</span>`]);
+  if (job.result?.aligned_photos != null)
+    rows.push(["Aligned photos", `<span class="mono">${job.result.aligned_photos}</span>`]);
   if (job.error) rows.push(["Error", `<span class="bad">${esc(job.error)}</span>`]);
   return rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
 }
@@ -1320,11 +1430,25 @@ function setDeviceButtons(id, value) {
 
 // Put the saved defaults into the Options panel (on load, and after saving).
 function applyDefaults(d) {
+  $("poses").value = d.poses || "colmap";
+  $("fillObs").checked = d.fill_obstructions !== false;
   $("seg").checked = d.remove_obstructions;
   $("model").value = d.seg_model;
-  device = d.device === "cuda" && !state.system.cuda ? "auto" : d.device;
+  // "cuda" was the GPU button's value before it meant any GPU (NVIDIA or Apple)
+  const wanted = d.device === "cuda" ? "gpu" : d.device;
+  device = wanted === "gpu" && !state.system.gpu ? "auto" : wanted;
   setDeviceButtons("device", device);
+  syncOptionRows();
 }
+
+// "Aligned photos only" applies to aligned poses; "Fill obstructions" to removing them:
+// each is shown only when it applies (and keeps its setting while hidden).
+function syncOptionRows() {
+  $("alignedOnlyRow").hidden = $("poses").value !== "colmap";
+  $("fillObsRow").hidden = !$("seg").checked;
+}
+$("poses").addEventListener("change", syncOptionRows);
+$("seg").addEventListener("change", syncOptionRows);
 
 function tokenMessage(text, kind = "") {
   const msg = $("tokenMsg");
@@ -1358,12 +1482,14 @@ async function openSettings(intro = "") {
   $("settingsIntro").textContent = intro;
   $("settingsIntro").hidden = !intro;
   if (d) {
+    $("defPoses").value = d.poses || "colmap";
+    $("defFill").checked = d.fill_obstructions !== false;
     $("defSeg").checked = d.remove_obstructions;
     $("defModel").value = d.seg_model;
-    defDevice = d.device;
-    setDeviceButtons("defDevice", d.device);
+    defDevice = d.device === "cuda" ? "gpu" : d.device;
+    setDeviceButtons("defDevice", defDevice);
   }
-  $("defDevice").querySelector('[data-v="cuda"]').disabled = !state.system.cuda;
+  $("defDevice").querySelector('[data-v="gpu"]').disabled = !state.system.gpu;
   tokenInput.value = "";
   renderTokenStatus();
   renderTokenControls();
@@ -1526,7 +1652,13 @@ $("settingsForm").addEventListener("submit", async (e) => {
     state.settings = await api("/api/settings", {
       method: "PUT",
       body: JSON.stringify({
-        defaults: { remove_obstructions: $("defSeg").checked, seg_model: $("defModel").value, device: defDevice },
+        defaults: {
+          poses: $("defPoses").value,
+          remove_obstructions: $("defSeg").checked,
+          fill_obstructions: $("defFill").checked,
+          seg_model: $("defModel").value,
+          device: defDevice,
+        },
       }),
     });
     applyDefaults(state.settings.defaults);
@@ -1557,7 +1689,10 @@ $("go").addEventListener("click", async () => {
       body: JSON.stringify({
         bbox: box,
         name: state.placeName || "Custom area",
+        poses: $("poses").value,
+        aligned_only: $("poses").value === "colmap" && $("alignedOnly").checked,
         remove_obstructions: $("seg").checked,
+        fill_obstructions: $("fillObs").checked,
         seg_model: $("model").value,
         device,
         terrain: $("terrain").checked,
@@ -1637,9 +1772,13 @@ renderGallery();
     $("go").disabled = true;
     return;
   }
-  const gpu = $("device").querySelector('[data-v="cuda"]');
-  gpu.disabled = !state.system.cuda;
-  gpu.title = state.system.cuda ? "" : "No CUDA GPU on this server";
+  const gpu = $("device").querySelector('[data-v="gpu"]');
+  gpu.disabled = !state.system.gpu;
+  gpu.title = state.system.gpu
+    ? state.system.gpu === "mps"
+      ? "Apple GPU"
+      : "NVIDIA GPU (CUDA)"
+    : "No GPU on this server";
   try {
     await loadSettings();
     applyDefaults(state.settings.defaults);

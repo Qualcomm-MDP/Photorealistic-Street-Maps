@@ -1,6 +1,6 @@
 import pytest
 
-from segmentation import obstruction
+from segmentation import model as seg_model
 
 
 class FakeModel:
@@ -26,36 +26,36 @@ def fake_models(monkeypatch):
         return FakeModel(model_id, fail_on="cuda")
 
     monkeypatch.setattr(
-        obstruction.Mask2FormerImageProcessor,
+        seg_model.Mask2FormerImageProcessor,
         "from_pretrained",
         staticmethod(lambda model_id: object()),
     )
     monkeypatch.setattr(
-        obstruction.Mask2FormerForUniversalSegmentation,
+        seg_model.Mask2FormerForUniversalSegmentation,
         "from_pretrained",
         staticmethod(model_from_pretrained),
     )
     for name in ("_seg_proc", "_seg_model", "_seg_key"):
-        monkeypatch.setattr(obstruction, name, None)
+        monkeypatch.setattr(seg_model, name, None)
     return loads
 
 
 def test_failed_model_switch_does_not_look_cached(fake_models):
-    obstruction._load_seg_model("tiny", "cpu")
-    assert obstruction._seg_key == ("tiny", "cpu")
+    seg_model.load_model("tiny", "cpu")
+    assert seg_model._seg_key == ("tiny", "cpu", False)
 
     with pytest.raises(RuntimeError, match="out of memory"):
-        obstruction._load_seg_model("large", "cuda")
-    assert obstruction._seg_key is None
+        seg_model.load_model("large", "cuda")
+    assert seg_model._seg_key is None
 
     # The next run reloads instead of reusing the half-switched model.
-    obstruction._load_seg_model("tiny", "cpu")
+    seg_model.load_model("tiny", "cpu")
     assert fake_models == ["tiny", "large", "tiny"]
-    assert obstruction._seg_model.name == "tiny"
+    assert seg_model._seg_model.name == "tiny"
 
 
 def test_same_model_and_device_is_reused(fake_models):
-    obstruction._load_seg_model("tiny", "cpu")
-    obstruction._load_seg_model("tiny", "cpu")
+    seg_model.load_model("tiny", "cpu")
+    seg_model.load_model("tiny", "cpu")
 
     assert fake_models == ["tiny"]

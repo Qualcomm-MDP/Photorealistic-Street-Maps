@@ -63,11 +63,36 @@ def test_retries_another_round_after_all_endpoints_fail(fake_post):
     assert calls == ["https://a", "https://b", "https://a"]
 
 
-def test_raises_after_exhausting_rounds(fake_post):
+def test_falls_back_to_the_osm_api_after_exhausting_rounds(fake_post, monkeypatch):
+    _, responses = fake_post
+    responses += [FakeResponse(504)] * 4
+    asked = {}
+
+    def elements(self, bbox, keep):
+        asked["bbox"] = bbox
+        asked["keeps_buildings"] = keep({"building": "yes"}) and not keep(
+            {"highway": "x"}
+        )
+        return {"elements": [{"type": "way", "id": 1}]}
+
+    monkeypatch.setattr(osm.OsmApiClient, "elements", elements)
+    with pytest.warns(UserWarning, match="OpenStreetMap API"):
+        assert make_client().fetch(BBOX) == {"elements": [{"type": "way", "id": 1}]}
+    assert asked == {
+        "bbox": (BBOX.min_lon, BBOX.min_lat, BBOX.max_lon, BBOX.max_lat),
+        "keeps_buildings": True,
+    }
+
+
+def test_raises_when_the_osm_api_fails_too(fake_post, monkeypatch):
     _, responses = fake_post
     responses += [FakeResponse(504)] * 4
 
-    with pytest.raises(RuntimeError, match="All Overpass endpoints failed"):
+    def down(self, bbox, keep):
+        raise requests.HTTPError("HTTP 503")
+
+    monkeypatch.setattr(osm.OsmApiClient, "elements", down)
+    with pytest.warns(UserWarning), pytest.raises(requests.HTTPError):
         make_client().fetch(BBOX)
 
 
