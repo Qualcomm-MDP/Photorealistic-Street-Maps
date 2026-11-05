@@ -23,28 +23,28 @@ class OSMClient(
 )
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/osm.py#L20)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/osm.py#L21)
 
 #### OSMClient.fetch()
 
 ```python
 def fetch(
     bbox: BoundingBox,
-    features: Optional[List[OSM_MAP_FEATURES]] = None,
-) -> Dict[str, Any]
+    features: list[OSM_MAP_FEATURES] | None = None,
+) -> dict[str, Any]
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/osm.py#L36)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/osm.py#L37)
 
 #### OSMClient.build_feature_query()
 
 ```python
-def build_feature_query(feature: OSM_MAP_FEATURES, bbox: BoundingBox) -> List[str]
+def build_feature_query(feature: OSM_MAP_FEATURES, bbox: BoundingBox) -> list[str]
 ```
 
 Build Overpass query snippets for a feature.
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/osm.py#L104)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/osm.py#L105)
 
 ### OSM_MAP_FEATURES
 
@@ -55,7 +55,7 @@ class OSM_MAP_FEATURES(Enum)
 - `BUILDING = 'building'`
 - `NATURE = 'nature'`
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/osm.py#L15)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/providers/osm.py#L16)
 
 ### OverpassClient
 

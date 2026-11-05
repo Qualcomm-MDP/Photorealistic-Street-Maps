@@ -554,7 +554,7 @@ Export a trimesh Scene to GLB format.
 | `mesh` | `trimesh.Scene` | The trimesh Scene to export. |
 | `output_path` | `str` | Path for the output .glb file. |
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/MeshExport.py#L5)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/MeshExport.py#L6)
 
 ## Coordinate conversions
 
@@ -568,7 +568,7 @@ def meters_to_feet(meters: float) -> float
 
 Convert meters to feet
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L10)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L11)
 
 ### feet_to_meters()
 
@@ -578,7 +578,7 @@ def feet_to_meters(feet: float) -> float
 
 Convert feet to meters
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L16)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L17)
 
 ### kilometers_to_miles()
 
@@ -588,7 +588,7 @@ def kilometers_to_miles(km: float) -> float
 
 Convert kilometers to miles
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L22)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L23)
 
 ### miles_to_kilometers()
 
@@ -598,7 +598,7 @@ def miles_to_kilometers(miles: float) -> float
 
 Convert miles to kilometers
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L28)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L29)
 
 ### meters_to_kilometers()
 
@@ -608,7 +608,7 @@ def meters_to_kilometers(meters: float) -> float
 
 Convert meters to kilometers
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L34)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L35)
 
 ### kilometers_to_meters()
 
@@ -618,7 +618,7 @@ def kilometers_to_meters(km: float) -> float
 
 Convert kilometers to meters
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L39)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L40)
 
 ### degrees_to_radians()
 
@@ -628,7 +628,7 @@ def degrees_to_radians(degrees: float) -> float
 
 Convert degrees to radians
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L45)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L46)
 
 ### radians_to_degrees()
 
@@ -638,7 +638,7 @@ def radians_to_degrees(radians: float) -> float
 
 Convert radians to degrees
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L50)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L51)
 
 ### normalize_angle_degrees()
 
@@ -648,7 +648,7 @@ def normalize_angle_degrees(angle: float) -> float
 
 Normalize angle to [0, 360) degrees
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L55)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L56)
 
 ### normalize_angle_radians()
 
@@ -658,7 +658,7 @@ def normalize_angle_radians(angle: float) -> float
 
 Normalize angle to [0, 2pi) radians
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L60)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L61)
 
 ### compass_to_cartesian()
 
@@ -679,7 +679,7 @@ cartesian angle (0° = East, counter-clockwise).
 
 - `float`: Cartesian angle in degrees (0-360)
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L65)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L66)
 
 ### cartesian_to_compass()
 
@@ -699,7 +699,7 @@ Convert cartesian angle to compass bearing.
 
 - `float`: Compass bearing in degrees (0° = North, clockwise)
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L79)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L80)
 
 ### utc_now()
 
@@ -709,7 +709,7 @@ def utc_now() -> datetime
 
 Get current UTC time
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L93)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L94)
 
 ### to_utc()
 
@@ -719,7 +719,7 @@ def to_utc(dt: datetime) -> datetime
 
 Convert datetime to UTC
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L98)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L99)
 
 ### unix_timestamp_to_utc()
 
@@ -729,7 +729,7 @@ def unix_timestamp_to_utc(timestamp: float) -> datetime
 
 Convert Unix timestamp to UTC datetime
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L106)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L107)
 
 ### utc_to_unix_timestamp()
 
@@ -739,7 +739,7 @@ def utc_to_unix_timestamp(dt: datetime) -> float
 
 Convert UTC datetime to Unix timestamp
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L111)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L112)
 
 ### haversine_distance()
 
@@ -769,7 +769,7 @@ Calculate great-circle distance between two points using Haversine formula.
 
 - `float`: Distance in specified unit
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L117)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L118)
 
 ### euclidean_distance_2d()
 
@@ -779,7 +779,7 @@ def euclidean_distance_2d(x1: float, y1: float, x2: float, y2: float) -> float
 
 Calculate 2D Euclidean distance
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L167)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L168)
 
 ### euclidean_distance_3d()
 
@@ -796,7 +796,7 @@ def euclidean_distance_3d(
 
 Calculate 3D Euclidean distance
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L172)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/basic.py#L173)
 
 Module `common.conversions.utm` · [source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/utm.py)
 
@@ -806,15 +806,15 @@ Module `common.conversions.utm` · [source](https://github.com/Qualcomm-MDP/PSM/
 def camera_center_utm(image_meta, utm_epsg, camera_height_m)
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/utm.py#L9)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/utm.py#L6)
 
 ### convert_mesh_to_utm()
 
 ```python
-def convert_mesh_to_utm(mesh_path: str, lon_and_lat: Tuple[float, float], utm_epsg: int)
+def convert_mesh_to_utm(mesh_path: str, lon_and_lat: tuple[float, float], utm_epsg: int)
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/utm.py#L17)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/conversions/utm.py#L14)
 
 ## Progress display
 
@@ -847,7 +847,7 @@ Initialize the progress monitor.
 | --- | --- | --- |
 | `verbose` | `bool` | Whether to print progress updates to console. |
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L4)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L1)
 
 #### ProgressMonitor.set_verbose()
 
@@ -857,12 +857,12 @@ def set_verbose(enable: bool = True) -> None
 
 Enable or disable verbose output.
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L29)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L26)
 
 #### ProgressMonitor.add_task()
 
 ```python
-def add_task(name: Optional[str] = None) -> int
+def add_task(name: str | None = None) -> int
 ```
 
 Add a task to track.
@@ -871,13 +871,13 @@ Add a task to track.
 
 | Name | Type | Description |
 | --- | --- | --- |
-| `name` | `Optional[str]` | Name of the task. If not provided, uses index number. |
+| `name` | `str \| None` | Name of the task. If not provided, uses index number. |
 
 **Returns**
 
 - `int`: Total number of tasks after adding this one.
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L33)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L30)
 
 #### ProgressMonitor.reset()
 
@@ -887,7 +887,7 @@ def reset() -> None
 
 Reset progress to the beginning.
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L69)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L66)
 
 #### ProgressMonitor.skip_to()
 
@@ -903,7 +903,7 @@ Skip to a specific task index.
 | --- | --- | --- |
 | `index` | `int` | Task index to skip to (0-based). |
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L73)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L70)
 
 #### ProgressMonitor.is_complete()
 
@@ -913,7 +913,7 @@ def is_complete() -> bool
 
 Check if all tasks are complete.
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L84)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L81)
 
 #### ProgressMonitor.next()
 
@@ -927,7 +927,7 @@ Mark current task as complete and move to next.
 
 - `bool`: True if all tasks are now complete, False otherwise.
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L88)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L85)
 
 #### ProgressMonitor.progress_percentage()
 
@@ -937,4 +937,4 @@ def progress_percentage() -> float
 
 Get progress as a percentage (0-100).
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L106)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/ProgressMonitor.py#L103)
