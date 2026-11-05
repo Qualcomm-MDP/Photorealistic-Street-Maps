@@ -206,3 +206,81 @@ def test_a_360_run_beats_a_forward_camera_covering_the_street_as_well():
     runs[0]["coverage"] = 1.0
     runs[1]["coverage"] = runs[2]["coverage"] = 0.5
     assert rank_runs(runs)[0]["sequence"] == "forward"
+
+
+def test_one_capture_chosen_on_two_streets_becomes_one_run():
+    from data_ingest.mapillary_sequences import choose_roi, selection_images
+
+    M_LAT = 1 / 111320.0
+    # one drive: 30 frames east along street 1, then 30 frames north along street 2
+    east = [_record(k, LON0 + 5 * k * M_LON) for k in range(30)]
+    north = [
+        _record(30 + k, LON0 + 150 * M_LON, LAT0 + 5 * (k + 1) * M_LAT)
+        for k in range(30)
+    ]
+    roi = make_roi(
+        "L",
+        [
+            _line(0, 145),
+            [
+                (LON0 + 150 * M_LON, LAT0 + 5 * M_LAT),
+                (LON0 + 150 * M_LON, LAT0 + 150 * M_LAT),
+            ],
+        ],
+        15.0,
+    )
+    selection = choose_roi(roi, east + north, no_rig=True)
+    (group,) = selection["groups"]
+    assert group["street_lines"] == [1, 2] and group["line"] == 1
+    run_ids = [i["id"] for i in group["pick"]["run"]]
+    assert run_ids == sorted(run_ids, key=int) and len(run_ids) == 60
+    assert len(selection_images(selection)) == 60
+
+
+def test_separate_passes_of_one_sequence_stay_separate():
+    from data_ingest.mapillary_sequences import merge_repeated
+
+    def group(k, ids, t0):
+        run = [
+            {"id": str(i), "sequence": "s", "captured_at": t0 + 1000 * n}
+            for n, i in enumerate(ids)
+        ]
+        return {
+            "line": k,
+            "street_line": k,
+            "pick": {"sequence": "s", "pano": False, "run": run},
+            "siblings": [],
+        }
+
+    # the second pass along the other street is 10 minutes later
+    out = merge_repeated([group(1, range(5), 0), group(2, range(5, 10), 600_000)], {})
+    assert [g["line"] for g in out] == [1, 2]
+
+
+def test_buildings_for_the_mesh_and_for_the_alignment():
+    from pose_alignment.osm import buildings_from_elements
+
+    def way(lon, lat, d=0.0001):
+        ring = [
+            (lon, lat),
+            (lon + d, lat),
+            (lon + d, lat + d),
+            (lon, lat + d),
+            (lon, lat),
+        ]
+        return {
+            "type": "way",
+            "tags": {"building": "yes"},
+            "geometry": [{"lon": x, "lat": y} for x, y in ring],
+        }
+
+    bbox = BoundingBox(LAT0, LAT0 + 0.001, LON0, LON0 + 0.001)
+    inside_box, outside_box = way(LON0 + 0.0005, LAT0 + 0.0005), way(LON0 + 0.002, LAT0)
+    node = {"type": "node", "tags": {"building": "yes"}, "lat": LAT0, "lon": LON0}
+    assert ingest.overlaps(inside_box, bbox) and not ingest.overlaps(outside_box, bbox)
+    buildings = buildings_from_elements([inside_box, outside_box, node])
+    assert (
+        len(buildings) == 2
+        and buildings[0][0] == {"building": "yes"}
+        and len(buildings[0][1]) == 5
+    )

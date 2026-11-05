@@ -31,6 +31,10 @@ MAPILLARY_FIELDS = [
 # 25 m past the box (pose_alignment.streets_from_bbox) and it takes images up to 40 m from
 # a line (15 m corridor + 25 m slack; data_ingest.mapillary_sequences.find_runs).
 ALIGNMENT_REACH_M = 70.0
+# ...and the alignment fits its cameras to the buildings within 120 m of them
+# (pose_alignment/align.py: margin + search + 40 m), so with aligned poses the buildings are
+# fetched once over the box grown by this much and handed to it.
+ALIGNMENT_OSM_REACH_M = ALIGNMENT_REACH_M + 120.0
 
 
 def grown(bbox: BoundingBox, metres: float) -> BoundingBox:
@@ -43,6 +47,22 @@ def grown(bbox: BoundingBox, metres: float) -> BoundingBox:
         bbox.max_lat + d_lat,
         bbox.min_lon - d_lon,
         bbox.max_lon + d_lon,
+    )
+
+
+def overlaps(element: dict, bbox: BoundingBox) -> bool:
+    """Whether an OSM element's outline (its geometry, or its members') overlaps the box."""
+    pts = element.get("geometry") or [
+        p for m in element.get("members", []) for p in m.get("geometry", [])
+    ]
+    if not pts:
+        return False
+    lons, lats = [p["lon"] for p in pts], [p["lat"] for p in pts]
+    return (
+        min(lons) <= bbox.max_lon
+        and max(lons) >= bbox.min_lon
+        and min(lats) <= bbox.max_lat
+        and max(lats) >= bbox.min_lat
     )
 
 
@@ -111,11 +131,24 @@ def ingest_data(bbox: BoundingBox, state: PipelineState):
     mapillary_client = MapillaryClient(reporter=reporter)
     state.require_metadata("progress_monitor").next()
 
-    osm_data = osm_client.fetch(bbox, [OSM_MAP_FEATURES.BUILDING])
+    aligning = state.get_metadata("pose_source", "raw") == "colmap"
+    if aligning:
+        # one request for the mesh's buildings and the alignment's wider ones
+        wide = osm_client.fetch(
+            grown(bbox, ALIGNMENT_OSM_REACH_M), [OSM_MAP_FEATURES.BUILDING]
+        )
+        osm_data = {
+            **wide,
+            "elements": [e for e in wide.get("elements", []) if overlaps(e, bbox)],
+        }
+    else:
+        osm_data = osm_client.fetch(bbox, [OSM_MAP_FEATURES.BUILDING])
     from data_ingest.mapillary_sequences import ALIGNMENT_FIELDS, selection_images
 
     min_quality = state.get_metadata("min_quality", None)
     cumulative_data = {"osm": osm_data}
+    if aligning:
+        cumulative_data["osm_alignment"] = wide
     fields = list(dict.fromkeys(MAPILLARY_FIELDS + ALIGNMENT_FIELDS))
     records = mapillary_client.fetch_images(grown(bbox, ALIGNMENT_REACH_M), fields)
     if not any(inside(img, bbox) for img in records):

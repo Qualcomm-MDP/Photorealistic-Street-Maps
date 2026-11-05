@@ -697,12 +697,14 @@ def choose_roi(
     if images is not None and not isinstance(images, dict):
         images = {img["id"]: img for img in images}
     groups = []
+    seen: dict = {}  # every record looked at, to fill the gap when merging runs
     for k, line in enumerate(roi["lines"], start=1):
         print(
             f"Line {k}: {len(line)} points, {line_length_m(line):.0f} m, corridor {roi['corridor_m']:.0f} m"
         )
         t0 = time.time()
         near = images if images is not None else line_images(line, roi["corridor_m"])
+        seen.update(near)
         runs, frame, samples = find_runs(near, line, roi["corridor_m"])
         TIMINGS["search_s"] += time.time() - t0
         ranked = rank_runs(runs, min_images, max_spacing, view, view_tol, pano)
@@ -748,7 +750,85 @@ def choose_roi(
                     "siblings": siblings,
                 }
             )
-    return {"roi": roi, "groups": groups}
+    return {"roi": roi, "groups": merge_repeated(groups, seen)}
+
+
+def _span(imgs):
+    return imgs[0]["captured_at"], imgs[-1]["captured_at"]
+
+
+def _joined(a, b, records, min_spacing=1.0):
+    """The frames of runs a and b of one sequence plus that sequence's frames between them
+    (records), in capture order, leaving out frames under min_spacing metres from the last
+    one kept (taken while stopped: no baseline for SfM)."""
+    t0 = min(_span(a)[0], _span(b)[0])
+    t1 = max(_span(a)[1], _span(b)[1])
+    seq = a[0]["sequence"]
+    pool = {i["id"]: i for i in [*a, *b]}
+    for img in records.values():
+        if img.get("sequence") == seq and t0 <= img.get("captured_at", -1) <= t1:
+            pool.setdefault(img["id"], img)
+    ordered = sorted(pool.values(), key=lambda i: i["captured_at"])
+    frame = LocalFrame(*image_lonlat(ordered[0]))
+    kept, last = [], None
+    for img in ordered:
+        xy = frame.xy(*image_lonlat(img))
+        if last is None or math.dist(xy, last) >= min_spacing:
+            kept.append(img)
+            last = xy
+    return kept
+
+
+def merge_repeated(groups, records, max_gap_s=60.0):
+    """Groups whose picks are the same capture (one sequence, its runs overlapping in time or
+    less than max_gap_s apart) chosen on several streets, merged into one: one run through
+    the turn between the streets, reconstructed (and calibrated) once, its legs linked
+    across the turn like any capture's. The frames between the runs come from records;
+    rig siblings are merged the same way. "street_line" stays the first street;
+    "street_lines" lists them all."""
+    merged: list[dict] = []
+    for g in groups:
+        pick = g["pick"]
+        a0, a1 = _span(pick["run"])
+        into = None
+        for h in merged:
+            hp = h["pick"]
+            if hp["sequence"] != pick["sequence"] or hp["pano"] != pick["pano"]:
+                continue
+            b0, b1 = _span(hp["run"])
+            if max(a0, b0) - min(a1, b1) <= max_gap_s * 1000:
+                into = h
+                break
+        if into is None:
+            merged.append({**g, "street_lines": [g["street_line"]]})
+            continue
+        run = _joined(into["pick"]["run"], pick["run"], records)
+        frame = LocalFrame(*image_lonlat(run[0]))
+        pts = [frame.xy(*image_lonlat(i)) for i in run]
+        steps = sorted(math.dist(p, q) for p, q in zip(pts, pts[1:])) or [float("inf")]
+        into["pick"] = {
+            **into["pick"],
+            "run": run,
+            "images": len(run),
+            "spacing_m": steps[len(steps) // 2],
+            "coverage": max(into["pick"]["coverage"], pick["coverage"]),
+        }
+        sibs = {r["sequence"]: (r, imgs) for r, imgs in into["siblings"]}
+        for r, imgs in g["siblings"]:
+            if r["sequence"] in sibs:
+                r0, imgs0 = sibs[r["sequence"]]
+                sibs[r["sequence"]] = (r0, _joined(imgs0, imgs, records))
+            else:
+                sibs[r["sequence"]] = (r, imgs)
+        into["siblings"] = list(sibs.values())
+        into["street_lines"].append(g["street_line"])
+        print(
+            f"  {pick['sequence']} was chosen on lines {', '.join(map(str, into['street_lines']))}: "
+            f"merged into one run of {len(run)} frames"
+        )
+    for n, g in enumerate(merged, start=1):
+        g["line"] = n
+    return merged
 
 
 def selection_images(selection):

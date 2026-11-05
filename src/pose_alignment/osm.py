@@ -15,6 +15,29 @@ from common.providers.overpass import OverpassClient, OverpassUnavailable
 from .geo_common import OSM_API_MAP, http_get
 
 
+def buildings_from_elements(elements):
+    """[(tags, [(lon, lat)])] from Overpass "out geom" elements: a way's outline, a
+    relation's outer rings (the main pipeline's fetch stage gets the same elements)."""
+    buildings = []
+    for el in elements:
+        if el.get("type") == "way" and "geometry" in el:
+            rings = [el["geometry"]]
+        elif el.get("type") == "relation":
+            rings = [
+                m["geometry"]
+                for m in el.get("members", [])
+                if m.get("role") == "outer" and "geometry" in m
+            ]
+        else:
+            continue
+        buildings += [
+            (el.get("tags", {}), [(p["lon"], p["lat"]) for p in ring])
+            for ring in rings
+            if len(ring) >= 3
+        ]
+    return buildings
+
+
 def fetch_buildings(bbox, cache=None):
     """OSM building footprints in bbox (min_lon, min_lat, max_lon, max_lat): [(tags, [(lon, lat)])].
 
@@ -31,21 +54,7 @@ def fetch_buildings(bbox, cache=None):
             f'[out:json][timeout:90];(way["building"]({s},{w},{n},{e});'
             f'relation["building"]({s},{w},{n},{e}););out geom;'
         )
-        buildings = []
-        for el in data["elements"]:
-            rings = (
-                [el["geometry"]]
-                if el["type"] == "way"
-                else [
-                    m["geometry"]
-                    for m in el.get("members", [])
-                    if m.get("role") == "outer" and "geometry" in m
-                ]
-            )
-            buildings += [
-                (el.get("tags", {}), [(p["lon"], p["lat"]) for p in ring])
-                for ring in rings
-            ]
+        buildings = buildings_from_elements(data["elements"])
     except OverpassUnavailable:
         print(
             "  Overpass is unavailable; fetching the buildings from the OpenStreetMap API instead"

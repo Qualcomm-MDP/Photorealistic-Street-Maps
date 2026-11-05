@@ -64,7 +64,9 @@ def _use_computed(mapillary, reporter=None):
     )
 
 
-def _run_alignment(bbox, roi_dir=None, images=None, selection=None, reporter=None):
+def _run_alignment(
+    bbox, roi_dir=None, images=None, selection=None, reporter=None, osm=None
+):
     """Run the alignment pipeline (or finish an earlier run in roi_dir); returns its RoiPaths.
     selection: the captures the fetch stage chose (ingest.py), which are reconstructed;
     without it they are chosen here from images, the fetch stage's Mapillary records (or
@@ -82,6 +84,15 @@ def _run_alignment(bbox, roi_dir=None, images=None, selection=None, reporter=Non
     if roi_dir is None:
         paths = RoiPaths(next_roi_dir())
         paths.data.mkdir(parents=True)
+        if osm is not None:
+            # the fetch stage's buildings (over the alignment's reach, ingest.py), saved as the
+            # align stage's building file so it does not ask Overpass again
+            from .osm import buildings_from_elements
+
+            paths.alignment.mkdir(parents=True, exist_ok=True)
+            (paths.alignment / "osm_buildings.json").write_text(
+                json.dumps(buildings_from_elements(osm.get("elements", [])))
+            )
         args = ["--out", paths.root, "--keep-originals"]
         if selection is not None:
             (paths.data / "selection.json").write_text(json.dumps(selection))
@@ -358,6 +369,7 @@ def align_poses(value, state):
                 state.require_metadata("provider_data").get("mapillary_images"),
                 state.require_metadata("provider_data").get("mapillary_selection"),
                 reporter,
+                state.require_metadata("provider_data").get("osm_alignment"),
             )
             # texturing reads the photos the alignment downloaded, and the class maps its
             # segmentation made, instead of downloading and segmenting them again
