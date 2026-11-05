@@ -9,16 +9,10 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from common.MeshUtils import building_heights  # noqa: F401  (align, plot_fit import it from here)
 from common.providers.overpass import OverpassClient, OverpassUnavailable
 
 from .geo_common import OSM_API_MAP, http_get
-
-
-def parse_metres(value):
-    try:
-        return float(str(value).lower().replace("m", "").split(";")[0].strip())
-    except ValueError:
-        return None
 
 
 def fetch_buildings(bbox, cache=None):
@@ -109,22 +103,6 @@ def _buildings_from_osm_api(bbox, tile=0.004):
         for t, refs in rings
         if len(refs) >= 4 and refs[0] == refs[-1] and all(r in nodes for r in refs)
     ]
-
-
-def building_heights(tags, level_height, default_levels):
-    """(base, top, source) in metres above ground from OSM tags."""
-    base = parse_metres(tags.get("min_height"))
-    if base is None and tags.get("building:min_level"):
-        base = (parse_metres(tags["building:min_level"]) or 0) * level_height
-    top = parse_metres(tags.get("height") or tags.get("building:height"))
-    source = "height"
-    if top is None and tags.get("building:levels"):
-        levels = parse_metres(tags["building:levels"])
-        if levels:
-            top, source = levels * level_height, "levels"
-    if top is None:
-        top, source = default_levels * level_height, "default"
-    return base or 0.0, top, source
 
 
 class WallMap:
