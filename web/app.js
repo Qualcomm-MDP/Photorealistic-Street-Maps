@@ -1213,10 +1213,11 @@ function applyDefaults(d) {
   syncOptionRows();
 }
 
-// "Aligned photos only" applies to aligned poses; "Fill obstructions" to removing them.
+// "Aligned photos only" applies to aligned poses; "Fill obstructions" to removing them:
+// each is shown only when it applies (and keeps its setting while hidden).
 function syncOptionRows() {
   $("alignedOnlyRow").hidden = $("poses").value !== "colmap";
-  $("fillObs").disabled = !$("seg").checked;
+  $("fillObsRow").hidden = !$("seg").checked;
 }
 $("poses").addEventListener("change", syncOptionRows);
 $("seg").addEventListener("change", syncOptionRows);
