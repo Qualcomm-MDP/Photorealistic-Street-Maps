@@ -108,6 +108,8 @@ class JobRequest(BaseModel):
     # Same as the CLI's --terrain and --naip; aerial photos need the terrain.
     terrain: bool = False
     naip: bool = False
+    # Same as the CLI's --profile: per-stage time and memory in profile.json.
+    profile: bool = False
 
 
 def _default_pipeline() -> PipelineChain:
@@ -295,6 +297,7 @@ def create_app(
                 "device": req.device,
                 "terrain": req.terrain or req.naip,
                 "naip": req.naip,
+                "profile": req.profile,
             },
         )
         return job.to_dict()
@@ -314,6 +317,18 @@ def create_app(
             path,
             media_type="model/gltf-binary",
             filename=f"psm-{slug}-{job.id}.glb" if download else None,
+        )
+
+    @app.get("/api/jobs/{job_id}/profile.json")
+    def get_profile(job_id: str, download: bool = False) -> FileResponse:
+        job = _job_or_404(job_id)
+        path = jobs.job_dir(job.id) / "profile.json"
+        if not path.exists():
+            raise HTTPException(404, "This job has no profile.")
+        return FileResponse(
+            path,
+            media_type="application/json",
+            filename=f"psm-{job.id}-profile.json" if download else None,
         )
 
     @app.get("/api/jobs/{job_id}/overlays.json")

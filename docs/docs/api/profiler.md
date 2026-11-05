@@ -20,7 +20,7 @@ class PipelineProfiler(pipeline_name: str)
 | `pipeline_name` | `str` |  |
 | `total_wall_time_s` | `float` |  |
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L99)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L101)
 
 ### PipelineProfiler.start()
 
@@ -28,7 +28,7 @@ class PipelineProfiler(pipeline_name: str)
 def start() -> None
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L107)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L110)
 
 ### PipelineProfiler.begin_stage()
 
@@ -36,7 +36,7 @@ def start() -> None
 def begin_stage(name: str) -> StageMetrics
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L111)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L114)
 
 ### PipelineProfiler.end_stage()
 
@@ -48,7 +48,7 @@ def end_stage(
 ) -> None
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L117)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L120)
 
 ### PipelineProfiler.finish()
 
@@ -56,7 +56,7 @@ def end_stage(
 def finish() -> None
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L122)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L125)
 
 ### PipelineProfiler.summary()
 
@@ -64,15 +64,37 @@ def finish() -> None
 def summary() -> dict[str, Any]
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L129)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L134)
+
+### PipelineProfiler.public_summary()
+
+```python
+def public_summary(running: str | None = None) -> dict[str, Any]
+```
+
+What the web app's profile view shows (full detail stays in the JSON file).
+running: the stage that has started but not finished; it is listed with
+status "running" and its time so far.
+
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L157)
+
+### PipelineProfiler.write()
+
+```python
+def write(path: str) -> dict[str, Any]
+```
+
+Write the full report to path without logging it (e.g. after each stage).
+
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L190)
 
 ### PipelineProfiler.save()
 
 ```python
-def save(path: str = 'performance.json') -> None
+def save(path: str = 'performance.json', reporter=None) -> dict[str, Any]
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L152)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L197)
 
 ## StageMetrics
 
@@ -110,7 +132,7 @@ class StageMetrics(
 | `status` | `str` | `'pending'` |
 | `error` | `str \| None` | `None` |
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L52)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L54)
 
 ### StageMetrics.set_throughput()
 
@@ -118,4 +140,4 @@ class StageMetrics(
 def set_throughput(label: str, value: float) -> None
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L95)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/profiler.py#L97)

@@ -491,3 +491,104 @@ def test_terrain_and_naip_options(tmp_path, request_options, options, use, stage
     log = client.get(f"/api/jobs/{job['id']}/log").text
     # A skipped stage doesn't get a section in the log either.
     assert ("── Terrain ──" in log) == options["terrain"]
+
+
+def test_profile_option_writes_json_and_job_summary(tmp_path):
+    client = make_client(tmp_path)
+    created = client.post("/api/jobs", json={"bbox": BBOX, "profile": True}).json()
+    assert created["options"]["profile"] is True
+    job = wait_for(client, created["id"])
+
+    assert job["status"] == "done"
+    stages = job["result"]["profile"]["stages"]
+    assert [s["name"] for s in stages] == ["fetch", "export"]
+    assert all(s["status"] == "ok" for s in stages)
+
+    report = client.get(f"/api/jobs/{job['id']}/profile.json")
+    assert report.status_code == 200
+    assert [s["name"] for s in report.json()["stages"]] == ["fetch", "export"]
+    download = client.get(f"/api/jobs/{job['id']}/profile.json?download=true")
+    assert "profile.json" in download.headers.get("content-disposition", "")
+
+
+def test_profile_off_has_no_file(tmp_path):
+    client = make_client(tmp_path)
+    job = wait_for(client, client.post("/api/jobs", json={"bbox": BBOX}).json()["id"])
+    assert "profile" not in job["result"]
+    assert client.get(f"/api/jobs/{job['id']}/profile.json").status_code == 404
+
+
+def test_profile_marks_optional_stages_skipped(tmp_path):
+    client = make_client(tmp_path, optional_stages_pipeline({}))
+    job = wait_for(
+        client,
+        client.post("/api/jobs", json={"bbox": BBOX, "profile": True}).json()["id"],
+    )
+    assert {s["name"]: s["status"] for s in job["result"]["profile"]["stages"]} == {
+        "fetch": "ok",
+        "terrain": "skipped",
+        "naip": "skipped",
+    }
+
+
+def test_profile_is_pushed_live_after_each_stage(tmp_path):
+    client = make_client(tmp_path)
+
+    with client.websocket_connect("/api/ws") as ws:
+        ws.receive_json()  # snapshot
+        job_id = client.post("/api/jobs", json={"bbox": BBOX, "profile": True}).json()[
+            "id"
+        ]
+        profiles = []
+        while True:
+            msg = ws.receive_json()
+            if msg["type"] != "job" or msg["job"]["id"] != job_id:
+                continue
+            if msg["job"]["profile"]:
+                profiles.append(msg["job"]["profile"])
+            if msg["job"]["status"] == "done":
+                break
+
+    # While a stage runs it is listed as running; the last update is the finished profile.
+    running = [
+        [s["name"] for s in p["stages"] if s["status"] == "running"] for p in profiles
+    ]
+    assert ["fetch"] in running and ["export"] in running
+    final = profiles[-1]
+    assert final["finished"] is True
+    assert [(s["name"], s["status"]) for s in final["stages"]] == [
+        ("fetch", "ok"),
+        ("export", "ok"),
+    ]
+    assert {"cpu_time_s", "peak_memory_mb", "memory_delta_mb"} <= set(
+        final["stages"][0]
+    )
+    assert client.get(f"/api/jobs/{job_id}").json()["profile"] == final
+
+
+def test_failed_job_keeps_its_profile(tmp_path):
+    client = make_client(tmp_path, failing_pipeline)
+    job_id = client.post("/api/jobs", json={"bbox": BBOX, "profile": True}).json()["id"]
+    job = wait_for(client, job_id)
+
+    assert job["status"] == "failed"
+    stages = {s["name"]: s["status"] for s in job["profile"]["stages"]}
+    assert stages == {"fetch": "error"}
+    assert job["profile"]["finished"] is True
+    report = client.get(f"/api/jobs/{job_id}/profile.json")
+    assert report.status_code == 200
+    assert report.json()["stages"][0]["error"] == "No images found."
+
+
+def test_jobs_saved_before_live_profiles_still_load(tmp_path):
+    client = make_client(tmp_path)
+    job_id = wait_for(
+        client, client.post("/api/jobs", json={"bbox": BBOX}).json()["id"]
+    )["id"]
+    saved = tmp_path / job_id / "job.json"
+    data = json.loads(saved.read_text())
+    data.pop("profile")
+    saved.write_text(json.dumps(data))
+
+    job = make_client(tmp_path).get(f"/api/jobs/{job_id}").json()
+    assert job["profile"] is None

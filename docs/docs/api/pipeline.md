@@ -62,6 +62,7 @@ def run(
     metadata: dict[str, Any] | None = None,
     profiler: 'PipelineProfiler | None' = None,
     on_stage: StageListener | None = None,
+    skip_stages: set[str] | None = None,
 ) -> PipelineState
 ```
 
@@ -77,7 +78,7 @@ def resume(
 ) -> PipelineState
 ```
 
-[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/pipeline_chain.py#L154)
+[source](https://github.com/Qualcomm-MDP/PSM/blob/main/src/common/pipeline_chain.py#L159)
 
 ## PipelineState
 

@@ -168,6 +168,12 @@ def main():
         if args.profile
         else None
     )
+    use_terrain = args.terrain or args.naip
+    skip_stages = set()
+    if not use_terrain:
+        skip_stages.add("terrain")
+    if not args.naip:
+        skip_stages.add("naip")
     run_pipeline.run(
         bbox,
         metadata={
@@ -179,7 +185,7 @@ def main():
             "output_path": args.output,
             "ask_output_path": ask_save_path,
             "mapillary_dump_path": args.dump_mapillary,
-            "use_terrain": args.terrain or args.naip,
+            "use_terrain": use_terrain,
             "use_naip": args.naip,
             "min_quality": args.min_quality,
             "pose_source": args.poses,
@@ -187,6 +193,7 @@ def main():
             "alignment_dir": args.alignment_dir,
         },
         profiler=profiler,
+        skip_stages=skip_stages,
     )
     if profiler is not None:
         profiler.save(args.profile)

@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from common.pipeline_chain import PipelineChain
@@ -151,3 +153,43 @@ def test_pipeline_describe_lists_labels_in_run_order():
         {"name": "geometry", "label": "Geometry", "detail": ""},
         {"name": "export", "label": "export", "detail": ""},
     ]
+
+
+def test_profiler_marks_skipped_stages_and_logs_through_the_reporter(tmp_path):
+    from common.profiler import PipelineProfiler
+
+    pipeline = PipelineChain("timed")
+    pipeline.add_stage("work", lambda value, state: value + 1)
+    pipeline.add_stage("optional", lambda value, state: value)
+
+    lines: list[str] = []
+
+    class Rec:
+        def info(self, message: str) -> None:
+            lines.append(message)
+
+    profiler = PipelineProfiler("timed")
+    pipeline.run(1, profiler=profiler, skip_stages={"optional"})
+    path = tmp_path / "profile.json"
+    profiler.save(str(path), reporter=Rec())
+
+    assert {s.name: s.status for s in profiler._stages} == {
+        "work": "ok",
+        "optional": "skipped",
+    }
+    data = json.loads(path.read_text())
+    assert [s["name"] for s in data["stages"]] == ["work", "optional"]
+    assert any("saved" in line for line in lines)
+
+
+def test_profiler_total_stops_at_finish():
+    import time
+
+    from common.profiler import PipelineProfiler
+
+    profiler = PipelineProfiler("timed")
+    PipelineChain("timed").add_stage("work", lambda v, s: v).run(1, profiler=profiler)
+    total = profiler.total_wall_time_s
+    time.sleep(0.05)
+    assert profiler.total_wall_time_s == total
+    assert profiler.public_summary()["finished"] is True

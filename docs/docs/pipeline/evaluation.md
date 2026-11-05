@@ -4,11 +4,19 @@ PSM is evaluated on speed and resource use, measured by the built-in profiler, a
 
 ## Pipeline profiler
 
-`PipelineProfiler` (`src/common/profiler.py`) measures each stage. Turn it on from the command line:
+`PipelineProfiler` (`src/common/profiler.py`) measures each stage. Turn it on from the command line or the web app.
+
+**Command line:** `--profile PATH` writes the report to `PATH` when the run ends, and logs a summary table:
 
 ```bash
 poetry run python src/main.py --bbox W S E N --output map.glb --profile results.json
 ```
+
+**Web app:** **Profile this run** writes the report to `profile.json` in the job's folder (`output/jobs/<job id>/`). It's updated after every stage while the job runs, and kept when a job fails. The job's details show it as charts and a table, live; see [Profiling a job](../web-app.md#profiling-a-job). It's also served at `/api/jobs/<job id>/profile.json` (see [Web API](../api/web.md)).
+
+The summary table goes through the pipeline's reporter, like the rest of its output: to the console on the command line, and into the job's log in the web app.
+
+Memory is measured with Python's `tracemalloc`: it sees Python and NumPy allocations, not the whole process (for example not PyTorch's own buffers). Tracing every allocation makes a profiled run slower.
 
 ### Metrics per stage
 
@@ -19,11 +27,12 @@ poetry run python src/main.py --bbox W S E N --output map.glb --profile results.
 | `peak_memory_mb`         | Peak Python memory traced during the stage        |
 | `memory_delta_mb`        | Memory at the end minus at the start              |
 | `gpu_delta_allocated_mb` | Change in allocated GPU memory (NVIDIA only)      |
-| `status`                 | `ok` or `error`                                   |
+| `status`                 | `ok`, `skipped` (optional stage was off), or `error` |
+| `error`                  | The error message, for a stage that failed        |
 
 ### Output
 
-The profiler writes a JSON report with system information and the per-stage metrics, and prints a summary table. The example below is from **Design Review 1**, when the pipeline had four stages; today the report also lists `terrain` and `naip`.
+The JSON report has `pipeline`, `started_at`, `finished_at` (empty until the run ends), `total_wall_time_s` (up to the end of the run), `system` (Python, OS, CPU and GPU), and `stages`, one entry per stage with the metrics above. Today's pipeline reports `fetch`, `align_poses`, `terrain`, `build_mesh`, `naip`, `texturing`, and `export`; optional stages that were off (`terrain` without `--terrain`, `naip` without `--naip`) are `skipped`. The example below is from **Design Review 1**, when there were four stages.
 
 ```json
 {
