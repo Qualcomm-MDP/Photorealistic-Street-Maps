@@ -514,6 +514,7 @@ async function loadModel(job) {
   // Only the latest request may change the scene: switching jobs quickly can
   // make an older model (or its error) arrive after the newer one.
   state.modelWanted = job.id;
+  if (overlays.jobId !== job.id) disposeOverlays();
   const empty = $("stageEmpty");
   if (!renderer) {
     state.modelJobId = job.id; // nothing to load; the WebGL note shows instead
@@ -550,6 +551,7 @@ async function loadModel(job) {
     state.modelJobId = job.id;
     empty.hidden = true;
     jobStageNote(job, "");
+    loadOverlays(job);
   } catch (err) {
     if (state.modelWanted !== job.id) return;
     empty.textContent = `Couldn't load the model: ${err.message || err}`;
@@ -558,6 +560,99 @@ async function loadModel(job) {
   }
   showModelInfo(job);
 }
+// ---------- Overlays: the photos' cameras and the alignment's point cloud ----------
+// /api/jobs/<id>/overlays.json (common/overlays.py), already in the model's frame.
+const CAMERA_COLOURS = { colmap: 0x3fb950, computed: 0xf0a020, raw: 0xe5534b };
+const overlays = { cameras: null, points: null, jobId: null };
+
+function disposeOverlays() {
+  for (const key of ["cameras", "points"]) {
+    if (overlays[key]) {
+      scene.remove(overlays[key]);
+      disposeModel(overlays[key]);
+      overlays[key] = null;
+    }
+  }
+  overlays.jobId = null;
+  for (const id of ["showCameras", "showPoints"]) $(id).hidden = true;
+}
+
+function cameraFrusta(cameras) {
+  // A small pyramid per camera: apex at the camera, 2 m deep, the photo's field of view.
+  const pos = [];
+  const col = [];
+  const depth = 2;
+  for (const c of cameras) {
+    const p = new THREE.Vector3(...c.p);
+    const f = new THREE.Vector3(...c.f).normalize();
+    const r = new THREE.Vector3().crossVectors(f, new THREE.Vector3(...c.u)).normalize();
+    const u = new THREE.Vector3().crossVectors(r, f);
+    const hh = depth * Math.tan(((c.fov || 60) * Math.PI) / 360);
+    const hw = hh * (c.aspect || 1.333);
+    const corner = (sx, sy) =>
+      p.clone().addScaledVector(f, depth).addScaledVector(r, sx * hw).addScaledVector(u, sy * hh);
+    const k = [corner(-1, 1), corner(1, 1), corner(1, -1), corner(-1, -1)];
+    const segs = [
+      [p, k[0]], [p, k[1]], [p, k[2]], [p, k[3]],
+      [k[0], k[1]], [k[1], k[2]], [k[2], k[3]], [k[3], k[0]],
+    ];
+    const colour = new THREE.Color(CAMERA_COLOURS[c.source] ?? CAMERA_COLOURS.raw);
+    for (const [a, b] of segs) {
+      pos.push(a.x, a.y, a.z, b.x, b.y, b.z);
+      col.push(colour.r, colour.g, colour.b, colour.r, colour.g, colour.b);
+    }
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geom.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  return new THREE.LineSegments(geom, new THREE.LineBasicMaterial({ vertexColors: true }));
+}
+
+function pointCloud(points) {
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(points.xyz, 3));
+  geom.setAttribute("color", new THREE.Uint8BufferAttribute(points.rgb, 3, true));
+  return new THREE.Points(
+    geom,
+    new THREE.PointsMaterial({ size: 0.35, sizeAttenuation: true, vertexColors: true })
+  );
+}
+
+async function loadOverlays(job) {
+  disposeOverlays();
+  let data;
+  try {
+    data = await api(`/api/jobs/${job.id}/overlays.json`);
+  } catch {
+    return; // jobs from before overlays existed have none
+  }
+  if (state.modelJobId !== job.id) return;
+  overlays.jobId = job.id;
+  if (data.cameras?.length) {
+    overlays.cameras = cameraFrusta(data.cameras);
+    $("showCameras").hidden = false;
+  }
+  if (data.points?.xyz?.length) {
+    overlays.points = pointCloud(data.points);
+    $("showPoints").hidden = false;
+  }
+  for (const [id, key] of [["showCameras", "cameras"], ["showPoints", "points"]]) {
+    const obj = overlays[key];
+    if (obj && $(id).getAttribute("aria-pressed") === "true") scene.add(obj);
+  }
+}
+
+for (const [id, key] of [["showCameras", "cameras"], ["showPoints", "points"]]) {
+  $(id).addEventListener("click", () => {
+    const on = $(id).getAttribute("aria-pressed") !== "true";
+    $(id).setAttribute("aria-pressed", String(on));
+    const obj = overlays[key];
+    if (!obj) return;
+    if (on) scene.add(obj);
+    else scene.remove(obj);
+  });
+}
+
 function showModelInfo(job) {
   const dl = $("download");
   dl.href = `/api/jobs/${job.id}/model.glb?download=true`;
@@ -749,6 +844,7 @@ function renderProgress(job) {
   else if (job?.status === "failed") label = `Failed: ${job.error || "unknown error"}`;
   $("progLabel").textContent = label;
   $("status").classList.toggle("failed", job?.status === "failed");
+  renderProfileButton();
 }
 
 // ---------- Jobs ----------
@@ -774,7 +870,9 @@ function renderJobs() {
   $("jobsEmpty").hidden = state.jobs.length > 0;
   $("jobRows").innerHTML = state.jobs
     .map((j) => {
-      const chip = statusChip(j.status);
+      const chip =
+        statusChip(j.status) +
+        (j.options?.profile ? ` <span class="chip" title="Run with Profile this run: open it to see the profile">Profiled</span>` : "");
       const thumb = j.result?.thumbnail
         ? `<img class="thumb" src="/api/jobs/${esc(j.id)}/images/${esc(j.result.thumbnail)}" alt="">`
         : `<span class="thumb"></span>`;
@@ -856,6 +954,7 @@ function renderJobModal(job) {
   else dl.removeAttribute("href");
   dl.setAttribute("aria-disabled", String(!done));
   $("jobFacts").innerHTML = jobFactsHtml(job);
+  renderJobProfile(job);
 
   // Only a finished job has a model to show; otherwise say why there isn't one.
   if (done) {
@@ -878,6 +977,13 @@ function jobStageNote(job, text) {
   $("jobStageEmpty").hidden = !text;
 }
 
+// Jobs from before the option existed used Mapillary's raw GPS.
+const POSE_LABELS = {
+  colmap: "Aligned to OpenStreetMap",
+  computed: "Mapillary computed",
+  raw: "Mapillary raw GPS",
+};
+
 function jobFactsHtml(job) {
   const { w, h } = boxSize(job.bbox);
   const o = job.options || {};
@@ -887,16 +993,244 @@ function jobFactsHtml(job) {
     ["Area", `<span class="mono">${Math.round(w)} × ${Math.round(h)} m · ${((w * h) / 1e6).toFixed(2)} km²</span>`],
     ["Created", esc(when(job.created_at))],
     ["Duration", esc(duration(job))],
-    ["Obstructions", o.remove_obstructions ? `Removed · ${esc(o.seg_model)} model` : "Kept"],
+    ["Camera poses", esc(POSE_LABELS[o.poses] || POSE_LABELS.raw) + (o.aligned_only ? " · aligned photos only" : "")],
+    [
+      "Obstructions",
+      o.remove_obstructions
+        ? `${o.fill_obstructions === false ? "Masked, not filled" : "Removed"} · ${esc(o.seg_model)} model`
+        : "Kept",
+    ],
     ["Device", esc(o.device || "auto")],
   ];
   // Jobs from before these options existed don't have them.
   if ("terrain" in o) rows.push(["Terrain", o.terrain ? "On" : "Off"]);
   if ("naip" in o) rows.push(["Aerial photos", o.naip ? "NAIP ground and roofs" : "Off"]);
+  if ("profile" in o) rows.push(["Profile", o.profile ? "On" : "Off"]);
   if (job.result?.photos != null) rows.push(["Photos", `<span class="mono">${job.result.photos}</span>`]);
+  if (job.result?.aligned_photos != null)
+    rows.push(["Aligned photos", `<span class="mono">${job.result.aligned_photos}</span>`]);
   if (job.error) rows.push(["Error", `<span class="bad">${esc(job.error)}</span>`]);
   return rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
 }
+
+// ---------- Profile (jobs run with "Profile this run") ----------
+// job.profile is the profiler's summary (src/common/profiler.py public_summary),
+// pushed after every stage while the job runs, and final once it ends. Jobs from
+// before live profiles kept it in job.result.profile only.
+const jobProfile = (job) => job?.profile || job?.result?.profile || null;
+const profileSeen = new Map(); // job id -> performance.now() when its profile last arrived
+
+function fmtSeconds(s) {
+  if (s == null || !Number.isFinite(s)) return "—";
+  if (s < 10) return `${s.toFixed(1)} s`;
+  if (s < 60) return `${Math.round(s)} s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${String(Math.round(s % 60)).padStart(2, "0")}s`;
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
+}
+const fmtMb = (mb) => (mb == null || !Number.isFinite(mb) ? "—" : mb >= 1000 ? `${(mb / 1000).toFixed(2)} GB` : `${mb.toFixed(mb < 10 ? 1 : 0)} MB`);
+const stageLabel = (name) => state.stages.find((s) => s.name === name)?.label || name;
+
+// Stage rows with the running stage's time brought up to now.
+function profileRows(job) {
+  const p = jobProfile(job);
+  if (!p?.stages) return [];
+  const since = profileSeen.has(job.id) ? (performance.now() - profileSeen.get(job.id)) / 1000 : 0;
+  return p.stages.map((s) => ({
+    ...s,
+    wall_time_s: s.status === "running" ? (s.wall_time_s || 0) + since : s.wall_time_s,
+  }));
+}
+
+function renderJobProfile(job) {
+  const el = $("jobProfile");
+  const p = jobProfile(job);
+  if (!job?.options?.profile && !p) {
+    el.hidden = true;
+    el.replaceChildren();
+    return;
+  }
+  el.hidden = false;
+  el.dataset.jobId = job.id;
+  const rows = profileRows(job);
+  const ran = rows.filter((r) => r.status !== "skipped");
+  const running = rows.find((r) => r.status === "running");
+  const failed = rows.find((r) => r.status === "error");
+  const total = p?.finished
+    ? p.total_wall_time_s
+    : p
+      ? (p.total_wall_time_s || 0) + (profileSeen.has(job.id) ? (performance.now() - profileSeen.get(job.id)) / 1000 : 0)
+      : null;
+
+  let note;
+  if (!p) note = job.status === "queued" ? "Waiting to start" : "Starting…";
+  else if (running) note = `Updating live · ${stageLabel(running.name)} running`;
+  else if (failed) note = `Failed in ${stageLabel(failed.name)}`;
+  else if (p.finished) note = `Finished${p.finished_at ? ` · ${new Date(p.finished_at).toLocaleString()}` : ""}`;
+  else note = "Updating live";
+  const machine = p ? [p.cpu_count ? `${p.cpu_count} CPU cores` : "", p.gpu || (p.cpu_count ? "no GPU" : "")].filter(Boolean).join(" · ") : "";
+
+  // Headline figures (stat tiles).
+  const done = ran.filter((r) => r.status !== "running" && r.status !== "pending");
+  const slowest = [...ran].sort((a, b) => (b.wall_time_s || 0) - (a.wall_time_s || 0))[0];
+  const peak = [...done].sort((a, b) => (b.peak_memory_mb || 0) - (a.peak_memory_mb || 0))[0];
+  const wallSum = done.reduce((a, r) => a + (r.wall_time_s || 0), 0);
+  const cpuSum = done.reduce((a, r) => a + (r.cpu_time_s || 0), 0);
+  const tile = (label, value, sub) =>
+    `<div class="prof-tile"><span class="prof-tile-label">${label}</span><span class="prof-tile-value">${value}</span>${sub ? `<span class="prof-tile-sub">${sub}</span>` : ""}</div>`;
+  const tiles = [
+    tile("Total time", fmtSeconds(total), p?.finished ? "" : "so far"),
+    tile(
+      "Slowest stage",
+      slowest ? esc(stageLabel(slowest.name)) : "—",
+      slowest && total ? `${fmtSeconds(slowest.wall_time_s)} · ${Math.round((100 * slowest.wall_time_s) / total)}% of the run` : "",
+    ),
+    tile("Highest memory peak", peak ? fmtMb(peak.peak_memory_mb) : "—", peak ? esc(stageLabel(peak.name)) : ""),
+    tile(
+      "CPU use",
+      wallSum > 0 && rows.some((r) => r.cpu_time_s != null) ? `${Math.round((100 * cpuSum) / wallSum)}%` : "—",
+      "CPU time ÷ wall time; over 100% means several cores",
+    ),
+  ].join("");
+
+  const chart = (title, key, fmt, note) => {
+    const max = Math.max(...rows.map((r) => r[key] || 0), 1e-9);
+    const bars = rows
+      .map((r, i) => {
+        const skipped = r.status === "skipped";
+        const pending = r.status === "pending" || (r.status === "running" && key !== "wall_time_s");
+        const v = r[key] || 0;
+        const w = skipped || pending ? 0 : Math.max(0.5, (100 * v) / max);
+        const value = skipped
+          ? "skipped"
+          : r.status === "running" && key === "wall_time_s"
+            ? `${fmt(v)} · running`
+            : pending
+              ? r.status === "running"
+                ? "running…"
+                : "—"
+              : `${fmt(v)}${r.status === "error" ? " · ⚠ error" : ""}`;
+        return `<div class="prof-row" data-i="${i}" tabindex="0">
+          <span class="prof-name">${esc(stageLabel(r.name))}</span>
+          <span class="prof-track"><span class="prof-bar${r.status === "running" ? " live" : ""}${r.status === "error" ? " err" : ""}" style="width:${w}%"></span></span>
+          <span class="prof-val${skipped || pending ? " muted" : ""}">${value}</span>
+        </div>`;
+      })
+      .join("");
+    return `<figure class="prof-chart"><figcaption><strong>${title}</strong>${note ? `<span>${note}</span>` : ""}</figcaption>${bars}</figure>`;
+  };
+
+  const tableRows = rows
+    .map(
+      (r) => `<tr><td>${esc(stageLabel(r.name))}</td><td>${esc(r.status)}</td>
+        <td class="num">${r.status === "skipped" ? "—" : fmtSeconds(r.wall_time_s)}</td>
+        <td class="num">${r.status === "skipped" || r.cpu_time_s == null || r.status === "running" ? "—" : fmtSeconds(r.cpu_time_s)}</td>
+        <td class="num">${r.wall_time_s > 0 && r.cpu_time_s != null && r.status !== "running" && r.status !== "skipped" ? `${Math.round((100 * r.cpu_time_s) / r.wall_time_s)}%` : "—"}</td>
+        <td class="num">${r.status === "skipped" || r.status === "running" ? "—" : fmtMb(r.peak_memory_mb)}</td>
+        <td class="num">${r.status === "skipped" || r.status === "running" || r.memory_delta_mb == null ? "—" : `${r.memory_delta_mb >= 0 ? "+" : ""}${fmtMb(r.memory_delta_mb)}`}</td>
+        <td class="num">${r.gpu_delta_allocated_mb == null || r.gpu_delta_allocated_mb === "N/A" ? "—" : fmtMb(Number(r.gpu_delta_allocated_mb))}</td></tr>`,
+    )
+    .join("");
+
+  el.innerHTML = `
+    <div class="prof-head">
+      <div><h3 id="jobProfileTitle">Profile</h3><span class="prof-note" role="status">${esc(note)}${machine ? ` · ${esc(machine)}` : ""}</span></div>
+      ${p ? `<a class="btn small" href="/api/jobs/${esc(job.id)}/profile.json?download=true">Download JSON</a>` : ""}
+    </div>
+    ${
+      p
+        ? `<div class="prof-tiles">${tiles}</div>
+    <div class="prof-charts">
+      ${chart("Time per stage", "wall_time_s", fmtSeconds)}
+      ${chart("Peak memory per stage", "peak_memory_mb", fmtMb, "Python and NumPy allocations seen by tracemalloc, not the whole process")}
+    </div>
+    <details class="prof-details"${p.finished ? "" : " open"}><summary>All metrics</summary>
+      <div class="prof-table-wrap"><table class="prof-table">
+        <thead><tr><th>Stage</th><th>Status</th><th class="num">Wall</th><th class="num">CPU</th><th class="num">CPU %</th><th class="num">Peak memory</th><th class="num">Memory change</th><th class="num">GPU memory</th></tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table></div>
+    </details>`
+        : `<p class="prof-empty">The profile appears here as soon as the first stage starts.</p>`
+    }`;
+  // Keep the "All metrics" panel the way the viewer left it between live updates.
+  const details = el.querySelector(".prof-details");
+  if (details && profileDetailsOpen.has(job.id)) details.open = profileDetailsOpen.get(job.id);
+  details?.addEventListener("toggle", () => profileDetailsOpen.set(job.id, details.open));
+}
+const profileDetailsOpen = new Map();
+
+// One tooltip for every profile bar: hover or keyboard focus shows the stage's numbers.
+const profTip = document.createElement("div");
+profTip.className = "prof-tip";
+profTip.hidden = true;
+document.body.append(profTip);
+function showProfTip(row, x, y) {
+  const job = state.jobs.find((j) => j.id === $("jobProfile").dataset.jobId);
+  const r = profileRows(job)[Number(row.dataset.i)];
+  if (!r) return;
+  const lines = [
+    [r.status === "skipped" ? "skipped" : fmtSeconds(r.wall_time_s), "wall time"],
+    [r.cpu_time_s != null && r.status !== "running" && r.status !== "skipped" ? fmtSeconds(r.cpu_time_s) : "—", "CPU time"],
+    [r.status === "skipped" || r.status === "running" ? "—" : fmtMb(r.peak_memory_mb), "peak memory"],
+  ];
+  profTip.replaceChildren();
+  const title = document.createElement("strong");
+  title.textContent = `${stageLabel(r.name)} · ${r.status}`;
+  profTip.append(title);
+  for (const [value, label] of lines) {
+    const line = document.createElement("div");
+    const b = document.createElement("b");
+    b.textContent = value;
+    line.append(b, ` ${label}`);
+    profTip.append(line);
+  }
+  if (r.error) {
+    const err = document.createElement("div");
+    err.className = "bad";
+    err.textContent = `⚠ ${r.error}`;
+    profTip.append(err);
+  }
+  profTip.hidden = false;
+  // Inside the open job dialog (top layer), so the tooltip goes there too.
+  if (profTip.parentElement !== jobDlg) jobDlg.append(profTip);
+  const box = jobDlg.getBoundingClientRect();
+  const tw = profTip.offsetWidth;
+  profTip.style.left = `${Math.min(x - box.left + 14, box.width - tw - 8)}px`;
+  profTip.style.top = `${y - box.top + 14}px`;
+}
+$("jobProfile").addEventListener("pointermove", (e) => {
+  const row = e.target.closest(".prof-row");
+  if (row) showProfTip(row, e.clientX, e.clientY);
+  else profTip.hidden = true;
+});
+$("jobProfile").addEventListener("pointerleave", () => (profTip.hidden = true));
+$("jobProfile").addEventListener("focusin", (e) => {
+  const row = e.target.closest(".prof-row");
+  if (!row) return;
+  const r = row.getBoundingClientRect();
+  showProfTip(row, r.left + 40, r.bottom - 6);
+});
+$("jobProfile").addEventListener("focusout", () => (profTip.hidden = true));
+
+// While a profiled job runs, its running stage's time ticks once a second.
+setInterval(() => {
+  const el = $("jobProfile");
+  if (el.hidden || !jobDlg.open) return;
+  const job = state.jobs.find((j) => j.id === el.dataset.jobId);
+  if (job && isActive(job) && jobProfile(job) && !profTip.matches(":not([hidden])")) renderJobProfile(job);
+}, 1000);
+
+// "View profile" on the main page opens the current job's details at its profile.
+function renderProfileButton() {
+  const job = state.current;
+  $("viewProfile").hidden = !(job?.options?.profile || jobProfile(job));
+}
+$("viewProfile").addEventListener("click", () => {
+  const job = state.current;
+  if (!job) return;
+  openJobModal(job);
+  requestAnimationFrame(() => $("jobProfile").scrollIntoView({ behavior: "smooth", block: "start" }));
+});
 
 jobDlg.addEventListener("click", (e) => {
   if (e.target === jobDlg || e.target.closest("[data-close]")) jobDlg.close();
@@ -950,6 +1284,7 @@ function finishJob(job) {
 
 function onJobUpdate(job) {
   const prev = state.jobs.find((j) => j.id === job.id);
+  if (jobProfile(job)) profileSeen.set(job.id, performance.now());
   upsertJob(job);
   // Follow a job that starts while nothing else is being watched (e.g. from
   // another tab), but not while the details of another job are open.
@@ -968,6 +1303,7 @@ function onJobUpdate(job) {
 }
 
 function onSnapshot(jobs) {
+  for (const j of jobs) if (jobProfile(j)) profileSeen.set(j.id, performance.now());
   const before = new Map(state.jobs.map((j) => [j.id, j]));
   const firstLoad = state.jobs.length === 0 && !state.current;
   state.jobs = jobs;
@@ -1094,11 +1430,25 @@ function setDeviceButtons(id, value) {
 
 // Put the saved defaults into the Options panel (on load, and after saving).
 function applyDefaults(d) {
+  $("poses").value = d.poses || "colmap";
+  $("fillObs").checked = d.fill_obstructions !== false;
   $("seg").checked = d.remove_obstructions;
   $("model").value = d.seg_model;
-  device = d.device === "cuda" && !state.system.cuda ? "auto" : d.device;
+  // "cuda" was the GPU button's value before it meant any GPU (NVIDIA or Apple)
+  const wanted = d.device === "cuda" ? "gpu" : d.device;
+  device = wanted === "gpu" && !state.system.gpu ? "auto" : wanted;
   setDeviceButtons("device", device);
+  syncOptionRows();
 }
+
+// "Aligned photos only" applies to aligned poses; "Fill obstructions" to removing them:
+// each is shown only when it applies (and keeps its setting while hidden).
+function syncOptionRows() {
+  $("alignedOnlyRow").hidden = $("poses").value !== "colmap";
+  $("fillObsRow").hidden = !$("seg").checked;
+}
+$("poses").addEventListener("change", syncOptionRows);
+$("seg").addEventListener("change", syncOptionRows);
 
 function tokenMessage(text, kind = "") {
   const msg = $("tokenMsg");
@@ -1132,12 +1482,14 @@ async function openSettings(intro = "") {
   $("settingsIntro").textContent = intro;
   $("settingsIntro").hidden = !intro;
   if (d) {
+    $("defPoses").value = d.poses || "colmap";
+    $("defFill").checked = d.fill_obstructions !== false;
     $("defSeg").checked = d.remove_obstructions;
     $("defModel").value = d.seg_model;
-    defDevice = d.device;
-    setDeviceButtons("defDevice", d.device);
+    defDevice = d.device === "cuda" ? "gpu" : d.device;
+    setDeviceButtons("defDevice", defDevice);
   }
-  $("defDevice").querySelector('[data-v="cuda"]').disabled = !state.system.cuda;
+  $("defDevice").querySelector('[data-v="gpu"]').disabled = !state.system.gpu;
   tokenInput.value = "";
   renderTokenStatus();
   renderTokenControls();
@@ -1300,7 +1652,13 @@ $("settingsForm").addEventListener("submit", async (e) => {
     state.settings = await api("/api/settings", {
       method: "PUT",
       body: JSON.stringify({
-        defaults: { remove_obstructions: $("defSeg").checked, seg_model: $("defModel").value, device: defDevice },
+        defaults: {
+          poses: $("defPoses").value,
+          remove_obstructions: $("defSeg").checked,
+          fill_obstructions: $("defFill").checked,
+          seg_model: $("defModel").value,
+          device: defDevice,
+        },
       }),
     });
     applyDefaults(state.settings.defaults);
@@ -1331,11 +1689,15 @@ $("go").addEventListener("click", async () => {
       body: JSON.stringify({
         bbox: box,
         name: state.placeName || "Custom area",
+        poses: $("poses").value,
+        aligned_only: $("poses").value === "colmap" && $("alignedOnly").checked,
         remove_obstructions: $("seg").checked,
+        fill_obstructions: $("fillObs").checked,
         seg_model: $("model").value,
         device,
         terrain: $("terrain").checked,
         naip: $("naip").checked,
+        profile: $("profile").checked,
       }),
     });
     // The socket often delivers newer updates for this job (running, first
@@ -1410,9 +1772,13 @@ renderGallery();
     $("go").disabled = true;
     return;
   }
-  const gpu = $("device").querySelector('[data-v="cuda"]');
-  gpu.disabled = !state.system.cuda;
-  gpu.title = state.system.cuda ? "" : "No CUDA GPU on this server";
+  const gpu = $("device").querySelector('[data-v="gpu"]');
+  gpu.disabled = !state.system.gpu;
+  gpu.title = state.system.gpu
+    ? state.system.gpu === "mps"
+      ? "Apple GPU"
+      : "NVIDIA GPU (CUDA)"
+    : "No GPU on this server";
   try {
     await loadSettings();
     applyDefaults(state.settings.defaults);

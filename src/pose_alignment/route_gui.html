@@ -1,0 +1,257 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Route picker</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root {
+    --ink: #111a20; --muted: #5a6874; --line: #d3d9df;
+    --surface: #fff; --ground: #eef1f3; --accent: #0d757c; --warn: #a9692a; --ok: #2f7d32;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         color: var(--ink); background: var(--ground); }
+  .app { display: grid; grid-template-columns: 330px 1fr; height: 100dvh; }
+  .panel { background: var(--surface); border-right: 1px solid var(--line);
+           overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+  #map { height: 100dvh; }
+  h1 { font-size: 15px; margin: 0; }
+  h1 + p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+  fieldset { border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px 12px; margin: 0; }
+  legend { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 0 4px; }
+  label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+  input[type=text] {
+    width: 100%; padding: 5px 7px; border: 1px solid var(--line); border-radius: 3px;
+    font: 12px ui-monospace, Menlo, monospace; color: var(--ink); background: var(--surface); }
+  button { font: 500 12px inherit; padding: 7px 10px; border: 1px solid var(--line);
+           border-radius: 3px; background: var(--surface); color: var(--ink); cursor: pointer; }
+  button:hover { background: var(--ground); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .stats { font: 12px ui-monospace, Menlo, monospace; display: grid;
+           grid-template-columns: auto 1fr; gap: 3px 10px; }
+  .stats span:nth-child(odd) { color: var(--muted); }
+  .hint { font-size: 11px; color: var(--muted); }
+  .warn { color: var(--warn); }
+  .ok { color: var(--ok); font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="panel">
+    <div>
+      <h1>Route picker</h1>
+      <p>Draw a line along the streets you want aligned. Mapillary images are searched in a
+         corridor around the line.</p>
+    </div>
+
+    <fieldset>
+      <legend>1 · Frame the map</legend>
+      <label for="bbox">Box to show — W, S, E, N (e.g. your Blosm import)</label>
+      <input type="text" id="bbox" value="-83.7584, 42.2740, -83.7105, 42.3023">
+      <div class="row" style="margin-top:8px">
+        <button id="fit">Zoom to box</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>2 · Draw the route</legend>
+      <p class="hint" style="margin:0 0 8px">Click along a street to trace it. Turns are fine:
+         the pipeline splits the capture into straight legs. For a street that isn't connected
+         to the last one, press <b>New street</b> and start again.</p>
+      <div class="row">
+        <button id="newline">New street</button>
+        <button id="undo">Undo point</button>
+        <button id="clear">Clear all</button>
+      </div>
+      <div id="roadlist" class="hint" style="margin-top:8px"></div>
+      <div style="margin-top:10px">
+        <label for="buffer">Corridor half-width: <b id="bufval">15</b> m either side</label>
+        <input type="range" id="buffer" min="5" max="60" step="1" value="15" style="width:100%">
+        <p class="hint" style="margin:4px 0 0">Wide enough to cover your clicking error;
+           too wide picks up captures on parallel streets.</p>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>3 · Send to the pipeline</legend>
+      <div class="stats">
+        <span>points</span><span id="s-pts">0</span>
+        <span>line length</span><span id="s-len">—</span>
+        <span>search box</span><span id="s-bbox">—</span>
+      </div>
+      <div style="margin-top:10px">
+        <label for="name">Route name (for your reference)</label>
+        <input type="text" id="name" value="my_route">
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button id="send" class="primary" disabled>Use this route</button>
+      </div>
+      <div id="status" class="hint" style="margin-top:8px"></div>
+    </fieldset>
+  </div>
+  <div id="map"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const map = L.map('map').setView([42.2813, -83.7430], 15);
+
+// Free tile servers that need no API key. The OpenStreetMap ones are open data and open
+// source, fine for light interactive use like this (their usage policy asks for the
+// attribution and a referer, which the browser sends because the page is served over
+// http://127.0.0.1). Esri aerial is free without a key but not open. Switch with the
+// control top-right if one stops serving.
+const osmAttribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+const bases = {
+  'OpenStreetMap': L.tileLayer(
+    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    { maxZoom: 19, attribution: osmAttribution }),
+  'OSM Humanitarian': L.tileLayer(
+    'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+    { maxZoom: 19, subdomains: 'abc', attribution: osmAttribution + ', tiles by HOT / OSM France' }),
+  'OpenTopoMap': L.tileLayer(
+    'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+    { maxZoom: 17, subdomains: 'abc', attribution: osmAttribution + ', SRTM | &copy; OpenTopoMap (CC-BY-SA)' }),
+  'Esri aerial': L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    { maxZoom: 19, attribution: 'Tiles &copy; Esri' }),
+};
+bases['OpenStreetMap'].addTo(map);
+L.control.layers(bases, null, { position: 'topright' }).addTo(map);
+
+const $ = id => document.getElementById(id);
+let tileFailures = 0;
+Object.values(bases).forEach(layer => layer.on('tileerror', () => {
+  if (++tileFailures === 8) {
+    $('status').innerHTML = '<span class="warn">Basemap tiles are not loading; try another ' +
+                            'provider in the top-right control.</span>';
+  }
+}));
+
+let lines = [[]];                              // each line = [[lng, lat], ...]
+let extent = null;
+const drawn = L.layerGroup().addTo(map);
+const markers = L.layerGroup().addTo(map);
+const PALETTE = ['#0d757c', '#a9692a', '#7a3d8f', '#2b6cb0', '#4a7c1f', '#b03a2e'];
+const R = 6378137.0;
+const rad = d => d * Math.PI / 180;
+
+function metres(a, b) {                        // a,b = [lng,lat]
+  const x = R * rad(b[0] - a[0]) * Math.cos(rad((a[1] + b[1]) / 2));
+  const y = R * rad(b[1] - a[1]);
+  return Math.hypot(x, y);
+}
+
+function parseBbox() {
+  const v = $('bbox').value.split(',').map(s => parseFloat(s.trim()));
+  return v.length === 4 && v.every(Number.isFinite) ? v : null;
+}
+
+function showExtent(zoom) {
+  const b = parseBbox();
+  if (!b) { $('status').innerHTML = '<span class="warn">The box needs four numbers: W, S, E, N</span>'; return; }
+  if (extent) map.removeLayer(extent);
+  extent = L.rectangle([[b[1], b[0]], [b[3], b[2]]],
+    { color: '#a9692a', weight: 1.5, fill: false, dashArray: '5,4' }).addTo(map);
+  if (zoom) map.fitBounds(extent.getBounds());
+}
+
+function routeBbox(pts, buffer) {
+  const lons = pts.map(p => p[0]), lats = pts.map(p => p[1]);
+  const mid = (Math.min(...lats) + Math.max(...lats)) / 2;
+  const dLat = buffer / 111320.0;
+  const dLon = buffer / (111320.0 * Math.cos(rad(mid)));
+  return [Math.min(...lons) - dLon, Math.min(...lats) - dLat,
+          Math.max(...lons) + dLon, Math.max(...lats) + dLat];
+}
+
+const lineLength = pts => {
+  let n = 0;
+  for (let i = 1; i < pts.length; i++) n += metres(pts[i - 1], pts[i]);
+  return n;
+};
+
+const valid = () => lines.filter(l => l.length > 1);
+
+function refresh() {
+  const buffer = +$('buffer').value;
+  $('bufval').textContent = buffer;
+  drawn.clearLayers();
+  markers.clearLayers();
+  // Corridor drawn to scale: a polyline's weight is in screen pixels, so convert metres.
+  const pxPerMetre = 1 / (156543.03392 * Math.cos(rad(map.getCenter().lat)) / Math.pow(2, map.getZoom()));
+  lines.forEach((pts, li) => {
+    const colour = PALETTE[li % PALETTE.length];
+    const latlngs = pts.map(p => [p[1], p[0]]);
+    if (pts.length > 1) {
+      L.polyline(latlngs, { color: colour, weight: Math.max(4, 2 * buffer * pxPerMetre), opacity: 0.18 }).addTo(drawn);
+      L.polyline(latlngs, { color: colour, weight: 3 }).addTo(drawn);
+    }
+    pts.forEach(p => L.circleMarker([p[1], p[0]], {
+      radius: 4, color: colour, fillColor: '#fff', fillOpacity: 1, weight: 2
+    }).addTo(markers));
+  });
+
+  const ok = valid();
+  const total = ok.reduce((a, l) => a + lineLength(l), 0);
+  $('roadlist').innerHTML = lines.map((l, i) => {
+    const colour = PALETTE[i % PALETTE.length];
+    const active = i === lines.length - 1 ? ' &larr; drawing' : '';
+    return `<div><span style="color:${colour}">&#9644;</span> street ${i + 1}: ` +
+           `${l.length} pts, ${l.length > 1 ? lineLength(l).toFixed(0) + ' m' : '—'}${active}</div>`;
+  }).join('');
+  $('s-pts').textContent = `${lines.reduce((a, l) => a + l.length, 0)} in ${ok.length} street(s)`;
+  $('s-len').textContent = ok.length ? `${total.toFixed(0)} m` : '—';
+  $('s-bbox').textContent = ok.length ? routeBbox(ok.flat(), buffer).map(v => v.toFixed(5)).join(', ') : '—';
+  $('send').disabled = !ok.length;
+}
+
+map.on('click', e => {
+  lines[lines.length - 1].push([e.latlng.lng, e.latlng.lat]);
+  refresh();
+});
+map.on('zoomend', refresh);
+$('newline').onclick = () => {
+  if (lines[lines.length - 1].length) lines.push([]);
+  refresh();
+};
+$('undo').onclick = () => {
+  const cur = lines[lines.length - 1];
+  if (cur.length) cur.pop();
+  else if (lines.length > 1) lines.pop();
+  refresh();
+};
+$('clear').onclick = () => { lines = [[]]; refresh(); };
+$('buffer').oninput = refresh;
+$('fit').onclick = () => showExtent(true);
+
+$('send').onclick = async () => {
+  const body = {
+    name: $('name').value || 'my_route',
+    corridor_m: +$('buffer').value,
+    lines: valid().map(l => l.map(p => [+p[0].toFixed(7), +p[1].toFixed(7)])),
+  };
+  $('send').disabled = true;
+  $('status').textContent = 'Sending…';
+  try {
+    const r = await fetch('/roi', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(body) });
+    const reply = await r.json();
+    if (!r.ok) throw new Error(reply.error || r.statusText);
+    $('status').innerHTML = `<span class="ok">Route sent.</span> Saved to <code>${reply.saved}</code>. ` +
+                            'You can close this tab; the pipeline continues in the terminal.';
+  } catch (err) {
+    $('status').innerHTML = `<span class="warn">Could not send the route (${err.message}). ` +
+                            'Is route_gui.py still running?</span>';
+    $('send').disabled = false;
+  }
+};
+
+showExtent(true);
+refresh();
+</script>
+</body>
+</html>

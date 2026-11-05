@@ -3,7 +3,7 @@ import shapely
 import trimesh
 from shapely.geometry import Polygon
 
-from common.MeshUtils import get_corners, get_lines, get_height
+from common.MeshUtils import get_base_and_height, get_corners, get_lines
 from common.reporter import Reporter, get_reporter
 
 # Foundation depth below the lowest ground point under a footprint.
@@ -65,14 +65,7 @@ def extrude_buildings(
             vertices=corners,
         )
 
-        try:
-            height = get_height(element)
-        except KeyError:
-            flagged.append((osm, "no tags"))
-            continue
-        except ValueError as exc:
-            flagged.append((osm, f"unreadable height tag: {exc}"))
-            continue
+        base, top = get_base_and_height(element)
 
         polys = path.polygons_closed
         if len(polys) == 0 or not polys[0]:
@@ -80,13 +73,16 @@ def extrude_buildings(
             continue
 
         # Meshes here are z-down (texturing and export flip z). On terrain the
-        # roof sits `height` above the highest ground under the footprint and
-        # the walls reach down to the lowest, so nothing floats downhill.
-        bottom = 0.0
+        # roof sits `top` above the highest ground under the footprint and
+        # the walls reach down to the lowest, so nothing floats downhill. A
+        # building part with a base (min_height: e.g. a tower's upper section)
+        # starts that high above the ground instead.
+        bottom = base
+        height = top - base
         if terrain is not None:
             ground_low, ground_high = ground_under(corners, terrain)
-            bottom = ground_low - EMBED_M
-            height = ground_high + height - bottom
+            bottom = ground_high + base if base > 0 else ground_low - EMBED_M
+            height = ground_high + top - bottom
 
         height = -1 * height
         if height == 0:

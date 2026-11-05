@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from api.joblog import JobReporter
-from common import PipelineChain, ProgressMonitor
+from common import PipelineChain, PipelineProfiler, ProgressMonitor
 from common.constants import BoundingBox
 from common.redact import redact
 
@@ -30,7 +30,8 @@ from common.redact import redact
 OPTIONAL_STAGES = {"terrain": "terrain", "naip": "naip"}
 
 SEG_MODELS = {
-    "large": "facebook/mask2former-swin-large-cityscapes-semantic",
+    # Mapillary Vistas: trained on Mapillary's own crowdsourced photos (no Tiny exists)
+    "large": "facebook/mask2former-swin-large-mapillary-vistas-semantic",
     "tiny": "facebook/mask2former-swin-tiny-cityscapes-semantic",
 }
 
@@ -52,6 +53,9 @@ class Job:
     started_at: str | None = None
     finished_at: str | None = None
     result: dict[str, Any] = field(default_factory=dict)
+    # With the "profile" option: per-stage time and memory, updated after each stage
+    # while the job runs (profiler.public_summary), so the page can show it live.
+    profile: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -220,8 +224,18 @@ class JobManager:
         labels = {s["name"]: s["label"] for s in self.stages}
 
         def on_stage(name: str, event: str) -> None:
+            if profiler is not None:
+                job.profile = profiler.public_summary(
+                    running=name if event == "start" else None
+                )
+                if event != "start":  # the download is current too, mid-run
+                    profiler.write(str(job_dir / "profile.json"))
             if job.stages.get(name) == "skipped":
-                return  # the stage runs but does nothing for this job
+                # The stage runs but does nothing for this job; only the profile changed.
+                if profiler is not None:
+                    with self._lock:
+                        self._save(job)
+                return
             if event == "start":
                 log.info(f"── {labels.get(name, name)} ──")
             state = {"start": "running", "done": "done", "error": "error"}[event]
@@ -234,13 +248,25 @@ class JobManager:
             min_lat=b["south"], max_lat=b["north"], min_lon=b["west"], max_lon=b["east"]
         )
         opts = job.options
+        profiler = (
+            PipelineProfiler(pipeline_name="photorealistic-street-maps")
+            if opts.get("profile")
+            else None
+        )
+        skip_stages = {
+            name for name, status in job.stages.items() if status == "skipped"
+        }
         try:
             state = self._pipeline_factory().run(
                 bbox,
                 metadata={
                     "bbox": bbox,
                     "progress_monitor": ProgressMonitor(verbose=False),
+                    # jobs from before the option existed used Mapillary's raw GPS
+                    "pose_source": opts.get("poses", "raw"),
+                    "aligned_only": opts.get("aligned_only", False),
                     "remove_obstructions": opts.get("remove_obstructions", True),
+                    "fill_obstructions": opts.get("fill_obstructions", True),
                     "seg_model": SEG_MODELS.get(opts.get("seg_model", "large")),
                     "seg_device": opts.get("device", "auto"),
                     "use_terrain": opts.get("terrain", False),
@@ -249,13 +275,35 @@ class JobManager:
                     "image_dir": str(job_dir / "images"),
                     "reporter": log,
                 },
+                profiler=profiler,
                 on_stage=on_stage,
+                skip_stages=skip_stages,
             )
         except Exception as exc:
+            outcome: dict[str, Any] = {
+                "status": "failed",
+                "error": _describe_error(exc),
+            }
+            if profiler is not None:
+                profiler.finish()  # run() only finishes it when every stage succeeds
+                outcome["profile"] = _write_profile(profiler, job_dir, log)
             log.error(traceback.format_exc())
-            return {"status": "failed", "error": _describe_error(exc)}
+            return outcome
 
-        return {"status": "done", "result": _summarize(state, job_dir)}
+        result = _summarize(state, job_dir)
+        outcome = {"status": "done", "result": result}
+        if profiler is not None:
+            result["profile"] = outcome["profile"] = _write_profile(
+                profiler, job_dir, log
+            )
+        return outcome
+
+
+def _write_profile(
+    profiler: PipelineProfiler, job_dir: Path, log: JobReporter
+) -> dict[str, Any]:
+    profiler.save(str(job_dir / "profile.json"), reporter=log)
+    return profiler.public_summary()
 
 
 def _turned_off(stage: str, options: dict[str, Any]) -> bool:
@@ -275,6 +323,11 @@ def _summarize(state: Any, job_dir: Path) -> dict[str, Any]:
     elements = (fetched.get("osm") or {}).get("elements", [])
     result["buildings"] = sum(1 for e in elements if "geometry" in e)
     result["photos"] = len(fetched.get("mapillary") or {})
+    aligned = state.get_metadata("pose_alignment", None)
+    if aligned:
+        result["aligned_photos"] = aligned.get("overridden", 0) + aligned.get(
+            "added", 0
+        )
     mesh = state.stage_outputs.get("texturing")
     faces = getattr(mesh, "faces", None)
     if faces is not None:

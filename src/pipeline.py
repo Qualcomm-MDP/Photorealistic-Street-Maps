@@ -4,15 +4,20 @@ Stage labels and details are what the web UI shows on its progress timeline,
 so adding, removing or renaming a stage here is reflected there automatically.
 """
 
+import json
+from pathlib import Path
+
 import numpy as np
 import trimesh
 
 from common import PipelineChain, export_to_glb
 from common.MeshUtils import _get_utm_transformer
+from common.overlays import build_overlays
 from common.reporter import get_reporter
 from data_ingest.ingest import ingest_data
 from mesh_builder.extrude import build_mesh
 from naip import naip_stage
+from pose_alignment.align_poses import align_poses
 from terrain import terrain_stage
 from texturing.tex_projection import tex_projection
 
@@ -63,6 +68,26 @@ def export_mesh(value, state):
     if path is not None:
         export_to_glb(value, path)
         get_reporter(state).info(f"Saved mesh to {path}")
+        # the cameras and the alignment's point cloud on the model, for viewers
+        overlays = build_overlays(
+            state.get_metadata("camera_poses", None),
+            state.get_metadata("alignment_points", None),
+            transformer,
+            (ox, oy),
+            center,
+            terrain,
+        )
+        overlays_path = Path(path).with_suffix(".overlays.json")
+        overlays_path.write_text(json.dumps(overlays, separators=(",", ":")))
+        get_reporter(state).info(
+            f"Saved {len(overlays['cameras'])} cameras"
+            + (
+                f" and {len(overlays['points']['rgb']) // 3} points"
+                if "points" in overlays
+                else ""
+            )
+            + f" to {overlays_path}"
+        )
 
     state.require_metadata("progress_monitor").next()
     return value
@@ -72,6 +97,12 @@ def build_pipeline() -> PipelineChain:
     pipeline = PipelineChain("photorealistic-street-maps")
     pipeline.add_stage(
         "fetch", ingest_data, label="Fetch data", detail="OSM + Mapillary"
+    )
+    pipeline.add_stage(
+        "align_poses",
+        align_poses,
+        label="Align poses",
+        detail="Optional COLMAP / Mapillary computed poses",
     )
     pipeline.add_stage(
         "terrain",

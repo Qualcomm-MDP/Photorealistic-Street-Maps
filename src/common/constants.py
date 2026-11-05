@@ -6,6 +6,7 @@ OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 OVERPASS_FALLBACK_URLS = (
     "https://overpass.private.coffee/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 )
 MAPILLARY_URL = "https://graph.mapillary.com/images"
 
@@ -25,7 +26,7 @@ class BoundingBox:
         return [self.min_lon, self.min_lat, self.max_lon, self.max_lat]
 
     def to_str(self):
-        return f"{str(self.min_lon)},{str(self.min_lat)},{str(self.max_lon)},{str(self.max_lat)}"
+        return f"{self.min_lon!s},{self.min_lat!s},{self.max_lon!s},{self.max_lat!s}"
 
     @classmethod
     def from_json(cls, data):

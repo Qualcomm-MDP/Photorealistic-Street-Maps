@@ -1,10 +1,12 @@
-from enum import Enum
-from typing import Any, Dict, List, Optional
 import time
+from enum import Enum
+from typing import Any
+
 import requests
 
 from ..constants import OVERPASS_FALLBACK_URLS, OVERPASS_URL, USER_AGENT, BoundingBox
 from ..reporter import Reporter, get_reporter
+from .osm_api import OsmApiClient
 
 # Status codes Overpass returns when it is overloaded or rate limiting.
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}
@@ -19,8 +21,9 @@ class OSM_MAP_FEATURES(Enum):
 class OSMClient:
     def __init__(
         self,
-        timeout: int = 60,
-        rounds: int = 3,
+        timeout: int = 30,
+        # one try per server, then the main OSM API (osm_api.py)
+        rounds: int = 1,
         backoff_s: float = 5.0,
         urls: tuple[str, ...] = (OVERPASS_URL, *OVERPASS_FALLBACK_URLS),
         reporter: Reporter | None = None,
@@ -34,8 +37,8 @@ class OSMClient:
     def fetch(
         self,
         bbox: BoundingBox,
-        features: Optional[List[OSM_MAP_FEATURES]] = None,
-    ) -> Dict[str, Any]:
+        features: list[OSM_MAP_FEATURES] | None = None,
+    ) -> dict[str, Any]:
 
         if features is None:
             features = [OSM_MAP_FEATURES.BUILDING]
@@ -51,15 +54,23 @@ class OSMClient:
         );
         out body geom;
         """
-        return self._post(query)
+        try:
+            return self._post(query)
+        except RuntimeError as exc:
+            keys = {k for f in features for k in self._get_tag_filters(f)}
+            self.reporter.warning(f"{exc}; fetching from the OpenStreetMap API instead")
+            return OsmApiClient().elements(
+                (bbox.min_lon, bbox.min_lat, bbox.max_lon, bbox.max_lat),
+                lambda tags: any(k in tags for k in keys),
+            )
 
-    def _post(self, query: str) -> Dict[str, Any]:
+    def _post(self, query: str) -> dict[str, Any]:
         """POST to each Overpass endpoint in turn, retrying with backoff.
 
         The public servers regularly time out or rate limit under load, so a
         single failure shouldn't abort the pipeline.
         """
-        errors: List[str] = []
+        errors: list[str] = []
         for round_idx in range(self.rounds):
             if round_idx > 0:
                 delay = self.backoff_s * 2 ** (round_idx - 1)
@@ -95,7 +106,7 @@ class OSMClient:
         self,
         feature: OSM_MAP_FEATURES,
         bbox: BoundingBox,
-    ) -> List[str]:
+    ) -> list[str]:
         """Build Overpass query snippets for a feature."""
         tag_filters = self._get_tag_filters(feature)
         query_parts = []
@@ -115,7 +126,7 @@ class OSMClient:
 
         return query_parts
 
-    def _get_tag_filters(self, feature: OSM_MAP_FEATURES) -> List[str]:
+    def _get_tag_filters(self, feature: OSM_MAP_FEATURES) -> list[str]:
         """Map enum feature to OSM tag keys."""
         if feature == OSM_MAP_FEATURES.BUILDING:
             return ["building"]
