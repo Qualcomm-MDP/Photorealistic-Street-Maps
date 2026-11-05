@@ -116,3 +116,81 @@ def test_overlays_are_in_the_models_frame():
     assert cam["source"] == "colmap" and cam["fov"] == pytest.approx(73.7, abs=0.1)
     assert out["points"]["xyz"] == pytest.approx([3.0, 5.0, -4.0])
     assert out["points"]["rgb"] == [10, 20, 30]
+
+
+def test_texturing_downloads_each_photo_once_in_parallel(monkeypatch):
+    import trimesh
+
+    from common.constants import BoundingBox
+    from common.MeshUtils import _get_utm_transformer
+    from texturing import tex_projection
+
+    lat0, lon0 = 42.28, -83.74
+    bbox = BoundingBox(lat0 - 0.001, lat0 + 0.001, lon0 - 0.001, lon0 + 0.001)
+    to_utm = _get_utm_transformer(lon0, lat0)
+    x0, y0 = to_utm.transform(lon0, lat0)
+    # one wall 10 m north of the cameras (mesh z is down)
+    verts = np.array(
+        [
+            [x0 - 2, y0 + 10, 0],
+            [x0 + 2, y0 + 10, 0],
+            [x0 + 2, y0 + 10, -3],
+            [x0 - 2, y0 + 10, -3],
+        ]
+    )
+    mesh = trimesh.Trimesh(vertices=verts, faces=[[0, 2, 1], [0, 3, 2]], process=False)
+
+    photo = cv2.imencode(".jpg", np.full((300, 400, 3), (0, 0, 255), np.uint8))[
+        1
+    ].tobytes()
+    pano = cv2.imencode(".jpg", np.full((400, 800, 3), (0, 255, 0), np.uint8))[
+        1
+    ].tobytes()
+    fetched = []
+
+    def fake_fetch(where, attempts=3):
+        fetched.append(where)
+        return pano if "pano" in where else photo
+
+    monkeypatch.setattr(tex_projection, "_fetch_bytes", fake_fetch)
+    rotvec = Rotation.from_matrix(LOOK_NORTH).as_rotvec().tolist()
+    base = {
+        "latitude": lat0,
+        "longitude": lon0,
+        "rotvec": rotvec,
+        "camera_type": "perspective",
+    }
+    data = {
+        "1": {
+            **base,
+            "image_url": "https://x/photo.jpg",
+            "focal_length_pixels": 200.0,
+            "original_width": 400,
+            "original_height": 300,
+        },
+        **{
+            f"2_{side}": {
+                **base,
+                "image_url": "https://x/pano.jpg",
+                "focal_length_pixels": 100.0,
+                "original_width": 200,
+                "original_height": 200,
+                "pano_crop": {
+                    "id": "2",
+                    "side": side,
+                    "yaw_deg": yaw,
+                    "fov_deg": 90.0,
+                    "size": 200,
+                },
+            }
+            for side, yaw in (("right", 90.0), ("left", -90.0))
+        },
+    }
+    out = tex_projection.apply_textures(
+        mesh, data, bbox, remove_obs=False, reporter=_Quiet()
+    )
+    assert sorted(fetched) == [
+        "https://x/pano.jpg",
+        "https://x/photo.jpg",
+    ]  # the 360 photo once
+    assert out.visual.uv is not None and len(out.faces) == 2

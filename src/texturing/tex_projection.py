@@ -1,5 +1,7 @@
 import json
 import tempfile
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import cv2
@@ -23,6 +25,11 @@ CAMERA_HEIGHT_M = 1.6
 ATLAS_W = 4096
 MAX_PATCH = 1024
 ENABLE_OCCLUSION = True
+# Photos are downloaded this many at a time, up to DOWNLOAD_AHEAD ahead of the one being
+# processed (one at a time took most of a job's time without the alignment, which downloads
+# its own photos in parallel).
+DOWNLOAD_WORKERS = 8
+DOWNLOAD_AHEAD = 32
 # Colour (0-255) of faces no street photo covers: roofs, back walls, gaps.
 UNTEXTURED_GREY = 225
 # With fill_obstructions off, each photo's obstruction mask is kept at 1/MASK_SCALE size to
@@ -66,6 +73,22 @@ def _project(
     z[z < 1e-6] = 1e-6
     uv = (K @ np.vstack([Xc[:, 0] / z, Xc[:, 1] / z, np.ones(len(z))])).T
     return uv[:, :2], z
+
+
+def _fetch_bytes(where: str, attempts: int = 3) -> bytes:
+    """A photo's file as is: read from disk, or downloaded (retrying with a growing pause)."""
+    if not where.startswith(("http://", "https://")):
+        return Path(where).read_bytes()
+    for attempt in range(attempts):
+        try:
+            resp = requests.get(where, timeout=60)
+            resp.raise_for_status()
+            return resp.content
+        except requests.RequestException:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(2**attempt)
+    raise RuntimeError(f"no answer from {where}")
 
 
 def _download_image(url: str) -> tuple[np.ndarray, bytes]:
@@ -223,27 +246,49 @@ def _apply_textures(
     reused = {"photos": 0, "class maps": 0}
 
     cam_data: list[dict] = []
-    pano: tuple[str, np.ndarray] | None = None  # the last 360 photo: (id, image)
-    for img_id, meta in reporter.progress(candidates, desc="Downloading images"):
-        crop = meta.get("pano_crop")  # a view of a 360 photo (data_ingest.pano)
+    # Each photo's source: a view of a 360 photo (data_ingest.pano) comes from that 360
+    # photo, and a photo the alignment stored is read from its store instead of its URL (an
+    # image the alignment added already points at its own frame, whose size its pose was
+    # solved for). The sources are fetched DOWNLOAD_WORKERS at a time, up to
+    # DOWNLOAD_AHEAD ahead of the photo being processed, while the processing (decoding,
+    # segmentation, inpainting) runs in order.
+    plan = []
+    for img_id, meta in candidates:
+        crop = meta.get("pano_crop")
         source_id = crop["id"] if crop else str(img_id)
+        stored = (
+            image_store is not None
+            and str(meta["image_url"]).startswith(("http://", "https://"))
+            and image_store.has(source_id)
+        )
+        where = str(image_store.path(source_id)) if stored else meta["image_url"]
+        plan.append((img_id, meta, crop, source_id, where, stored))
+    sources = list(dict.fromkeys((sid, where) for _, _, _, sid, where, _ in plan))
+    order = {sid: k for k, (sid, _) in enumerate(sources)}
+    fetches: dict = {}
+    pool = ThreadPoolExecutor(DOWNLOAD_WORKERS)
+
+    def fetch_through(k: int) -> None:
+        while len(fetches) + fetched[0] < min(k, len(sources)):
+            sid, where = sources[len(fetches) + fetched[0]]
+            fetches[sid] = pool.submit(_fetch_bytes, where)
+
+    fetched = [0]  # sources fetched and released
+    pano: tuple[str, np.ndarray] | None = None  # the last 360 photo: (id, image)
+    for n, (img_id, meta, crop, source_id, where, stored) in enumerate(
+        reporter.progress(plan, desc="Downloading images")
+    ):
+        fetch_through(order[source_id] + DOWNLOAD_AHEAD)
         try:
             if crop and pano is not None and pano[0] == source_id:
                 img = pano[1]  # the other view of the 360 photo just downloaded
             else:
-                # the stored original stands in for its URL (an image the alignment
-                # added already points at its own frame, whose size its pose was
-                # solved for)
-                stored = (
-                    image_store is not None
-                    and str(meta["image_url"]).startswith(("http://", "https://"))
-                    and image_store.has(source_id)
-                )
+                raw = fetches[source_id].result()
+                img = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+                if img is None:
+                    raise ValueError(f"Failed to decode image from {where}")
                 if stored:
-                    img, raw = _download_image(str(image_store.path(source_id)))
                     reused["photos"] += 1
-                else:
-                    img, raw = _download_image(meta["image_url"])
             if crop:
                 pano = (source_id, img)
                 img = crop_view(img, crop["yaw_deg"], crop["fov_deg"], crop["size"])
@@ -253,6 +298,11 @@ def _apply_textures(
         except Exception as exc:
             reporter.info(f"  Download failed [{img_id}]: {exc}")
             continue
+        finally:
+            # this source's bytes are not needed once its last photo is past
+            if n + 1 == len(plan) or plan[n + 1][3] != source_id:
+                if fetches.pop(source_id, None) is not None:
+                    fetched[0] += 1
         # Folder for this photo's previews, or None once enough are saved.
         preview_dir = image_dir if len(saved) < max_saved_images else None
         if preview_dir is not None:
@@ -324,6 +374,7 @@ def _apply_textures(
             }
         )
 
+    pool.shutdown(wait=False, cancel_futures=True)
     if image_dir is not None:
         with open(image_dir / "images.json", "w") as f:
             json.dump(saved, f, indent=2)
