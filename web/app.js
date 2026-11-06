@@ -510,6 +510,140 @@ function resetView() {
 $("resetView").addEventListener("click", resetView);
 $("resetView2").addEventListener("click", resetView);
 
+// ---------- Image capture ----------
+// Saves the current view as a PNG at a chosen resolution and focal length.
+// The focal length is 35 mm-equivalent: the image is 36 mm wide, so in pixels
+// fx = fy = focal / 36 × width, with the principal point at the image centre.
+const SENSOR_WIDTH_MM = 36;
+const fovDegrees = (pixels, focalPx) => THREE.MathUtils.radToDeg(2 * Math.atan(pixels / (2 * focalPx)));
+const focalPixels = (width, focalMm) => (focalMm / SENSOR_WIDTH_MM) * width;
+
+function captureLimit() {
+  const gl = renderer.getContext();
+  return Math.min(gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), ...gl.getParameter(gl.MAX_VIEWPORT_DIMS));
+}
+
+// This borrows the preview's renderer for one frame: its textures can't be
+// shared with another, and a render target would skip the sRGB output step.
+// Everything is put back before the browser next paints, so the preview doesn't
+// flicker. toBlob takes its copy of the canvas straight away; only encoding is async.
+function renderCapture(width, height, focalMm) {
+  const size = renderer.getSize(new THREE.Vector2());
+  const pixelRatio = renderer.getPixelRatio();
+  const { fov, aspect } = camera;
+  const gl = renderer.getContext();
+  try {
+    renderer.setDrawingBufferSize(width, height, 1);
+    // Browsers shrink an oversized canvas silently instead of failing.
+    if (gl.drawingBufferWidth !== width || gl.drawingBufferHeight !== height) {
+      throw new Error(`This browser can't render ${width} × ${height}. Try a smaller size.`);
+    }
+    camera.fov = fovDegrees(height, focalPixels(width, focalMm));
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+    renderer.render(scene, camera);
+    return new Promise((resolve, reject) =>
+      renderer.domElement.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("The browser couldn't encode the image."))),
+        "image/png",
+      ),
+    );
+  } finally {
+    camera.fov = fov;
+    camera.aspect = aspect;
+    camera.updateProjectionMatrix();
+    renderer.setDrawingBufferSize(size.x, size.y, pixelRatio);
+  }
+}
+
+// The button lives inside #scene so it follows the preview into both dialogs.
+const captureBtn = document.createElement("button");
+captureBtn.className = "btn small";
+captureBtn.type = "button";
+captureBtn.hidden = true;
+captureBtn.title = "Save this view as an image";
+captureBtn.style.cssText = "position: absolute; z-index: 1; right: 12px; bottom: 12px;";
+captureBtn.innerHTML = `
+  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 5.5h2.5L6 3.5h4l1.5 2H14v7H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="8" cy="8.75" r="2" stroke="currentColor" stroke-width="1.4"/></svg>
+  Capture`;
+sceneEl.appendChild(captureBtn);
+
+const captureDlg = document.createElement("dialog");
+captureDlg.className = "modal";
+captureDlg.setAttribute("aria-labelledby", "captureTitle");
+captureDlg.style.cssText = "width: min(360px, calc(100vw - 32px)); height: fit-content;";
+captureDlg.innerHTML = `
+  <form id="captureForm">
+    <div class="modal-head">
+      <h2 id="captureTitle" style="flex: 1">Capture image</h2>
+      <button class="btn icon" type="button" data-close aria-label="Close">
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+        <div class="field">
+          <label for="captureWidth">Width (px)</label>
+          <input id="captureWidth" type="number" min="1" step="1" value="1920" required />
+        </div>
+        <div class="field">
+          <label for="captureHeight">Height (px)</label>
+          <input id="captureHeight" type="number" min="1" step="1" value="1080" required />
+        </div>
+      </div>
+      <div class="field">
+        <label for="captureFocal">Focal length (mm, 35 mm equiv.)</label>
+        <input id="captureFocal" type="number" min="1" step="any" value="28" required />
+      </div>
+      <span class="stats" id="captureInfo"></span>
+    </div>
+    <div class="modal-foot">
+      <button class="btn primary" type="submit">Save PNG</button>
+    </div>
+  </form>`;
+document.body.appendChild(captureDlg);
+
+function renderCaptureInfo() {
+  const width = $("captureWidth").valueAsNumber;
+  const height = $("captureHeight").valueAsNumber;
+  const focal = focalPixels(width, $("captureFocal").valueAsNumber);
+  $("captureInfo").textContent =
+    width > 0 && height > 0 && focal > 0
+      ? `${fovDegrees(width, focal).toFixed(1)}° × ${fovDegrees(height, focal).toFixed(1)}° · f ${Math.round(focal)} px`
+      : "";
+}
+
+captureBtn.addEventListener("click", () => {
+  const limit = captureLimit();
+  $("captureWidth").max = limit;
+  $("captureHeight").max = limit;
+  renderCaptureInfo();
+  captureDlg.showModal();
+});
+captureDlg.addEventListener("input", renderCaptureInfo);
+captureDlg.addEventListener("click", (e) => {
+  if (e.target === captureDlg || e.target.closest("[data-close]")) captureDlg.close();
+});
+$("captureForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  captureDlg.close();
+  const width = $("captureWidth").valueAsNumber;
+  const height = $("captureHeight").valueAsNumber;
+  const focal = $("captureFocal").valueAsNumber;
+  try {
+    const blob = await renderCapture(width, height, focal);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `capture-${state.modelJobId}-${width}x${height}-${focal}mm.png`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast(`Saved ${width} × ${height} image`);
+  } catch (err) {
+    toast(err.message || String(err));
+  }
+});
+
 async function loadModel(job) {
   // Only the latest request may change the scene: switching jobs quickly can
   // make an older model (or its error) arrive after the newer one.
@@ -548,6 +682,7 @@ async function loadModel(job) {
     });
     scene.add(model);
     frameModel();
+    captureBtn.hidden = false;
     state.modelJobId = job.id;
     empty.hidden = true;
     jobStageNote(job, "");
