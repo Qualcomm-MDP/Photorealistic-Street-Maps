@@ -29,10 +29,18 @@ def export_mesh(value, state):
     transformer = _get_utm_transformer(center_lon, center_lat)
     ox, oy = transformer.transform(center_lon, center_lat)
 
-    value.vertices -= np.array([ox, oy, 0.0])
-    value.vertices[:, 2] *= -1
-    parts = [value]
+    building_parts: list[trimesh.Trimesh] = [
+        geometry
+        for geometry in value.geometry.values()
+        if isinstance(geometry, trimesh.Trimesh)
+    ]
 
+    for p in building_parts:
+        p.vertices -= np.array([ox, oy, 0.0])
+        p.vertices[:, 2] *= -1
+
+    parts = list(building_parts)
+    ground = None
     terrain = state.get_metadata("terrain", None)
     if terrain is not None:
         ground = terrain.to_mesh()
@@ -53,13 +61,13 @@ def export_mesh(value, state):
         p.apply_translation(-center)
         p.apply_transform(rotation)
 
-    # Buildings and ground stay separate objects: merging them into one mesh
-    # would drop the buildings' photo texture.
-    if terrain is not None:
-        value = trimesh.Scene()
-        value.add_geometry(parts[0], node_name="buildings", geom_name="buildings")
-        value.add_geometry(parts[1], node_name="terrain", geom_name="terrain")
-
+    if ground is not None:
+        value.add_geometry(
+            ground,
+            node_name="terrain",
+            geom_name="terrain",
+        )
+        
     # The CLI may pass a callable that asks the user (e.g. a save dialog).
     path = state.get_metadata("output_path", None)
     if path is None:

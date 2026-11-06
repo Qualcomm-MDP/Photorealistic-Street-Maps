@@ -13,6 +13,7 @@ from scipy.spatial.transform import Rotation as SciR
 from trimesh import visual
 
 from common import PipelineState
+from common.per_patch_confidence import clip_confidence_score, confidence_score
 from common.MeshUtils import _get_utm_transformer
 from common.reporter import Reporter, get_reporter
 from naip.naip import roof_faces, roof_patches
@@ -146,7 +147,7 @@ def apply_textures(
     seg_labels: LabelCache | None = None,
     fill_obstructions: bool = True,
     texture_mode: str = "blend",
-) -> trimesh.Trimesh:
+) -> trimesh.Scene:
     """Project street photos onto the mesh.
 
     texture_mode "blend" (default) bakes every wall from all the photos that see it
@@ -212,10 +213,12 @@ def _apply_textures(
     seg_labels: LabelCache | None = None,
     fill_obstructions: bool = True,
     texture_mode: str = "blend",
-) -> trimesh.Trimesh:
+) -> trimesh.Scene:
     center_lon = (bbox.min_lon + bbox.max_lon) / 2
     center_lat = (bbox.min_lat + bbox.max_lat) / 2
     transformer = _get_utm_transformer(center_lon, center_lat)
+    scene = trimesh.Scene()
+    scene.add_geometry(mesh)
 
     candidates = [
         (k, v)
@@ -230,7 +233,7 @@ def _apply_textures(
     ]
     if not candidates and aerial is None:
         reporter.info("  No images with valid metadata, skipping texturing.")
-        return mesh
+        return scene
 
     saved: list[dict] = []
     if image_dir is not None:
@@ -386,7 +389,7 @@ def _apply_textures(
 
     if not cam_data and aerial is None:
         reporter.info("  All image downloads failed, skipping texturing.")
-        return mesh
+        return scene
 
     verts = mesh.vertices
     faces = mesh.faces
@@ -403,6 +406,7 @@ def _apply_textures(
 
     patch_records: list[dict]
     if texture_mode == "blend":
+        print("Running the blending")
         patch_records, stats = bake_walls(
             verts_proj, faces, face_normals, cam_data, skip, reporter, UNTEXTURED_GREY
         )
@@ -411,6 +415,7 @@ def _apply_textures(
             f"the photos ({100 * stats.get('coverage', 0):.0f}% of their texels seen)"
         )
     else:
+        print("Running the raycasting")
         best_hit: dict[int, tuple] = {}
         for ci, cd in enumerate(reporter.progress(cam_data, desc="Visibility")):
             Cw, R, K = cd["Cw"], cd["R"], cd["K"]
@@ -469,7 +474,7 @@ def _apply_textures(
         patch_records = []
         # Group faces by camera so each photo is read from disk once.
         loaded_ci, loaded_img = None, None
-        for fi, (ci, uv_img, depths, _) in sorted(
+        for fi, (ci, uv_img, depths, score) in sorted(
             best_hit.items(), key=lambda item: item[1][0]
         ):
             if ci != loaded_ci:
@@ -522,6 +527,8 @@ def _apply_textures(
             S = np.array([[ds, 0, s_min], [0, -dt, t_max], [0, 0, 1]], dtype=np.float64)
             H_atlas = H @ S
 
+            confidence = confidence_score(depths, 1, score) # in this case the cos and clear are being captured by score, and if we multiple them, we will be multiplying score by 1 so it's ok hopefully for now
+
             patch_bgr = cv2.warpPerspective(
                 loaded_img,
                 H_atlas,
@@ -529,7 +536,16 @@ def _apply_textures(
                 flags=cv2.WARP_INVERSE_MAP | cv2.INTER_LINEAR,
                 borderMode=cv2.BORDER_REPLICATE,
             )
+
+            alpha = np.full(
+                (patch_h, patch_w),
+                confidence,
+                dtype=np.uint8
+            )
+            
             patch_rgb = cv2.cvtColor(patch_bgr, cv2.COLOR_BGR2RGB)
+            patch_rgba = np.dstack((patch_rgb, alpha))
+            print("patch_rgba:", patch_rgba.shape)
 
             def to_px(s, t, _ds=ds, _dt=dt, _s_min=s_min, _t_max=t_max):
                 return (s - _s_min) / _ds, (_t_max - t) / _dt
@@ -537,7 +553,7 @@ def _apply_textures(
             patch_records.append(
                 {
                     "fi": fi,
-                    "patch": patch_rgb,
+                    "patch": patch_rgba,
                     "pw": patch_w,
                     "ph": patch_h,
                     "v0_px": to_px(0.0, 0.0),
@@ -565,8 +581,9 @@ def _apply_textures(
 
     GRAY_H = 16
     atlas_h = photo_h + GRAY_H
-    atlas = np.full((atlas_h, ATLAS_W, 3), UNTEXTURED_GREY, dtype=np.uint8)
+    atlas = np.full((atlas_h, ATLAS_W, 4), UNTEXTURED_GREY, dtype=np.uint8)
     for p in patch_records:
+        print(f"This patch has shape {p['patch'].shape}, with an average conf score of {np.mean(p['patch'][:,:,3])}")
         atlas[p["ay"] : p["ay"] + p["ph"], p["ax"] : p["ax"] + p["pw"]] = p["patch"]
 
     DEFAULT_U = 0.5
@@ -589,11 +606,75 @@ def _apply_textures(
             new_uvs[fi * 3 + j] = [np.clip(u, 0, 1), np.clip(v, 0, 1)]
 
     tex_pil = Image.fromarray(atlas)
-    new_mesh = trimesh.Trimesh(vertices=new_verts, faces=new_faces, process=False)
-    mat = visual.material.PBRMaterial(baseColorTexture=tex_pil, doubleSided=True)
-    new_mesh.visual = visual.TextureVisuals(uv=new_uvs, material=mat, image=tex_pil)
+    # 1. Base mesh: fully opaque
+    base_mesh = trimesh.Trimesh(
+        vertices=new_verts,
+        faces=new_faces,
+        process=False
+    )
+
+    base_mat = visual.material.PBRMaterial(
+        baseColorFactor=[255, 255, 255, 255],
+        alphaMode="OPAQUE",
+        doubleSided=True
+    )
+
+    base_mesh.visual = visual.TextureVisuals(
+        uv=new_uvs,
+        material=base_mat
+    )
+
+    # 2. Overlay mesh: confidence-based transparency
+    overlay_mesh = trimesh.Trimesh(
+        vertices=new_verts.copy(),
+        faces=new_faces,
+        process=False
+    )
+
+    # Move overlay slightly outward
+    # Calculate vertex normals
+    normals = overlay_mesh.vertex_normals
+
+    # Group vertices that occupy the same position
+    rounded = np.round(overlay_mesh.vertices, decimals=6)
+    unique_positions, inverse = np.unique(
+        rounded,
+        axis=0,
+        return_inverse=True
+    )
+
+    # Average normals for vertices at the same position
+    averaged_normals = np.zeros((len(unique_positions), 3))
+    np.add.at(averaged_normals, inverse, normals)
+
+    # Normalize the averaged normals
+    lengths = np.linalg.norm(averaged_normals, axis=1, keepdims=True)
+    averaged_normals /= np.maximum(lengths, 1e-8)
+
+    # Apply the same displacement to coincident vertices
+    offset = 0.05
+    overlay_mesh.vertices += averaged_normals[inverse] * offset
+
+    overlay_mat = visual.material.PBRMaterial(
+        baseColorTexture=tex_pil,
+        doubleSided=True,
+        alphaMode="BLEND"
+    )
+
+    overlay_mesh.visual = visual.TextureVisuals(
+        uv=new_uvs,
+        material=overlay_mat,
+        image=tex_pil
+    )
+
+    scene.add_geometry(base_mesh)
+    scene.add_geometry(overlay_mesh)
+
+    # new_mesh = trimesh.Trimesh(vertices=new_verts, faces=new_faces, process=False)
+    # mat = visual.material.PBRMaterial(baseColorTexture=tex_pil, doubleSided=True)
+    # new_mesh.visual = visual.TextureVisuals(uv=new_uvs, material=mat, image=tex_pil)
     reporter.info(f"  Atlas: {ATLAS_W}x{atlas_h} px, {len(patch_records)} face patches")
-    return new_mesh
+    return scene
 
 
 def tex_projection(value, state: PipelineState):
@@ -603,7 +684,7 @@ def tex_projection(value, state: PipelineState):
         with open(dump_path, "w") as f:
             json.dump(mapillary_data, f, indent=2)
     bbox = state.require_metadata("bbox")
-    mesh = apply_textures(
+    scene = apply_textures(
         value,
         mapillary_data,
         bbox,
@@ -620,4 +701,4 @@ def tex_projection(value, state: PipelineState):
         seg_labels=state.get_metadata("segmentation_labels", None),
     )
     state.require_metadata("progress_monitor").next()
-    return mesh
+    return scene

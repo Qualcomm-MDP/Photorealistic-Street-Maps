@@ -249,10 +249,16 @@ def roof_patches(
         r1 = int(np.ceil(rows.max())) + PATCH_PAD_PX
         if c0 < 0 or r0 < 0 or c1 > w or r1 > h:
             continue
+
+        patch_rgb = ortho.image[r0:r1, c0:c1]
+        # Add fully opaque alpha channel
+        alpha = np.full(patch_rgb.shape[:2], 255, dtype=np.uint8)
+        patch_rgba = np.dstack((patch_rgb, alpha))
+
         records.append(
             {
                 "fi": int(fi),
-                "patch": ortho.image[r0:r1, c0:c1],
+                "patch": patch_rgba,
                 "pw": c1 - c0,
                 "ph": r1 - r0,
                 "v0_px": (cols[0] - c0, rows[0] - r0),

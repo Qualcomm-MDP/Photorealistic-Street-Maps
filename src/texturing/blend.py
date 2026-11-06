@@ -20,6 +20,8 @@ import math
 import cv2
 import numpy as np
 
+from common.per_patch_confidence import confidence_score, clip_confidence_score
+
 TEXEL_M = 0.1  # metres per texel
 MAX_TEXELS = 1024  # longest patch side; larger faces get coarser texels
 REACH_M = 60.0  # a photo paints walls within this distance
@@ -104,6 +106,7 @@ def bake_walls(
     outward = np.array([frames[f]["n"] for f in fis])
     acc: dict[int, np.ndarray] = {}
     wsum: dict[int, np.ndarray] = {}
+    confidence_map: dict[int, np.ndarray] = {}
     lo_ab, hi_ab = np.minimum(A, B), np.maximum(A, B)
 
     for cd in reporter.progress(cam_data, desc="Blending photos onto walls"):
@@ -186,8 +189,17 @@ def bake_walls(
             if int(fi) not in acc:
                 acc[int(fi)] = np.zeros((H, W, 3), np.float32)
                 wsum[int(fi)] = np.zeros((H, W), np.float32)
+                confidence_map[int(fi)] = np.zeros((H, W), np.float32)
             acc[int(fi)] += col * w[..., None]
             wsum[int(fi)] += w
+            confidence = confidence_score(rn, cos, clear, average=False)
+
+            # Keep the highest confidence observation for each texel
+            confidence_map[int(fi)] = np.maximum(
+                confidence_map[int(fi)],
+                confidence
+            )
+
 
     patches, seen, total = [], 0, 0
     for fi, a in acc.items():
@@ -195,6 +207,9 @@ def bake_walls(
         has = ws > 1e-30
         tex = np.full(a.shape, grey, np.uint8)
         tex[has] = np.clip(a[has] / ws[has][:, None], 0, 255).astype(np.uint8)
+        tex = cv2.cvtColor(tex, cv2.COLOR_BGR2RGB)
+        face_confidence = confidence_map[int(fi)].astype(np.uint8)
+        tex_rgba = np.dstack((tex, face_confidence))
         seen += int(has.sum())
         total += has.size
 
@@ -204,7 +219,7 @@ def bake_walls(
         patches.append(
             {
                 "fi": fi,
-                "patch": cv2.cvtColor(tex, cv2.COLOR_BGR2RGB),
+                "patch": tex_rgba,
                 "pw": fr["W"],
                 "ph": fr["H"],
                 **{f"v{j}_px": to_px(fr["vs"][j], fr["vt"][j]) for j in range(3)},
