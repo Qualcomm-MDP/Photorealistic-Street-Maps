@@ -1,11 +1,13 @@
 import numpy as np
 
-def clip_confidence_score(confidence_raw):
-    confidence_8bit = np.clip(
-        (confidence_raw * 255),
-        0,
-        255
+def clip_confidence_score(confidence_raw, threshold=85):
+    confidence_alpha = confidence_raw * 255
+    confidence_8bit = np.where(
+        confidence_alpha > threshold,
+        255,
+        200
     ).astype(np.uint8)
+
     return confidence_8bit
 
 def confidence_score(distance, cos, clear, average=True):
