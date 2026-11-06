@@ -12,12 +12,15 @@ EMBED_M = 0.1
 
 def build_mesh(value, state):
     bbox = state.require_metadata("bbox")
+    flagged = []
     data = extrude_buildings(
         value["osm"],
         bbox,
         reporter=get_reporter(state),
         terrain=state.get_metadata("terrain", None),
+        flagged=flagged,
     )
+    state.set_metadata("flagged_buildings", flagged)
     state.require_metadata("progress_monitor").next()
     return data
 
@@ -39,17 +42,25 @@ def ground_under(corners, terrain) -> tuple[float, float]:
 
 
 def extrude_buildings(
-    input_data, area_bbox, reporter: Reporter | None = None, terrain=None
+    input_data, area_bbox, reporter: Reporter | None = None, terrain=None, flagged=None
 ):
     reporter = reporter or get_reporter()
     buildings = {}
+    flagged = (
+        [] if flagged is None else flagged
+    )  # (osm, reason for buildings left out of mesh)
 
     for _, element in reporter.progress(
         enumerate(input_data["elements"]),
         desc="Generating Building Mesh(s)",
         total=len(input_data["elements"]),
     ):
+        osm = f"{element.get('type')} {element.get('id')}"
         if "geometry" not in element:
+            flagged.append((osm, "no outline in data"))
+            continue
+        if len(element["geometry"]) < 3:
+            flagged.append((osm, "outline has too few points"))
             continue
 
         id = element["id"]
@@ -65,7 +76,8 @@ def extrude_buildings(
         base, top = get_base_and_height(element)
 
         polys = path.polygons_closed
-        if not polys[0]:
+        if len(polys) == 0 or not polys[0]:
+            flagged.append((osm, "outline is not a valid closed shape"))
             continue
 
         # Meshes here are z-down (texturing and export flip z). On terrain the
@@ -98,6 +110,12 @@ def extrude_buildings(
             mesh.apply_translation([0.0, 0.0, -bottom])
 
         buildings[id] = mesh
+
+    if flagged:
+        details = "\n".join(f"  {osm}: {reason}" for osm, reason in flagged)
+        reporter.warning(
+            f"{len(flagged)} building(s) were left out of the mesh:\n{details}"
+        )
 
     combined_mesh = trimesh.util.concatenate(
         [building for _, building in buildings.items()]

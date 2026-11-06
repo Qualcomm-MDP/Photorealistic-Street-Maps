@@ -323,6 +323,10 @@ def _summarize(state: Any, job_dir: Path) -> dict[str, Any]:
     elements = (fetched.get("osm") or {}).get("elements", [])
     result["buildings"] = sum(1 for e in elements if "geometry" in e)
     result["photos"] = len(fetched.get("mapillary") or {})
+    result["flagged"] = [
+        {"osm": osm, "reason": reason}
+        for osm, reason in state.get_metadata("flagged_buildings", [])
+    ]
     aligned = state.get_metadata("pose_alignment", None)
     if aligned:
         result["aligned_photos"] = aligned.get("overridden", 0) + aligned.get(
